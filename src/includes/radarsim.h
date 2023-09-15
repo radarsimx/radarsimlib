@@ -46,6 +46,8 @@ c_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   double *frame_start_time, int num_frames,
                                   float tx_power);
 
+void Free_Transmitter(c_Transmitter *ptr_tx_c);
+
 #ifdef __cplusplus
 }
 #endif
