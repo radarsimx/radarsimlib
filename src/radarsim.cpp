@@ -4,19 +4,19 @@
 
 #include "transmitter.hpp"
 
-struct c_Transmitter {
-  void *ptr_transmitter;
+struct s_Transmitter {
+  Transmitter<float> *_ptr_transmitter;
 };
 
-c_Transmitter *Create_Transmitter(double *freq, double *freq_time,
+t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   int waveform_size, double *freq_offset,
                                   double *pulse_start_time, int num_pulses,
                                   double *frame_start_time, int num_frames,
                                   float tx_power) {
-  c_Transmitter *ptr_tx_c;
-  Transmitter<float> *ptr_tx_cpp;
+  t_Transmitter *ptr_tx_c;
+  // Transmitter<float> *ptr_tx_cpp;
 
-  ptr_tx_c = (c_Transmitter *)malloc(sizeof(*ptr_tx_c));
+  ptr_tx_c = (t_Transmitter *)malloc(sizeof(t_Transmitter *));
 
   std::vector<double> freq_vt;
   std::vector<double> freq_time_vt;
@@ -42,17 +42,18 @@ c_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     frame_start_time_vt.push_back(frame_start_time[idx]);
   }
 
-  ptr_tx_cpp =
-      new Transmitter<float>(tx_power, freq_vt, freq_time_vt, freq_offset_vt,
+  // ptr_tx_cpp =
+  //     new Transmitter<float>(tx_power, freq_vt, freq_time_vt, freq_offset_vt,
+  //                            pulse_start_time_vt, frame_start_time_vt);
+  ptr_tx_c->_ptr_transmitter = new Transmitter<float>(tx_power, freq_vt, freq_time_vt, freq_offset_vt,
                              pulse_start_time_vt, frame_start_time_vt);
-  ptr_tx_c->ptr_transmitter = ptr_tx_cpp;
 
   return ptr_tx_c;
 }
 
-void Free_Transmitter(c_Transmitter *ptr_tx_c) {
+void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == NULL) return;
-  delete static_cast<Transmitter<float> *>(ptr_tx_c->ptr_transmitter);
+  delete static_cast<Transmitter<float> *>(ptr_tx_c->_ptr_transmitter);
   free(ptr_tx_c);
 }
 

@@ -38,15 +38,15 @@
 extern "C" {
 #endif
 
-struct c_Transmitter;
+struct s_Transmitter;
+typedef struct s_Transmitter t_Transmitter;
 
-c_Transmitter *Create_Transmitter(double *freq, double *freq_time,
-                                  int waveform_size, double *freq_offset,
-                                  double *pulse_start_time, int num_pulses,
-                                  double *frame_start_time, int num_frames,
-                                  float tx_power);
+__declspec(dllexport) t_Transmitter *Create_Transmitter(
+    double *freq, double *freq_time, int waveform_size, double *freq_offset,
+    double *pulse_start_time, int num_pulses, double *frame_start_time,
+    int num_frames, float tx_power);
 
-void Free_Transmitter(c_Transmitter *ptr_tx_c);
+__declspec(dllexport) void Free_Transmitter(t_Transmitter *ptr_tx_c);
 
 #ifdef __cplusplus
 }
