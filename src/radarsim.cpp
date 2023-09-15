@@ -8,6 +8,20 @@ struct s_Transmitter {
   Transmitter<float> *_ptr_transmitter;
 };
 
+/**
+ * @brief 
+ * 
+ * @param freq 
+ * @param freq_time 
+ * @param waveform_size 
+ * @param freq_offset 
+ * @param pulse_start_time 
+ * @param num_pulses 
+ * @param frame_start_time 
+ * @param num_frames 
+ * @param tx_power 
+ * @return t_Transmitter* 
+ */
 t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   int waveform_size, double *freq_offset,
                                   double *pulse_start_time, int num_pulses,
@@ -45,12 +59,18 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
   // ptr_tx_cpp =
   //     new Transmitter<float>(tx_power, freq_vt, freq_time_vt, freq_offset_vt,
   //                            pulse_start_time_vt, frame_start_time_vt);
-  ptr_tx_c->_ptr_transmitter = new Transmitter<float>(tx_power, freq_vt, freq_time_vt, freq_offset_vt,
+  ptr_tx_c->_ptr_transmitter =
+      new Transmitter<float>(tx_power, freq_vt, freq_time_vt, freq_offset_vt,
                              pulse_start_time_vt, frame_start_time_vt);
 
   return ptr_tx_c;
 }
 
+/**
+ * @brief 
+ * 
+ * @param ptr_tx_c 
+ */
 void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == NULL) return;
   delete static_cast<Transmitter<float> *>(ptr_tx_c->_ptr_transmitter);
