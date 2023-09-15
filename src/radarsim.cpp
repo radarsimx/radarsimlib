@@ -1,6 +1,7 @@
 #include "radarsim.h"
 
 #include <vector>
+#include <iostream>
 
 #include "transmitter.hpp"
 
@@ -75,6 +76,10 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == NULL) return;
   delete static_cast<Transmitter<float> *>(ptr_tx_c->_ptr_transmitter);
   free(ptr_tx_c);
+}
+
+void Dump_Transmitter(t_Transmitter *ptr_tx_c) {
+  ptr_tx_c->_ptr_transmitter->Dump("");
 }
 
 // void mather_destroy(mather_t *m) {
