@@ -50,6 +50,12 @@ c_Transmitter *Create_Transmitter(double *freq, double *freq_time,
   return ptr_tx_c;
 }
 
+void Free_Transmitter(c_Transmitter *ptr_tx_c) {
+  if (ptr_tx_c == NULL) return;
+  delete static_cast<Transmitter<float> *>(ptr_tx_c->ptr_transmitter);
+  free(ptr_tx_c);
+}
+
 // void mather_destroy(mather_t *m) {
 //   if (m == NULL) return;
 //   delete static_cast<CPPMather *>(m->obj);
