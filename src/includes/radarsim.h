@@ -40,6 +40,12 @@ extern "C" {
 
 struct c_Transmitter;
 
+c_Transmitter *Create_Transmitter(double *freq, double *freq_time,
+                                  int waveform_size, double *freq_offset,
+                                  double *pulse_start_time, int num_pulses,
+                                  double *frame_start_time, int num_frames,
+                                  float tx_power);
+
 #ifdef __cplusplus
 }
 #endif
