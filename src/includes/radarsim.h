@@ -48,7 +48,7 @@ __declspec(dllexport) t_Transmitter *Create_Transmitter(
 
 __declspec(dllexport) void Free_Transmitter(t_Transmitter *ptr_tx_c);
 
-__declspec(dllexport) void Dump_Transmitter();
+__declspec(dllexport) void Dump_Transmitter(t_Transmitter *ptr_tx_c);
 
 #ifdef __cplusplus
 }
