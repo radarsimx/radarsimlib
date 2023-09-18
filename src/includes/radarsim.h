@@ -70,7 +70,44 @@ __declspec(dllexport) void Dump_Transmitter(t_Transmitter *ptr_tx_c);
 struct s_Receiver;
 typedef struct s_Receiver t_Receiver;
 
+__declspec(dllexport) t_Receiver *Create_Receiver(float fs, float rf_gain,
+                                                  float resistor,
+                                                  float baseband_gain,
+                                                  int samples);
 
+__declspec(dllexport) void Add_Rxchannel(float *location, float *polar,
+                                         float *phi, float *phi_ptn,
+                                         int phi_length, float *theta,
+                                         float *theta_ptn, int theta_length,
+                                         float antenna_gain,
+                                         t_Receiver *ptr_rx_c);
+
+__declspec(dllexport) void Free_Receiver(t_Receiver *ptr_rx_c);
+
+// __declspec(dllexport) void Dump_Receiver(t_Receiver *ptr_rx_c);
+
+/*********************************************
+ *
+ *  Radar
+ *
+ *********************************************/
+struct s_Radar;
+typedef struct s_Radar t_Radar;
+
+__declspec(dllexport) t_Radar *Create_Radar(t_Transmitter *ptr_tx_c,
+                                            t_Receiver *ptr_rx_c);
+
+__declspec(dllexport) void Free_Radar(t_Radar *ptr_radar_c);
+
+/*********************************************
+ *
+ *  Targets
+ *
+ *********************************************/
+struct s_Targets;
+typedef struct s_Targets t_Targets;
+
+__declspec(dllexport) t_Targets *Init_Targets();
 
 #ifdef __cplusplus
 }
