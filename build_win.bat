@@ -42,8 +42,11 @@ CD ".\build"
 
 @REM MSVC needs to set the build type using '--config Relesae' 
 cmake -DGPU_BUILD=OFF ..
-cmake --build . --config Debug
+cmake --build . --config Release
 
 CD %pwd%
+
+COPY .\build\Release\radarsimc.dll .\matlab\
+COPY .\src\includes\radarsim.h .\matlab\
 
 ECHO ## Build completed ##

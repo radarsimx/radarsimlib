@@ -54,3 +54,6 @@ dkms.conf
 /build/
 
 /.vscode/
+matlab/radarsim.h
+*.asv
+/matlab/debug/
