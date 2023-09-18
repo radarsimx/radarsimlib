@@ -3,6 +3,9 @@
 #include <iostream>
 #include <vector>
 
+#include "point.hpp"
+#include "radar.hpp"
+#include "receiver.hpp"
 #include "transmitter.hpp"
 
 /*********************************************
@@ -35,7 +38,6 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   double *frame_start_time, int num_frames,
                                   float tx_power) {
   t_Transmitter *ptr_tx_c;
-  // Transmitter<float> *ptr_tx_cpp;
 
   ptr_tx_c = (t_Transmitter *)malloc(sizeof(t_Transmitter *));
 
@@ -63,9 +65,6 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     frame_start_time_vt.push_back(frame_start_time[idx]);
   }
 
-  // ptr_tx_cpp =
-  //     new Transmitter<float>(tx_power, freq_vt, freq_time_vt, freq_offset_vt,
-  //                            pulse_start_time_vt, frame_start_time_vt);
   ptr_tx_c->_ptr_transmitter =
       new Transmitter<float>(tx_power, freq_vt, freq_time_vt, freq_offset_vt,
                              pulse_start_time_vt, frame_start_time_vt);
@@ -161,3 +160,137 @@ void Dump_Transmitter(t_Transmitter *ptr_tx_c) {
  *  Receiver
  *
  *********************************************/
+struct s_Receiver {
+  Receiver<float> *_ptr_receiver;
+};
+
+/**
+ * @brief
+ *
+ * @param fs
+ * @param rf_gain
+ * @param resistor
+ * @param baseband_gain
+ * @param samples
+ * @return t_Receiver*
+ */
+t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
+                            float baseband_gain, int samples) {
+  t_Receiver *ptr_rx_c;
+  ptr_rx_c = (t_Receiver *)malloc(sizeof(t_Receiver *));
+
+  ptr_rx_c->_ptr_receiver =
+      new Receiver<float>(fs, rf_gain, resistor, baseband_gain, samples);
+
+  return ptr_rx_c;
+}
+
+/**
+ * @brief
+ *
+ * @param location
+ * @param polar
+ * @param phi
+ * @param phi_ptn
+ * @param phi_length
+ * @param theta
+ * @param theta_ptn
+ * @param theta_length
+ * @param antenna_gain
+ * @param ptr_rx_c
+ */
+void Add_Rxchannel(float *location, float *polar, float *phi, float *phi_ptn,
+                   int phi_length, float *theta, float *theta_ptn,
+                   int theta_length, float antenna_gain, t_Receiver *ptr_rx_c) {
+  std::vector<float> phi_vt, phi_ptn_vt;
+  phi_vt.reserve(phi_length);
+  phi_ptn_vt.reserve(phi_length);
+  for (int idx = 0; idx < phi_length; idx++) {
+    phi_vt.push_back(phi[idx]);
+    phi_ptn_vt.push_back(phi_ptn[idx]);
+  }
+
+  std::vector<float> theta_vt, theta_ptn_vt;
+  theta_vt.reserve(theta_length);
+  theta_ptn_vt.reserve(theta_length);
+  for (int idx = 0; idx < theta_length; idx++) {
+    theta_vt.push_back(theta[idx]);
+    theta_ptn_vt.push_back(theta_ptn[idx]);
+  }
+
+  ptr_rx_c->_ptr_receiver->AddChannel(
+      RxChannel<float>(zpv::Vec3<float>(location[0], location[1], location[2]),
+                       zpv::Vec3<float>(polar[0], polar[1], polar[2]), phi_vt,
+                       phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
+}
+
+/**
+ * @brief
+ *
+ * @param ptr_rx_c
+ */
+void Free_Receiver(t_Receiver *ptr_rx_c) {
+  if (ptr_rx_c == NULL) return;
+  delete static_cast<Receiver<float> *>(ptr_rx_c->_ptr_receiver);
+  free(ptr_rx_c);
+}
+
+/*********************************************
+ *
+ *  Radar
+ *
+ *********************************************/
+struct s_Radar {
+  t_Transmitter *_ptr_tx;
+  t_Receiver *_ptr_rx;
+  Radar<float> *_ptr_radar;
+};
+
+/**
+ * @brief
+ *
+ * @param ptr_tx_c
+ * @param ptr_rx_c
+ * @return t_Radar*
+ */
+t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c) {
+  t_Radar *ptr_radar_c;
+  ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar *));
+  ptr_radar_c->_ptr_tx = ptr_tx_c;
+  ptr_radar_c->_ptr_rx = ptr_rx_c;
+
+  ptr_radar_c->_ptr_radar =
+      new Radar<float>(*ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver);
+
+  return ptr_radar_c;
+}
+
+/**
+ * @brief
+ *
+ * @param ptr_radar_c
+ */
+void Free_Radar(t_Radar *ptr_radar_c) {
+  if (ptr_radar_c == NULL) return;
+
+  Free_Transmitter(ptr_radar_c->_ptr_tx);
+  Free_Receiver(ptr_radar_c->_ptr_rx);
+  delete static_cast<Radar<float> *>(ptr_radar_c->_ptr_radar);
+  free(ptr_radar_c);
+}
+
+/*********************************************
+ *
+ *  Targets
+ *
+ *********************************************/
+struct s_Targets {
+  std::vector<Point<float>> *_points;
+};
+
+t_Targets *Init_Targets() {
+  t_Targets *ptr_targets_c;
+  ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets *));
+
+  return ptr_targets_c;
+}
