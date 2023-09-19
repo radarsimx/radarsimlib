@@ -109,6 +109,8 @@ typedef struct s_Targets t_Targets;
 
 __declspec(dllexport) t_Targets *Init_Targets();
 
+__declspec(dllexport) void Add_Target(t_Targets *ptr_targets_c);
+
 #ifdef __cplusplus
 }
 #endif

@@ -294,3 +294,8 @@ t_Targets *Init_Targets() {
 
   return ptr_targets_c;
 }
+
+void Add_Target(float *loc, float *speed, float rcs, float phs,
+                t_Targets *ptr_targets_c) {
+  // ptr_targets_c.push_back(Point<float>());
+}
