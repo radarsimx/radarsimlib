@@ -109,7 +109,18 @@ typedef struct s_Targets t_Targets;
 
 __declspec(dllexport) t_Targets *Init_Targets();
 
-__declspec(dllexport) void Add_Target(t_Targets *ptr_targets_c);
+__declspec(dllexport) void Add_Target(float *loc, float *speed, float rcs,
+                                      float phs, t_Targets *ptr_targets_c);
+
+/*********************************************
+ *
+ *  Simulator
+ *
+ *********************************************/
+__declspec(dllexport) void Run_Simulator(t_Radar *ptr_radar_c,
+                                         t_Targets *ptr_targets_c,
+                                         double *ptr_bb_real,
+                                         double *ptr_bb_imag);
 
 #ifdef __cplusplus
 }

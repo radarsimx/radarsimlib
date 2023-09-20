@@ -1,6 +1,10 @@
+
 loadlibrary('radarsimc','radarsim.h');
 
-x=calllib('radarsimc','Create_Transmitter',[1000,10001],[0,1], 2, [0,1,2], [0,1,2],3,[0], 1, 10);
+f = libpointer("doublePtr",[4,5,6]);
+t = libpointer("doublePtr",[0,1]);
+
+tx_ptr=calllib('radarsimc','Create_Transmitter',[1000,10001],[0,1], 2, [0,1,2], [0,1,2],3,[0], 1, 10);
 
 calllib('radarsimc','Dump_Transmitter',x);
 

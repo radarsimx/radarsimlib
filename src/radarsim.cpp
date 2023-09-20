@@ -6,6 +6,7 @@
 #include "point.hpp"
 #include "radar.hpp"
 #include "receiver.hpp"
+#include "simulator.hpp"
 #include "transmitter.hpp"
 
 /*********************************************
@@ -285,7 +286,7 @@ void Free_Radar(t_Radar *ptr_radar_c) {
  *
  *********************************************/
 struct s_Targets {
-  std::vector<Point<float>> *_points;
+  std::vector<Point<float>> _points;
 };
 
 t_Targets *Init_Targets() {
@@ -297,5 +298,19 @@ t_Targets *Init_Targets() {
 
 void Add_Target(float *loc, float *speed, float rcs, float phs,
                 t_Targets *ptr_targets_c) {
-  // ptr_targets_c.push_back(Point<float>());
+  ptr_targets_c->_points.push_back(
+      Point<float>(zpv::Vec3<float>(loc[0], loc[1], loc[2]),
+                   zpv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs));
+}
+
+/*********************************************
+ *
+ *  Simulator
+ *
+ *********************************************/
+void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
+                   double *ptr_bb_real, double *ptr_bb_imag) {
+  Simulator<float> simc;
+  simc.Run(*ptr_radar_c->_ptr_radar, ptr_targets_c->_points, ptr_bb_real,
+           ptr_bb_imag);
 }
