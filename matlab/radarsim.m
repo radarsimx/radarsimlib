@@ -1,16 +1,77 @@
 
 loadlibrary('radarsimc','radarsim.h');
 
-f = libpointer("doublePtr",[4,5,6]);
-t = libpointer("doublePtr",[0,1]);
+%% Transmitter
+f = libpointer("doublePtr",[24.075e9, 24.175e9]);
+t = libpointer("doublePtr",[0,80e-6]);
 
-tx_ptr=calllib('radarsimc','Create_Transmitter',[1000,10001],[0,1], 2, [0,1,2], [0,1,2],3,[0], 1, 10);
+freq_offset = libpointer("doublePtr",zeros(1,256));
+pulse_start_time = libpointer("doublePtr",(0:1:255)*100e-6);
 
-calllib('radarsimc','Dump_Transmitter',x);
+frame_start_time = libpointer("doublePtr",0);
 
-calllib('radarsimc','Free_Transmitter',x);
+tx_ptr=calllib('radarsimc', 'Create_Transmitter', f, t, 2, freq_offset, pulse_start_time,256, frame_start_time, 1, 10);
 
-clear x;
+%% Tx Channel
+location=libpointer("singlePtr",[0,0,0]);
+polar=libpointer("singlePtr",[0,0,1]);
+phi=libpointer("singlePtr",[-90,90]);
+phi_ptn=libpointer("singlePtr",[0,0]);
+theta=libpointer("singlePtr",[0,180]);
+theta_ptn=libpointer("singlePtr",[0,0]);
+antenna_gain=0;
+mod_t=libpointer("singlePtr",[]);
+mod_var_real=libpointer("singlePtr",[]);
+mod_var_imag=libpointer("singlePtr",[]);
+
+pulse_mod_real=libpointer("singlePtr",ones(1,256));
+pulse_mod_imag=libpointer("singlePtr",zeros(1,256));
+
+calllib('radarsimc', 'Add_Txchannel', location, polar, phi, phi_ptn, 2, ...
+    theta, theta_ptn, 2, antenna_gain, ...
+    mod_t, mod_var_real, mod_var_imag, 0, ...
+    pulse_mod_real, pulse_mod_imag, 0, 1, ...
+    tx_ptr);
+
+%% Receiver
+fs=2e6;
+rf_gain = 20;
+resistor=500;
+baseband_gain=30;
+samples=160;
+rx_ptr = calllib('radarsimc', 'Create_Receiver', fs, rf_gain, resistor, ...
+                            baseband_gain, samples);
+
+%% Rx Channel
+calllib('radarsimc', 'Add_Rxchannel', location, polar, phi, phi_ptn, 2, ...
+    theta, theta_ptn, 2, antenna_gain, ...
+    rx_ptr);
+
+%% Radar
+radar_ptr=calllib('radarsimc', 'Create_Radar', tx_ptr, rx_ptr);
+
+
+%% Targets
+targets_ptr=calllib('radarsimc', 'Init_Targets');
+
+tg_loc = libpointer("singlePtr",[200,0,0]);
+tg_speed = libpointer("singlePtr",[-5,0,0]);
+calllib('radarsimc', 'Add_Target', tg_loc, tg_speed, 20, 0, targets_ptr);
+
+%% Simulator
+bb_real = libpointer("doublePtr",zeros(256, 160));
+bb_imag = libpointer("doublePtr",zeros(256, 160));
+
+calllib('radarsimc','Run_Simulator',radar_ptr, targets_ptr, bb_real, bb_imag);
+
+calllib('radarsimc','Dump_Transmitter',tx_ptr);
+
+calllib('radarsimc','Free_Transmitter',tx_ptr);
+
+clear tx_ptr;
+clear rx_ptr;
+clear radar_ptr;
+clear targets_ptr;
 unloadlibrary radarsimc;
 
 

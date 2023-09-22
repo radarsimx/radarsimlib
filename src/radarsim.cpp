@@ -293,6 +293,8 @@ t_Targets *Init_Targets() {
   t_Targets *ptr_targets_c;
   ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets *));
 
+  ptr_targets_c->_points = std::vector<Point<float>>();
+
   return ptr_targets_c;
 }
 
@@ -310,7 +312,7 @@ void Add_Target(float *loc, float *speed, float rcs, float phs,
  *********************************************/
 void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
                    double *ptr_bb_real, double *ptr_bb_imag) {
-  Simulator<float> simc;
+  Simulator<float> simc = Simulator<float>();
   simc.Run(*ptr_radar_c->_ptr_radar, ptr_targets_c->_points, ptr_bb_real,
            ptr_bb_imag);
 }
