@@ -57,18 +57,19 @@ else()
 
     # ## build executable
     add_library(radarsimc SHARED ${SOURCES})
+    # add_executable(radarsimc ${SOURCES})
 
-    # ## require OpenMP for CPU build
-    find_package(OpenMP REQUIRED)
+    # require OpenMP for CPU build
+    # find_package(OpenMP REQUIRED)
 
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC") # MSVC
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp")
-    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU") # gcc/g++
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
-    else() # other compiler (not tested)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
-    endif()
+    # if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC") # MSVC
+    #     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp")
+    # elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU") # gcc/g++
+    #     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+    # else() # other compiler (not tested)
+    #     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+    # endif()
 
-    # ## link with OpenMP library
-    target_link_libraries(radarsimc PRIVATE OpenMP::OpenMP_CXX)
+    # link with OpenMP library
+    # target_link_libraries(radarsimc PRIVATE OpenMP::OpenMP_CXX)
 endif()
