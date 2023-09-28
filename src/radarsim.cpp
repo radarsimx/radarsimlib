@@ -173,7 +173,6 @@ struct s_Receiver {
  * @param rf_gain
  * @param resistor
  * @param baseband_gain
- * @param samples
  * @return t_Receiver*
  */
 t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
@@ -267,6 +266,15 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c) {
   return ptr_radar_c;
 }
 
+/**
+ * @brief 
+ * 
+ * @param location 
+ * @param speed 
+ * @param rotation 
+ * @param rotation_rate 
+ * @param ptr_radar_c 
+ */
 void Radar_Motion(float *location, float *speed, float *rotation,
                   float *rotation_rate, t_Radar *ptr_radar_c) {
   std::vector<zpv::Vec3<float>> loc_vt, spd_vt, rot_vt, rrt_vt;
@@ -301,6 +309,11 @@ struct s_Targets {
   PointList<float> *_ptr_points;
 };
 
+/**
+ * @brief 
+ * 
+ * @return t_Targets* 
+ */
 t_Targets *Init_Targets() {
   t_Targets *ptr_targets_c;
   ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets));
@@ -309,6 +322,15 @@ t_Targets *Init_Targets() {
   return ptr_targets_c;
 }
 
+/**
+ * @brief 
+ * 
+ * @param loc 
+ * @param speed 
+ * @param rcs 
+ * @param phs 
+ * @param ptr_targets_c 
+ */
 void Add_Target(float *loc, float *speed, float rcs, float phs,
                 t_Targets *ptr_targets_c) {
   ptr_targets_c->_ptr_points->Add_Point(
@@ -321,6 +343,15 @@ void Add_Target(float *loc, float *speed, float rcs, float phs,
  *  Simulator
  *
  *********************************************/
+
+/**
+ * @brief 
+ * 
+ * @param ptr_radar_c 
+ * @param ptr_targets_c 
+ * @param ptr_bb_real 
+ * @param ptr_bb_imag 
+ */
 void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
                    double *ptr_bb_real, double *ptr_bb_imag) {
   Simulator<float> simc = Simulator<float>();
@@ -329,6 +360,11 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
            ptr_bb_real, ptr_bb_imag);
 }
 
+/*********************************************
+ *
+ *  main
+ *
+ *********************************************/
 int main() {
   double f[] = {24.075e9, 24.175e9};
   double t[] = {0, 80e-6};
