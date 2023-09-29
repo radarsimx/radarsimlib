@@ -41,7 +41,6 @@
 #include "receiver.hpp"
 #include "simulator.hpp"
 #include "transmitter.hpp"
-#include "zpvector/zpvector.hpp"
 
 /*********************************************
  *
