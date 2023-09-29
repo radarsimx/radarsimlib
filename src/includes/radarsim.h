@@ -119,6 +119,8 @@ __declspec(dllexport) void Add_Txchannel(
     float *pulse_mod_real, float *pulse_mod_imag, float delay, float grid,
     t_Transmitter *ptr_tx_c);
 
+__declspec(dllexport) int Get_Num_Txchannel(t_Transmitter *ptr_tx_c);
+
 /**
  * @brief Free the memory of Transmitter
  *
@@ -169,6 +171,8 @@ __declspec(dllexport) void Add_Rxchannel(float *location, float *polar,
                                          float *theta_ptn, int theta_length,
                                          float antenna_gain,
                                          t_Receiver *ptr_rx_c);
+
+__declspec(dllexport) int Get_Num_Rxchannel(t_Receiver *ptr_rx_c);
 
 /**
  * @brief Free the memory of Receiver

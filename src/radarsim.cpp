@@ -198,6 +198,10 @@ void Add_Txchannel(float *location, float *polar, float *phi, float *phi_ptn,
                        mod_t_vt, mod_var_vt, pulse_mod_vt, delay, grid));
 }
 
+int Get_Num_Txchannel(t_Transmitter *ptr_tx_c){
+  return ptr_tx_c->_ptr_transmitter->channel_size_;
+}
+
 /**
  * @brief Free the memory of Transmitter
  *
@@ -279,6 +283,10 @@ void Add_Rxchannel(float *location, float *polar, float *phi, float *phi_ptn,
       RxChannel<float>(zpv::Vec3<float>(location[0], location[1], location[2]),
                        zpv::Vec3<float>(polar[0], polar[1], polar[2]), phi_vt,
                        phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
+}
+
+int Get_Num_Rxchannel(t_Receiver *ptr_rx_c){
+  return ptr_rx_c->_ptr_receiver->channel_size_;
 }
 
 /**
