@@ -1,9 +1,9 @@
 /*
  *
- *    radarsim
+ *    C wrapper of RadarSimCpp
  *
  *    ----------
- *    RadarSimC - A Radar Simulation Library Built with C++
+ *
  *    Copyright (C) 2023 - PRESENT  Zhengyu Peng
  *    E-mail: zpeng.me@gmail.com
  *    Website: https://zpeng.me
@@ -54,18 +54,21 @@ struct s_Transmitter {
 };
 
 /**
- * @brief
+ * @brief Create a Transmitter, return the pointer of the Transmitter
  *
- * @param freq
- * @param freq_time
- * @param waveform_size
- * @param freq_offset
- * @param pulse_start_time
- * @param num_pulses
- * @param frame_start_time
- * @param num_frames
- * @param tx_power
- * @return t_Transmitter*
+ * @param freq frequency vector (Hz)
+ * @param freq_time timestamp vector for the frequency vector (s)
+ * @param waveform_size length of the frequency and timestamp vector
+ * @param freq_offset frequency offset per pulse (Hz)
+ * length should equal to the number of pulses
+ * @param pulse_start_time pulse start time vector (s)
+ * length should equal to the number of pulses
+ * @param num_pulses number of pulses
+ * @param frame_start_time frame start time vector (s)
+ * length should equal to the number of frames
+ * @param num_frames number of frames
+ * @param tx_power transmitter power (dBm)
+ * @return t_Transmitter* ponter to the Transmitter
  */
 t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   int waveform_size, double *freq_offset,
@@ -181,7 +184,9 @@ void Add_Txchannel(float *location, float *polar, float *phi, float *phi_ptn,
  * @param ptr_tx_c
  */
 void Free_Transmitter(t_Transmitter *ptr_tx_c) {
-  if (ptr_tx_c == NULL) return;
+  if (ptr_tx_c == NULL) {
+    return;
+  }
   delete static_cast<Transmitter<float> *>(ptr_tx_c->_ptr_transmitter);
   free(ptr_tx_c);
 }
@@ -296,13 +301,13 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c) {
 }
 
 /**
- * @brief 
- * 
- * @param location 
- * @param speed 
- * @param rotation 
- * @param rotation_rate 
- * @param ptr_radar_c 
+ * @brief
+ *
+ * @param location
+ * @param speed
+ * @param rotation
+ * @param rotation_rate
+ * @param ptr_radar_c
  */
 void Radar_Motion(float *location, float *speed, float *rotation,
                   float *rotation_rate, t_Radar *ptr_radar_c) {
@@ -339,9 +344,9 @@ struct s_Targets {
 };
 
 /**
- * @brief 
- * 
- * @return t_Targets* 
+ * @brief
+ *
+ * @return t_Targets*
  */
 t_Targets *Init_Targets() {
   t_Targets *ptr_targets_c;
@@ -352,13 +357,13 @@ t_Targets *Init_Targets() {
 }
 
 /**
- * @brief 
- * 
- * @param loc 
- * @param speed 
- * @param rcs 
- * @param phs 
- * @param ptr_targets_c 
+ * @brief
+ *
+ * @param loc
+ * @param speed
+ * @param rcs
+ * @param phs
+ * @param ptr_targets_c
  */
 void Add_Target(float *loc, float *speed, float rcs, float phs,
                 t_Targets *ptr_targets_c) {
@@ -374,12 +379,12 @@ void Add_Target(float *loc, float *speed, float rcs, float phs,
  *********************************************/
 
 /**
- * @brief 
- * 
- * @param ptr_radar_c 
- * @param ptr_targets_c 
- * @param ptr_bb_real 
- * @param ptr_bb_imag 
+ * @brief
+ *
+ * @param ptr_radar_c
+ * @param ptr_targets_c
+ * @param ptr_bb_real
+ * @param ptr_bb_imag
  */
 void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
                    double *ptr_bb_real, double *ptr_bb_imag) {

@@ -1,9 +1,9 @@
 /*
  *
- *    radarsim
+ *    C wrapper of RadarSimCpp
  *
  *    ----------
- *    RadarSimC - A Radar Simulation Library Built with C++
+ *
  *    Copyright (C) 2023 - PRESENT  Zhengyu Peng
  *    E-mail: zpeng.me@gmail.com
  *    Website: https://zpeng.me
