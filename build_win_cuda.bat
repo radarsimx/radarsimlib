@@ -33,6 +33,7 @@ SET pwd=%cd%
 
 ECHO ## Clean old build files ##
 RMDIR /Q/S .\build
+RMDIR /Q/S .\radarsimlib
 
 ECHO ## Building radarsimc_entry with GPU ##
 
@@ -45,5 +46,9 @@ cmake -DGPU_BUILD=ON ..
 cmake --build . --config Release
 
 CD %pwd%
+
+MD ".\radarsimlib"
+COPY .\build\Release\radarsimc.dll .\radarsimlib\
+COPY .\src\includes\radarsim.h .\radarsimlib\
 
 ECHO ## Build completed ##
