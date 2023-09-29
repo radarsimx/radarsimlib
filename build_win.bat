@@ -33,6 +33,7 @@ SET pwd=%cd%
 
 ECHO ## Clean old build files ##
 RMDIR /Q/S .\build
+RMDIR /Q/S .\radarsimlib
 
 ECHO ## Building radarsimc_entry with CPU ##
 
@@ -46,7 +47,8 @@ cmake --build . --config Release
 
 CD %pwd%
 
-COPY .\build\Release\radarsimc.dll .\matlab\
-COPY .\src\includes\radarsim.h .\matlab\
+MD ".\radarsimlib"
+COPY .\build\Release\radarsimc.dll .\radarsimlib\
+COPY .\src\includes\radarsim.h .\radarsimlib\
 
 ECHO ## Build completed ##

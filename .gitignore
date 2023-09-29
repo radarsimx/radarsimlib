@@ -57,3 +57,4 @@ dkms.conf
 matlab/radarsim.h
 *.asv
 /matlab/debug/
+/radarsimlib/
