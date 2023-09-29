@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        ssh-key: ${{ secrets.RADARSIMC }}
+        ssh-key: ${{ secrets.RADARSIMCPP }}
         submodules: true
     - name: Build
       run: |
