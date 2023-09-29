@@ -4,7 +4,7 @@
  *
  *    ----------
  *    RadarSimC - A Radar Simulation Library Built with C++
- *    Copyright (C) 2018 - PRESENT  Zhengyu Peng
+ *    Copyright (C) 2023 - PRESENT  Zhengyu Peng
  *    E-mail: zpeng.me@gmail.com
  *    Website: https://zpeng.me
  *
@@ -59,8 +59,6 @@ __declspec(dllexport) void Add_Txchannel(
     t_Transmitter *ptr_tx_c);
 
 __declspec(dllexport) void Free_Transmitter(t_Transmitter *ptr_tx_c);
-
-__declspec(dllexport) void Dump_Transmitter(t_Transmitter *ptr_tx_c);
 
 /*********************************************
  *

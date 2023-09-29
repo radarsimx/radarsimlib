@@ -1,3 +1,36 @@
+/*
+ *
+ *    radarsim
+ *
+ *    ----------
+ *    RadarSimC - A Radar Simulation Library Built with C++
+ *    Copyright (C) 2023 - PRESENT  Zhengyu Peng
+ *    E-mail: zpeng.me@gmail.com
+ *    Website: https://zpeng.me
+ *
+ *    `                      `
+ *    -:.                  -#:
+ *    -//:.              -###:
+ *    -////:.          -#####:
+ *    -/:.://:.      -###++##:
+ *    ..   `://:-  -###+. :##:
+ *           `:/+####+.   :##:
+ *    .::::::::/+###.     :##:
+ *    .////-----+##:    `:###:
+ *     `-//:.   :##:  `:###/.
+ *       `-//:. :##:`:###/.
+ *         `-//:+######/.
+ *           `-/+####/.
+ *             `+##+.
+ *              :##:
+ *              :##:
+ *              :##:
+ *              :##:
+ *              :##:
+ *               .+:
+ *
+ */
+
 #include "radarsim.h"
 
 #include <iostream>
@@ -151,10 +184,6 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == NULL) return;
   delete static_cast<Transmitter<float> *>(ptr_tx_c->_ptr_transmitter);
   free(ptr_tx_c);
-}
-
-void Dump_Transmitter(t_Transmitter *ptr_tx_c) {
-  ptr_tx_c->_ptr_transmitter->Dump("");
 }
 
 /*********************************************

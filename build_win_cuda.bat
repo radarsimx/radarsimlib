@@ -42,7 +42,7 @@ CD ".\build"
 
 @REM MSVC needs to set the build type using '--config Relesae' 
 cmake -DGPU_BUILD=ON ..
-cmake --build . --config Debug
+cmake --build . --config Release
 
 CD %pwd%
 
