@@ -198,6 +198,12 @@ void Add_Txchannel(float *location, float *polar, float *phi, float *phi_ptn,
                        mod_t_vt, mod_var_vt, pulse_mod_vt, delay, grid));
 }
 
+/**
+ * @brief Get the number of Tx channels
+ * 
+ * @param ptr_tx_c Pointer to the Transmitter
+ * @return int Number of Tx channels
+ */
 int Get_Num_Txchannel(t_Transmitter *ptr_tx_c){
   return ptr_tx_c->_ptr_transmitter->channel_size_;
 }
@@ -285,6 +291,12 @@ void Add_Rxchannel(float *location, float *polar, float *phi, float *phi_ptn,
                        phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
 }
 
+/**
+ * @brief Get the number of Rx channels
+ * 
+ * @param ptr_rx_c Pointer to the Receiver
+ * @return int Number of Rx channels
+ */
 int Get_Num_Rxchannel(t_Receiver *ptr_rx_c){
   return ptr_rx_c->_ptr_receiver->channel_size_;
 }
