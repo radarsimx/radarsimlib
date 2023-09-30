@@ -35,7 +35,7 @@ ECHO ## Clean old build files ##
 RMDIR /Q/S .\build
 RMDIR /Q/S .\radarsimlib
 
-ECHO ## Building radarsimc_entry with CPU ##
+ECHO ## Building radarsimlib with CPU ##
 
 @REM go to the build folder
 MD ".\build"

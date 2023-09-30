@@ -34,11 +34,11 @@ workpath=$(pwd)
 echo "## Clean old build files ##"
 rm -rf ./build
 
-echo "## Building radarsimc_entry with GPU ##"
+echo "## Building radarsimlib with GPU ##"
 mkdir ./build 
 cd ./build
 
-cmake -DCMAKE_BUILD_TYPE=Debug -DGPU_BUILD=ON ..
+cmake -DCMAKE_BUILD_TYPE=Release -DGPU_BUILD=ON ..
 cmake --build .
 
 cd $workpath
