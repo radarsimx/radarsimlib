@@ -1,6 +1,6 @@
 #!/bin/sh
 
-echo "Automatic build script of radarsimc_entry for Linux"
+echo "Automatic build script of radarsimlib for Linux"
 echo ""
 echo "----------"
 echo "Copyright (C) 2023 - PRESENT  radarsimx.com"
