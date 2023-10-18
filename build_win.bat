@@ -33,7 +33,7 @@ cmake --build . --config Release
 CD %pwd%
 
 MD ".\radarsimlib"
-COPY .\build\Release\radarsimc.dll .\radarsimlib\
+COPY .\build\Release\radarsim.dll .\radarsimlib\
 COPY .\src\includes\radarsim.h .\radarsimlib\
 
 ECHO ## Build completed ##
