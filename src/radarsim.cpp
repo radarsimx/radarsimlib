@@ -10,8 +10,8 @@
  *
  *     ____           _            ____  _          __  __
  *    |  _ \ __ _  __| | __ _ _ __/ ___|(_)_ __ ___ \ \/ /
- *    | |_) / _` |/ _` |/ _` | '__\___ \| | '_ ` _ \ \  / 
- *    |  _ < (_| | (_| | (_| | |   ___) | | | | | | |/  \ 
+ *    | |_) / _` |/ _` |/ _` | '__\___ \| | '_ ` _ \ \  /
+ *    |  _ < (_| | (_| | (_| | |   ___) | | | | | | |/  \
  *    |_| \_\__,_|\__,_|\__,_|_|  |____/|_|_| |_| |_/_/\_\
  *
  */
@@ -185,11 +185,11 @@ void Add_Txchannel(float *location, float *polar, float *phi, float *phi_ptn,
 
 /**
  * @brief Get the number of Tx channels
- * 
+ *
  * @param ptr_tx_c Pointer to the Transmitter
  * @return int Number of Tx channels
  */
-int Get_Num_Txchannel(t_Transmitter *ptr_tx_c){
+int Get_Num_Txchannel(t_Transmitter *ptr_tx_c) {
   return ptr_tx_c->_ptr_transmitter->channel_size_;
 }
 
@@ -278,11 +278,11 @@ void Add_Rxchannel(float *location, float *polar, float *phi, float *phi_ptn,
 
 /**
  * @brief Get the number of Rx channels
- * 
+ *
  * @param ptr_rx_c Pointer to the Receiver
  * @return int Number of Rx channels
  */
-int Get_Num_Rxchannel(t_Receiver *ptr_rx_c){
+int Get_Num_Rxchannel(t_Receiver *ptr_rx_c) {
   return ptr_rx_c->_ptr_receiver->channel_size_;
 }
 
@@ -458,7 +458,8 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
 //   double frame_start_time[] = {0};
 
 //   t_Transmitter *tx_ptr = Create_Transmitter(
-//       f, t, 2, freq_offset, pulse_start_time, 256, frame_start_time, 1, 10.0);
+//       f, t, 2, freq_offset, pulse_start_time, 256, frame_start_time,
+//       1, 10.0);
 
 //   float location[] = {0, 0, 0};
 //   float polar[] = {0, 0, 1};
@@ -497,7 +498,8 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
 //   float radar_spd_ptr[] = {0, 0, 0};
 //   float radar_rot_ptr[] = {0, 0, 0};
 //   float radar_rrt_ptr[] = {0, 0, 0};
-//   Set_Radar_Motion(radar_loc_ptr, radar_spd_ptr, radar_rot_ptr, radar_rrt_ptr,
+//   Set_Radar_Motion(radar_loc_ptr, radar_spd_ptr, radar_rot_ptr,
+//   radar_rrt_ptr,
 //                radar_ptr);
 
 //   t_Targets *targets_ptr = Init_Targets();
