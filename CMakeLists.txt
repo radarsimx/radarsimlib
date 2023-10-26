@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 
-# ## Config for radarsim
-project(radarsim LANGUAGES CXX)
+# ## Config for radarsimc
+project(radarsimc LANGUAGES CXX)
 
 # ## force GPU build
 # set(GPU_BUILD OFF)
@@ -29,10 +29,10 @@ if(GPU_BUILD)
     set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE CUDA)
 
     # ## build executable
-    add_library(radarsim SHARED ${SOURCES})
+    add_library(radarsimc SHARED ${SOURCES})
 
     # ## set CUDA building properties
-    set_target_properties(radarsim PROPERTIES
+    set_target_properties(radarsimc PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES "50;61;86")
 
@@ -40,24 +40,24 @@ if(GPU_BUILD)
     include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
     # ## add _CUDA_ micro to the compiler
-    target_compile_definitions(radarsim PRIVATE _CUDA_ _CUDATEST_)
+    target_compile_definitions(radarsimc PRIVATE _CUDA_ _CUDATEST_)
 
     # ## for MSVC, remove default libs
     if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        # target_compile_options(radarsim PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+        # target_compile_options(radarsimc PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
         # --generate-line-info
         # --use_fast_math
         # --relocatable-device-code=true
         # >)
-        set_target_properties(radarsim PROPERTIES LINK_FLAGS "/NODEFAULTLIB:\"LIBCMT\"")
+        set_target_properties(radarsimc PROPERTIES LINK_FLAGS "/NODEFAULTLIB:\"LIBCMT\"")
     endif()
 else()
     # ## add source files, ".cpp"
     file(GLOB SOURCES "./src/*.cpp" "./src/radarsimcpp/src/*.cpp")
 
     # ## build executable
-    add_library(radarsim SHARED ${SOURCES})
-    # add_executable(radarsim ${SOURCES})
+    add_library(radarsimc SHARED ${SOURCES})
+    # add_executable(radarsimc ${SOURCES})
 
     # require OpenMP for CPU build
     # find_package(OpenMP REQUIRED)
