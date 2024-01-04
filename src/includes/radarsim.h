@@ -272,8 +272,8 @@ __declspec(dllexport) void Free_Targets(t_Targets *ptr_targets_c);
  * @param ptr_bb_imag Imag part of baseband samples
  */
 __declspec(dllexport) void Run_Simulator(t_Radar *ptr_radar_c,
-                                         t_Targets *ptr_targets_c,
-                                         double *ptr_bb_real,
+                                         t_Targets *ptr_targets_c, int level,
+                                         float density, double *ptr_bb_real,
                                          double *ptr_bb_imag);
 
 #ifdef __cplusplus

@@ -461,8 +461,8 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  * @param ptr_bb_real Real part of baseband samples
  * @param ptr_bb_imag Imag part of baseband samples
  */
-void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
-                   double *ptr_bb_real, double *ptr_bb_imag) {
+void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
+                   float density, double *ptr_bb_real, double *ptr_bb_imag) {
   if (ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
     Simulator<float> simc = Simulator<float>();
 
@@ -479,16 +479,58 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
     scene_c.SetRadar(*ptr_radar_c->_ptr_radar);
 
     SnapshotList<float> snap_list;
-    snap_list.Add_Snapshot(Snapshot<float>(0, 0, 0, 0, 0));
+    if (level == 0) {
+      for (int fm_idx = 0; fm_idx < ptr_radar_c->_ptr_radar->tx_.frame_size_;
+           fm_idx++) {
+        for (int tx_idx = 0;
+             tx_idx < ptr_radar_c->_ptr_radar->tx_.channel_size_; tx_idx++) {
+          double timesatmp =
+              ptr_radar_c->_ptr_radar->tx_.ptrh_frame_start_time_[fm_idx] +
+              ptr_radar_c->_ptr_radar->tx_.ptrh_channels_[tx_idx].delay_;
+          snap_list.Add_Snapshot(
+              Snapshot<float>(timesatmp, fm_idx, tx_idx, 0, 0));
+        }
+      }
+    } else if (level == 1) {
+      for (int fm_idx = 0; fm_idx < ptr_radar_c->_ptr_radar->tx_.frame_size_;
+           fm_idx++) {
+        for (int tx_idx = 0;
+             tx_idx < ptr_radar_c->_ptr_radar->tx_.channel_size_; tx_idx++) {
+          for (int ps_idx = 0;
+               ps_idx < ptr_radar_c->_ptr_radar->tx_.pulse_size_; ps_idx++) {
+            double timesatmp =
+                ptr_radar_c->_ptr_radar->tx_.ptrh_frame_start_time_[fm_idx] +
+                ptr_radar_c->_ptr_radar->tx_.ptrh_channels_[tx_idx].delay_ +
+                ptr_radar_c->_ptr_radar->tx_.ptrh_pulse_start_time_[ps_idx];
+            snap_list.Add_Snapshot(
+                Snapshot<float>(timesatmp, fm_idx, tx_idx, ps_idx, 0));
+          }
+        }
+      }
+    } else if (level == 2) {
+      for (int fm_idx = 0; fm_idx < ptr_radar_c->_ptr_radar->tx_.frame_size_;
+           fm_idx++) {
+        for (int tx_idx = 0;
+             tx_idx < ptr_radar_c->_ptr_radar->tx_.channel_size_; tx_idx++) {
+          for (int ps_idx = 0;
+               ps_idx < ptr_radar_c->_ptr_radar->tx_.pulse_size_; ps_idx++) {
+            for (int sp_idx = 0; sp_idx < ptr_radar_c->_ptr_radar->sample_size_;
+                 sp_idx++) {
+              double timesatmp =
+                  ptr_radar_c->_ptr_radar->tx_.ptrh_frame_start_time_[fm_idx] +
+                  ptr_radar_c->_ptr_radar->tx_.ptrh_channels_[tx_idx].delay_ +
+                  ptr_radar_c->_ptr_radar->tx_.ptrh_pulse_start_time_[ps_idx] +
+                  sp_idx / ptr_radar_c->_ptr_radar->rx_.fs_;
+              snap_list.Add_Snapshot(
+                  Snapshot<float>(timesatmp, fm_idx, tx_idx, ps_idx, sp_idx));
+            }
+          }
+        }
+      }
+    }
 
-    scene_c.RunSimulator(
-      0,
-      false,
-      snap_list.ptr_snapshots_,
-      0.2,
-      ptr_bb_real,
-      ptr_bb_imag
-    );
+    scene_c.RunSimulator(level, false, snap_list.ptr_snapshots_, density,
+                         ptr_bb_real, ptr_bb_imag);
   }
 }
 
@@ -610,14 +652,16 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
 
 //   t_Targets *targets_ptr = Init_Targets();
 
-//   float points[] = {0,0,0,-0.0577,0,0.0816,-0.0577,0.0707,-0.0408,-0.0577,-0.0707,-0.0408};
+//   float points[] =
+//   {0,0,0,-0.0577,0,0.0816,-0.0577,0.0707,-0.0408,-0.0577,-0.0707,-0.0408};
 //   int cells[]={0,1,2,0,2,3,0,3,1};
 //   float tg_org[] = {0, 0, 0};
 //   float tg_loc[] = {50, 0, 0};
 //   float tg_speed[] = {-5, 0, 0};
 //   float tg_rot[] = {0, 0, 0};
 //   float tg_rrt[] = {0, 0, 0};
-//   Add_Mesh_Target(points, cells, 3, tg_org, tg_loc, tg_speed, tg_rot, tg_rrt, -1.0, 0.0, 1.0, 0.0, false, targets_ptr);
+//   Add_Mesh_Target(points, cells, 3, tg_org, tg_loc, tg_speed, tg_rot, tg_rrt,
+//   -1.0, 0.0, 1.0, 0.0, false, targets_ptr);
 
 //   double bb_real[256][160];
 //   double bb_imag[256][160];
