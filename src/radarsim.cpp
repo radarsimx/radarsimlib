@@ -24,7 +24,9 @@
 #include "point.hpp"
 #include "radar.hpp"
 #include "receiver.hpp"
+#include "scene.hpp"
 #include "simulator.hpp"
+#include "snapshot.hpp"
 #include "transmitter.hpp"
 
 /*********************************************
@@ -371,6 +373,7 @@ void Free_Radar(t_Radar *ptr_radar_c) {
  *********************************************/
 struct s_Targets {
   PointList<float> *_ptr_points;
+  TargetList<float> *_ptr_targets;
 };
 
 /**
@@ -383,6 +386,7 @@ t_Targets *Init_Targets() {
   ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets));
 
   ptr_targets_c->_ptr_points = new PointList<float>();
+  ptr_targets_c->_ptr_targets = new TargetList<float>();
   return ptr_targets_c;
 }
 
@@ -395,11 +399,39 @@ t_Targets *Init_Targets() {
  * @param phs Target's phase (rad)
  * @param ptr_targets_c Pointer to the target list
  */
-void Add_Target(float *loc, float *speed, float rcs, float phs,
-                t_Targets *ptr_targets_c) {
+void Add_Point_Target(float *loc, float *speed, float rcs, float phs,
+                      t_Targets *ptr_targets_c) {
   ptr_targets_c->_ptr_points->Add_Point(
       Point<float>(zpv::Vec3<float>(loc[0], loc[1], loc[2]),
                    zpv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs));
+}
+
+void Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
+                     float *loc, float *speed, float *rotation,
+                     float *rotation_rate, float ep_real, float ep_imag,
+                     float mu_real, float mu_imag, bool is_ground,
+                     t_Targets *ptr_targets_c) {
+  std::vector<zpv::Vec3<float>> loc_vt;
+  loc_vt.push_back(zpv::Vec3<float>(loc[0], loc[1], loc[2]));
+
+  std::vector<zpv::Vec3<float>> spd_vt;
+  spd_vt.push_back(zpv::Vec3<float>(speed[0], speed[1], speed[2]));
+
+  std::vector<zpv::Vec3<float>> rot_vt;
+  rot_vt.push_back(zpv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
+
+  std::vector<zpv::Vec3<float>> rrt_vt;
+  rrt_vt.push_back(
+      zpv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
+
+  std::complex<float> ep = std::complex(ep_real, ep_imag);
+
+  std::complex<float> mu = std::complex(mu_real, mu_imag);
+
+  ptr_targets_c->_ptr_targets->Add_Target(
+      Target<float>(points, cells, cell_size,
+                    zpv::Vec3<float>(origin[0], origin[1], origin[2]), loc_vt,
+                    spd_vt, rot_vt, rrt_vt, ep, mu, is_ground));
 }
 
 /**
@@ -411,6 +443,7 @@ void Free_Targets(t_Targets *ptr_targets_c) {
   if (ptr_targets_c == NULL) {
     return;
   }
+  delete static_cast<TargetList<float> *>(ptr_targets_c->_ptr_targets);
   delete static_cast<PointList<float> *>(ptr_targets_c->_ptr_points);
   free(ptr_targets_c);
 }
@@ -430,10 +463,33 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  */
 void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
                    double *ptr_bb_real, double *ptr_bb_imag) {
-  Simulator<float> simc = Simulator<float>();
+  if (ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
+    Simulator<float> simc = Simulator<float>();
 
-  simc.Run(*ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points->ptr_points_,
-           ptr_bb_real, ptr_bb_imag);
+    simc.Run(*ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points->ptr_points_,
+             ptr_bb_real, ptr_bb_imag);
+  }
+
+  if (ptr_targets_c->_ptr_targets->ptr_targets_.size() > 0) {
+    Scene<double, float> scene_c;
+    for (int tg_idx = 0;
+         tg_idx < ptr_targets_c->_ptr_targets->ptr_targets_.size(); tg_idx++) {
+      scene_c.AddTarget(ptr_targets_c->_ptr_targets->ptr_targets_[tg_idx]);
+    }
+    scene_c.SetRadar(*ptr_radar_c->_ptr_radar);
+
+    SnapshotList<float> snap_list;
+    snap_list.Add_Snapshot(Snapshot<float>(0, 0, 0, 0, 0));
+
+    scene_c.RunSimulator(
+      0,
+      false,
+      snap_list.ptr_snapshots_,
+      0.2,
+      ptr_bb_real,
+      ptr_bb_imag
+    );
+  }
 }
 
 /*********************************************
@@ -442,7 +498,8 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
  *
  *********************************************/
 // int main() {
-//   double f[] = {2.40750000e+10, 2.40760901e+10, 2.40771786e+10, 2.40782654e+10,
+//   double f[] =
+//   {2.40750000e+10, 2.40760901e+10, 2.40771786e+10, 2.40782654e+10,
 //                 2.40793506e+10, 2.40804341e+10, 2.40815161e+10, 2.40825964e+10,
 //                 2.40836750e+10, 2.40847521e+10, 2.40858275e+10, 2.40869012e+10,
 //                 2.40879734e+10, 2.40890439e+10, 2.40901127e+10, 2.40911800e+10,
@@ -467,7 +524,32 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
 //                 2.41646790e+10, 2.41656254e+10, 2.41665702e+10, 2.41675134e+10,
 //                 2.41684550e+10, 2.41693949e+10, 2.41703331e+10, 2.41712698e+10,
 //                 2.41722048e+10, 2.41731381e+10, 2.41740699e+10, 2.41750000e+10};
-//   double t[] = {0, 8.08080808080808e-07, 1.61616161616162e-06, 2.42424242424242e-06, 3.23232323232323e-06, 4.04040404040404e-06, 4.84848484848485e-06, 5.65656565656566e-06, 6.46464646464647e-06, 7.27272727272727e-06, 8.08080808080808e-06, 8.88888888888889e-06, 9.69696969696970e-06, 1.05050505050505e-05, 1.13131313131313e-05, 1.21212121212121e-05, 1.29292929292929e-05, 1.37373737373737e-05, 1.45454545454545e-05, 1.53535353535354e-05, 1.61616161616162e-05, 1.69696969696970e-05, 1.77777777777778e-05, 1.85858585858586e-05, 1.93939393939394e-05, 2.02020202020202e-05, 2.10101010101010e-05, 2.18181818181818e-05, 2.26262626262626e-05, 2.34343434343434e-05, 2.42424242424242e-05, 2.50505050505051e-05, 2.58585858585859e-05, 2.66666666666667e-05, 2.74747474747475e-05, 2.82828282828283e-05, 2.90909090909091e-05, 2.98989898989899e-05, 3.07070707070707e-05, 3.15151515151515e-05, 3.23232323232323e-05, 3.31313131313131e-05, 3.39393939393939e-05, 3.47474747474748e-05, 3.55555555555556e-05, 3.63636363636364e-05, 3.71717171717172e-05, 3.79797979797980e-05, 3.87878787878788e-05, 3.95959595959596e-05, 4.04040404040404e-05, 4.12121212121212e-05, 4.20202020202020e-05, 4.28282828282828e-05, 4.36363636363636e-05, 4.44444444444444e-05, 4.52525252525253e-05, 4.60606060606061e-05, 4.68686868686869e-05, 4.76767676767677e-05, 4.84848484848485e-05, 4.92929292929293e-05, 5.01010101010101e-05, 5.09090909090909e-05, 5.17171717171717e-05, 5.25252525252525e-05, 5.33333333333333e-05, 5.41414141414141e-05, 5.49494949494950e-05, 5.57575757575758e-05, 5.65656565656566e-05, 5.73737373737374e-05, 5.81818181818182e-05, 5.89898989898990e-05, 5.97979797979798e-05, 6.06060606060606e-05, 6.14141414141414e-05, 6.22222222222222e-05, 6.30303030303030e-05, 6.38383838383838e-05, 6.46464646464647e-05, 6.54545454545455e-05, 6.62626262626263e-05, 6.70707070707071e-05, 6.78787878787879e-05, 6.86868686868687e-05, 6.94949494949495e-05, 7.03030303030303e-05, 7.11111111111111e-05, 7.19191919191919e-05, 7.27272727272727e-05, 7.35353535353536e-05, 7.43434343434344e-05, 7.51515151515152e-05, 7.59595959595960e-05, 7.67676767676768e-05, 7.75757575757576e-05, 7.83838383838384e-05, 7.91919191919192e-05, 8.00000000000000e-05};
+//   double t[] =
+//   {0, 8.08080808080808e-07, 1.61616161616162e-06, 2.42424242424242e-06, 3.23232323232323e-06,
+//   4.04040404040404e-06, 4.84848484848485e-06, 5.65656565656566e-06, 6.46464646464647e-06,
+//   7.27272727272727e-06, 8.08080808080808e-06, 8.88888888888889e-06, 9.69696969696970e-06,
+//   1.05050505050505e-05, 1.13131313131313e-05, 1.21212121212121e-05, 1.29292929292929e-05,
+//   1.37373737373737e-05, 1.45454545454545e-05, 1.53535353535354e-05, 1.61616161616162e-05,
+//   1.69696969696970e-05, 1.77777777777778e-05, 1.85858585858586e-05, 1.93939393939394e-05,
+//   2.02020202020202e-05, 2.10101010101010e-05, 2.18181818181818e-05, 2.26262626262626e-05,
+//   2.34343434343434e-05, 2.42424242424242e-05, 2.50505050505051e-05, 2.58585858585859e-05,
+//   2.66666666666667e-05, 2.74747474747475e-05, 2.82828282828283e-05, 2.90909090909091e-05,
+//   2.98989898989899e-05, 3.07070707070707e-05, 3.15151515151515e-05, 3.23232323232323e-05,
+//   3.31313131313131e-05, 3.39393939393939e-05, 3.47474747474748e-05, 3.55555555555556e-05,
+//   3.63636363636364e-05, 3.71717171717172e-05, 3.79797979797980e-05, 3.87878787878788e-05,
+//   3.95959595959596e-05, 4.04040404040404e-05, 4.12121212121212e-05, 4.20202020202020e-05,
+//   4.28282828282828e-05, 4.36363636363636e-05, 4.44444444444444e-05, 4.52525252525253e-05,
+//   4.60606060606061e-05, 4.68686868686869e-05, 4.76767676767677e-05, 4.84848484848485e-05,
+//   4.92929292929293e-05, 5.01010101010101e-05, 5.09090909090909e-05, 5.17171717171717e-05,
+//   5.25252525252525e-05, 5.33333333333333e-05, 5.41414141414141e-05, 5.49494949494950e-05,
+//   5.57575757575758e-05, 5.65656565656566e-05, 5.73737373737374e-05, 5.81818181818182e-05,
+//   5.89898989898990e-05, 5.97979797979798e-05, 6.06060606060606e-05, 6.14141414141414e-05,
+//   6.22222222222222e-05, 6.30303030303030e-05, 6.38383838383838e-05, 6.46464646464647e-05,
+//   6.54545454545455e-05, 6.62626262626263e-05, 6.70707070707071e-05, 6.78787878787879e-05,
+//   6.86868686868687e-05, 6.94949494949495e-05, 7.03030303030303e-05, 7.11111111111111e-05,
+//   7.19191919191919e-05, 7.27272727272727e-05, 7.35353535353536e-05, 7.43434343434344e-05,
+//   7.51515151515152e-05, 7.59595959595960e-05, 7.67676767676768e-05, 7.75757575757576e-05,
+//   7.83838383838384e-05, 7.91919191919192e-05, 8.00000000000000e-05};
 
 //   double freq_offset[256];
 //   for (int idx = 0; idx < 256; idx++) {
@@ -487,9 +569,9 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
 
 //   float location[] = {0, 0, 0};
 //   float polar[] = {0, 0, 1};
-//   float phi[] = {-90, 90};
+//   float phi[] = {-90.0/180.0*kPI, 90.0/180.0*kPI};
 //   float phi_ptn[] = {0, 0};
-//   float theta[] = {0, 180};
+//   float theta[] = {0, 180.0/180.0*kPI};
 //   float theta_ptn[] = {0, 0};
 //   float antenna_gain = 0;
 //   float mod_t[1];
@@ -505,7 +587,7 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
 
 //   Add_Txchannel(location, polar, phi, phi_ptn, 2, theta, theta_ptn, 2,
 //                 antenna_gain, mod_t, mod_var_real, mod_var_imag, 0,
-//                 pulse_mod_real, pulse_mod_imag, 0, 1, tx_ptr);
+//                 pulse_mod_real, pulse_mod_imag, 0, 1.0/180.0*kPI, tx_ptr);
 
 //   float fs = 2e6;
 //   float rf_gain = 20;
@@ -528,9 +610,14 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
 
 //   t_Targets *targets_ptr = Init_Targets();
 
-//   float tg_loc[] = {200, 0, 0};
-//   float tg_speed[] = {0, 0, 0};
-//   Add_Target(tg_loc, tg_speed, 30, 0, targets_ptr);
+//   float points[] = {0,0,0,-0.0577,0,0.0816,-0.0577,0.0707,-0.0408,-0.0577,-0.0707,-0.0408};
+//   int cells[]={0,1,2,0,2,3,0,3,1};
+//   float tg_org[] = {0, 0, 0};
+//   float tg_loc[] = {50, 0, 0};
+//   float tg_speed[] = {-5, 0, 0};
+//   float tg_rot[] = {0, 0, 0};
+//   float tg_rrt[] = {0, 0, 0};
+//   Add_Mesh_Target(points, cells, 3, tg_org, tg_loc, tg_speed, tg_rot, tg_rrt, -1.0, 0.0, 1.0, 0.0, false, targets_ptr);
 
 //   double bb_real[256][160];
 //   double bb_imag[256][160];

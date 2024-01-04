@@ -10,8 +10,8 @@
  *
  *     ____           _            ____  _          __  __
  *    |  _ \ __ _  __| | __ _ _ __/ ___|(_)_ __ ___ \ \/ /
- *    | |_) / _` |/ _` |/ _` | '__\___ \| | '_ ` _ \ \  / 
- *    |  _ < (_| | (_| | (_| | |   ___) | | | | | | |/  \ 
+ *    | |_) / _` |/ _` |/ _` | '__\___ \| | '_ ` _ \ \  /
+ *    |  _ < (_| | (_| | (_| | |   ___) | | | | | | |/  \
  *    |_| \_\__,_|\__,_|\__,_|_|  |____/|_|_| |_| |_/_/\_\
  *
  */
@@ -106,7 +106,7 @@ __declspec(dllexport) void Add_Txchannel(
 
 /**
  * @brief Get the number of Tx channels
- * 
+ *
  * @param ptr_tx_c Pointer to the Transmitter
  * @return int Number of Tx channels
  */
@@ -165,7 +165,7 @@ __declspec(dllexport) void Add_Rxchannel(float *location, float *polar,
 
 /**
  * @brief Get the number of Rx channels
- * 
+ *
  * @param ptr_rx_c Pointer to the Receiver
  * @return int Number of Rx channels
  */
@@ -241,8 +241,15 @@ __declspec(dllexport) t_Targets *Init_Targets();
  * @param phs Target's phase (rad)
  * @param ptr_targets_c Pointer to the target list
  */
-__declspec(dllexport) void Add_Target(float *loc, float *speed, float rcs,
-                                      float phs, t_Targets *ptr_targets_c);
+__declspec(dllexport) void Add_Point_Target(float *loc, float *speed, float rcs,
+                                            float phs,
+                                            t_Targets *ptr_targets_c);
+
+__declspec(dllexport) void Add_Mesh_Target(
+    float *points, int *cells, int cell_size, float *origin, float *loc,
+    float *speed, float *rotation, float *rotation_rate, float ep_real,
+    float ep_imag, float mu_real, float mu_imag, bool is_ground,
+    t_Targets *ptr_targets_c);
 
 /**
  * @brief Free the memory of target list
