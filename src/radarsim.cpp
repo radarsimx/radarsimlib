@@ -400,20 +400,38 @@ t_Targets *Init_Targets() {
  * @param phs Target's phase (rad)
  * @param ptr_targets_c Pointer to the target list
  */
-void Add_Point_Target(float *loc, float *speed, float rcs, float phs,
+void Add_Point_Target(float *location, float *speed, float rcs, float phs,
                       t_Targets *ptr_targets_c) {
   ptr_targets_c->_ptr_points->Add_Point(
-      Point<float>(zpv::Vec3<float>(loc[0], loc[1], loc[2]),
+      Point<float>(zpv::Vec3<float>(location[0], location[1], location[2]),
                    zpv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs));
 }
 
+/**
+ * @brief Add a 3D mesh target to the target list
+ *
+ * @param points Mesh coordinates
+ * @param cells Mesh connections
+ * @param cell_size Number of meshes
+ * @param origin Target origin (m)
+ * @param location Target location (m)
+ * @param speed Target speed (m/s)
+ * @param rotation Target rotation (rad)
+ * @param rotation_rate Target rotation rate (rad/s)
+ * @param ep_real Real part of Permittivity
+ * @param ep_imag Image part of Permittivity
+ * @param mu_real Real part of Permeability
+ * @param mu_imag Image part of Permeability
+ * @param is_ground Flag to identify if the target is ground
+ * @param ptr_targets_c Pointer to the target list
+ */
 void Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
-                     float *loc, float *speed, float *rotation,
+                     float *location, float *speed, float *rotation,
                      float *rotation_rate, float ep_real, float ep_imag,
                      float mu_real, float mu_imag, bool is_ground,
                      t_Targets *ptr_targets_c) {
   std::vector<zpv::Vec3<float>> loc_vt;
-  loc_vt.push_back(zpv::Vec3<float>(loc[0], loc[1], loc[2]));
+  loc_vt.push_back(zpv::Vec3<float>(location[0], location[1], location[2]));
 
   std::vector<zpv::Vec3<float>> spd_vt;
   spd_vt.push_back(zpv::Vec3<float>(speed[0], speed[1], speed[2]));
@@ -459,6 +477,8 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  *
  * @param ptr_radar_c Pointer to the radar
  * @param ptr_targets_c Pointer to the target list
+ * @param level Fidelity level of ray tracing
+ * @param density Ray density
  * @param ptr_bb_real Real part of baseband samples
  * @param ptr_bb_imag Imag part of baseband samples
  */

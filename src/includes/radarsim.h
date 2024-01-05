@@ -236,18 +236,36 @@ __declspec(dllexport) t_Targets *Init_Targets();
 /**
  * @brief Add an ideal point target to the target list
  *
- * @param loc Target's location {x, y, z} (m)
+ * @param location Target's location {x, y, z} (m)
  * @param speed Target's speed {x, y, z} (m/s)
  * @param rcs Target's RCS (dBsm)
  * @param phs Target's phase (rad)
  * @param ptr_targets_c Pointer to the target list
  */
-__declspec(dllexport) void Add_Point_Target(float *loc, float *speed, float rcs,
-                                            float phs,
+__declspec(dllexport) void Add_Point_Target(float *location, float *speed,
+                                            float rcs, float phs,
                                             t_Targets *ptr_targets_c);
 
+/**
+ * @brief Add a 3D mesh target to the target list
+ *
+ * @param points Mesh coordinates
+ * @param cells Mesh connections
+ * @param cell_size Number of meshes
+ * @param origin Target origin (m)
+ * @param location Target location (m)
+ * @param speed Target speed (m/s)
+ * @param rotation Target rotation (rad)
+ * @param rotation_rate Target rotation rate (rad/s)
+ * @param ep_real Real part of Permittivity
+ * @param ep_imag Image part of Permittivity
+ * @param mu_real Real part of Permeability
+ * @param mu_imag Image part of Permeability
+ * @param is_ground Flag to identify if the target is ground
+ * @param ptr_targets_c Pointer to the target list
+ */
 __declspec(dllexport) void Add_Mesh_Target(
-    float *points, int *cells, int cell_size, float *origin, float *loc,
+    float *points, int *cells, int cell_size, float *origin, float *location,
     float *speed, float *rotation, float *rotation_rate, float ep_real,
     float ep_imag, float mu_real, float mu_imag, bool is_ground,
     t_Targets *ptr_targets_c);
