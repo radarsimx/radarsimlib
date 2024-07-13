@@ -99,11 +99,11 @@ __declspec(dllexport) t_Transmitter *Create_Transmitter(
  * @param ptr_tx_c Pointer to the Transmitter
  */
 __declspec(dllexport) void Add_Txchannel(
-    float *location, float *polar, float *phi, float *phi_ptn, int phi_length,
-    float *theta, float *theta_ptn, int theta_length, float antenna_gain,
-    float *mod_t, float *mod_var_real, float *mod_var_imag, int mod_length,
-    float *pulse_mod_real, float *pulse_mod_imag, float delay, float grid,
-    t_Transmitter *ptr_tx_c);
+    float *location, float *polar_real, float *polar_imag, float *phi,
+    float *phi_ptn, int phi_length, float *theta, float *theta_ptn,
+    int theta_length, float antenna_gain, float *mod_t, float *mod_var_real,
+    float *mod_var_imag, int mod_length, float *pulse_mod_real,
+    float *pulse_mod_imag, float delay, float grid, t_Transmitter *ptr_tx_c);
 
 /**
  * @brief Get the number of Tx channels
@@ -157,11 +157,11 @@ __declspec(dllexport) t_Receiver *Create_Receiver(float fs, float rf_gain,
  * @param antenna_gain Antenna gain (dB)
  * @param ptr_rx_c Pointer to Receiver
  */
-__declspec(dllexport) void Add_Rxchannel(float *location, float *polar,
-                                         float *phi, float *phi_ptn,
-                                         int phi_length, float *theta,
-                                         float *theta_ptn, int theta_length,
-                                         float antenna_gain,
+__declspec(dllexport) void Add_Rxchannel(float *location, float *polar_real,
+                                         float *polar_imag, float *phi,
+                                         float *phi_ptn, int phi_length,
+                                         float *theta, float *theta_ptn,
+                                         int theta_length, float antenna_gain,
                                          t_Receiver *ptr_rx_c);
 
 /**

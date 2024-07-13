@@ -140,12 +140,12 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
  * @param grid Ray occupancy checking grid (rad)
  * @param ptr_tx_c Pointer to the Transmitter
  */
-void Add_Txchannel(float *location, float *polar, float *phi, float *phi_ptn,
-                   int phi_length, float *theta, float *theta_ptn,
-                   int theta_length, float antenna_gain, float *mod_t,
-                   float *mod_var_real, float *mod_var_imag, int mod_length,
-                   float *pulse_mod_real, float *pulse_mod_imag, float delay,
-                   float grid, t_Transmitter *ptr_tx_c) {
+void Add_Txchannel(float *location, float *polar_real, float *polar_imag,
+                   float *phi, float *phi_ptn, int phi_length, float *theta,
+                   float *theta_ptn, int theta_length, float antenna_gain,
+                   float *mod_t, float *mod_var_real, float *mod_var_imag,
+                   int mod_length, float *pulse_mod_real, float *pulse_mod_imag,
+                   float delay, float grid, t_Transmitter *ptr_tx_c) {
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
   phi_ptn_vt.reserve(phi_length);
@@ -179,11 +179,15 @@ void Add_Txchannel(float *location, float *polar, float *phi, float *phi_ptn,
         std::complex<float>(pulse_mod_real[idx], pulse_mod_imag[idx]));
   }
 
-  ptr_tx_c->_ptr_transmitter->AddChannel(
-      TxChannel<float>(zpv::Vec3<float>(location[0], location[1], location[2]),
-                       zpv::Vec3<float>(polar[0], polar[1], polar[2]), phi_vt,
-                       phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain,
-                       mod_t_vt, mod_var_vt, pulse_mod_vt, delay, grid));
+  zpv::Vec3<std::complex<float>> polar_complex = zpv::Vec3<std::complex<float>>(
+      std::complex<float>(polar_real[0], polar_imag[0]),
+      std::complex<float>(polar_real[1], polar_imag[1]),
+      std::complex<float>(polar_real[2], polar_imag[2]));
+
+  ptr_tx_c->_ptr_transmitter->AddChannel(TxChannel<float>(
+      zpv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
+      phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain, mod_t_vt,
+      mod_var_vt, pulse_mod_vt, delay, grid));
 }
 
 /**
@@ -254,9 +258,10 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
  * @param antenna_gain Antenna gain (dB)
  * @param ptr_rx_c Pointer to Receiver
  */
-void Add_Rxchannel(float *location, float *polar, float *phi, float *phi_ptn,
-                   int phi_length, float *theta, float *theta_ptn,
-                   int theta_length, float antenna_gain, t_Receiver *ptr_rx_c) {
+void Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
+                   float *phi, float *phi_ptn, int phi_length, float *theta,
+                   float *theta_ptn, int theta_length, float antenna_gain,
+                   t_Receiver *ptr_rx_c) {
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
   phi_ptn_vt.reserve(phi_length);
@@ -273,10 +278,14 @@ void Add_Rxchannel(float *location, float *polar, float *phi, float *phi_ptn,
     theta_ptn_vt.push_back(theta_ptn[idx]);
   }
 
-  ptr_rx_c->_ptr_receiver->AddChannel(
-      RxChannel<float>(zpv::Vec3<float>(location[0], location[1], location[2]),
-                       zpv::Vec3<float>(polar[0], polar[1], polar[2]), phi_vt,
-                       phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
+  zpv::Vec3<std::complex<float>> polar_complex = zpv::Vec3<std::complex<float>>(
+      std::complex<float>(polar_real[0], polar_imag[0]),
+      std::complex<float>(polar_real[1], polar_imag[1]),
+      std::complex<float>(polar_real[2], polar_imag[2]));
+
+  ptr_rx_c->_ptr_receiver->AddChannel(RxChannel<float>(
+      zpv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
+      phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
 }
 
 /**
@@ -550,7 +559,7 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
       }
     }
 
-    scene_c.RunSimulator(level, false, snap_list.ptr_snapshots_, density,
+    scene_c.RunSimulator(level, false, snap_list.ptr_snapshots_, density, "",
                          ptr_bb_real, ptr_bb_imag);
   }
 }
