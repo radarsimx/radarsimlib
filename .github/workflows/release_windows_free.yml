@@ -25,4 +25,4 @@ jobs:
         if: success()
         with:
           name: radarsimlib_win_x86_64_cpu_free
-          path: .\radarsimlib
+          path: .\radarsimlib_win_x86_64_cpu_free

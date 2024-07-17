@@ -55,7 +55,6 @@ SET pwd=%cd%
 
 ECHO ## Clean old build files ##
 RMDIR /Q/S .\build
-RMDIR /Q/S .\radarsimlib
 
 @REM go to the build folder
 MD ".\build"
@@ -65,17 +64,21 @@ CD ".\build"
 if /I %ARCH% == gpu (
     if /I %TIER% == standard (
         ECHO ## Build standard GPU verion ##
+        SET release_path=".\radarsimlib_win_x86_64_gpu"
         cmake -DGPU_BUILD=ON -DFREETIER=OFF ..
     ) else if /I %TIER% == free (
         ECHO ## Build freetier GPU verion ##
+        SET release_path=".\radarsimlib_win_x86_64_gpu_free"
         cmake -DGPU_BUILD=ON -DFREETIER=ON ..
     )
 ) else if /I %ARCH% == cpu (
     if /I %TIER% == standard (
         ECHO ## Build standard CPU verion ##
+        SET release_path=".\radarsimlib_win_x86_64_cpu"
         cmake -DGPU_BUILD=OFF -DFREETIER=OFF ..
     ) else if /I %TIER% == free (
         ECHO ## Build freetier CPU verion ##
+        SET release_path=".\radarsimlib_win_x86_64_cpu_free"
         cmake -DGPU_BUILD=OFF -DFREETIER=ON ..
     )
 )
@@ -83,8 +86,9 @@ cmake --build . --config Release
 
 CD %pwd%
 
-MD ".\radarsimlib"
-COPY .\build\Release\radarsimc.dll .\radarsimlib\
-COPY .\src\includes\radarsim.h .\radarsimlib\
+RMDIR /Q/S %release_path%
+MD %release_path%
+COPY .\build\Release\radarsimc.dll %release_path%
+COPY .\src\includes\radarsim.h %release_path%
 
 ECHO ## Build completed ##
