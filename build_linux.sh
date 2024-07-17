@@ -57,11 +57,12 @@ echo "Copyright (C) 2023 - PRESENT  radarsimx.com"
 echo "E-mail: info@radarsimx.com"
 echo "Website: https://radarsimx.com"
 echo ""
-echo " ____           _            ____  _          __  __ "
-echo "|  _ \ __ _  __| | __ _ _ __/ ___|(_)_ __ ___ \ \/ / "
-echo "| |_) / _' |/ _' |/ _' | '__\___ \| | '_ ' _ \ \  /  "
-echo "|  _ < (_| | (_| | (_| | |   ___) | | | | | | |/  \  "
-echo "|_| \_\__,_|\__,_|\__,_|_|  |____/|_|_| |_| |_/_/\_\ "
+echo "██████╗  █████╗ ██████╗  █████╗ ██████╗ ███████╗██╗███╗   ███╗██╗  ██╗"
+echo "██╔══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗██╔════╝██║████╗ ████║╚██╗██╔╝"
+echo "██████╔╝███████║██║  ██║███████║██████╔╝███████╗██║██╔████╔██║ ╚███╔╝ "
+echo "██╔══██╗██╔══██║██║  ██║██╔══██║██╔══██╗╚════██║██║██║╚██╔╝██║ ██╔██╗ "
+echo "██║  ██║██║  ██║██████╔╝██║  ██║██║  ██║███████║██║██║ ╚═╝ ██║██╔╝ ██╗"
+echo "╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝╚═╝     ╚═╝╚═╝  ╚═╝"
 
 workpath=$(pwd)
 
@@ -74,22 +75,31 @@ cd ./build
 if [ "${ARCH,,}" == "gpu" ]; then
     if [ "${TIER,,}" == "standard" ]; then
         echo "## Build standard GPU verion ##"
+        release_path="./radarsimlib_linux_x86_64_gpu"
         cmake -DCMAKE_BUILD_TYPE=Release -DGPU_BUILD=ON -DFREETIER=OFF ..
     elif [ "${TIER,,}" == "free" ]; then
         echo "## Build freetier GPU verion ##"
+        release_path="./radarsimlib_linux_x86_64_gpu_free"
         cmake -DCMAKE_BUILD_TYPE=Release -DGPU_BUILD=ON -DFREETIER=ON ..
     fi
 elif [ "${ARCH,,}" == "cpu" ]; then
     if [ "${TIER,,}" == "standard" ]; then
         echo "## Build standard CPU verion ##"
+        release_path="./radarsimlib_linux_x86_64_cpu"
         cmake -DCMAKE_BUILD_TYPE=Release -DGPU_BUILD=OFF -DFREETIER=OFF ..
     elif [ "${TIER,,}" == "free" ]; then
         echo "## Build freetier CPU verion ##"
+        release_path="./radarsimlib_linux_x86_64_cpu_free"
         cmake -DCMAKE_BUILD_TYPE=Release -DGPU_BUILD=OFF -DFREETIER=ON ..
     fi
 fi
 cmake --build .
 
 cd $workpath
+
+rm -rf ${release_path}
+mkdir ${release_path}
+cp ./build/libradarsimc.so ${release_path}
+cp ./src/includes/radarsim.h ${release_path}
 
 echo "## Build completed ##"

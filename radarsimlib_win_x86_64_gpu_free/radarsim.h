@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-#if defined _WIN64 || defined _WIN32
+#ifdef _WIN64 or _WIN32
 #define EXPORTED __declspec(dllexport)
 #else
 #define EXPORTED
@@ -43,7 +43,7 @@ extern "C" {
  *
  * @param version Version numbers {major, minor}
  */
-EXPORTED void Get_Version(int version[2]);
+__declspec(dllexport) void Get_Version(int version[2]);
 
 /*********************************************
  *
@@ -70,7 +70,7 @@ typedef struct s_Transmitter t_Transmitter;
  * @param tx_power Transmitter power (dBm)
  * @return t_Transmitter* Ponter to the Transmitter
  */
-EXPORTED t_Transmitter *Create_Transmitter(
+__declspec(dllexport) t_Transmitter *Create_Transmitter(
     double *freq, double *freq_time, int waveform_size, double *freq_offset,
     double *pulse_start_time, int num_pulses, double *frame_start_time,
     int num_frames, float tx_power);
@@ -104,7 +104,7 @@ EXPORTED t_Transmitter *Create_Transmitter(
  * @param grid Ray occupancy checking grid (rad)
  * @param ptr_tx_c Pointer to the Transmitter
  */
-EXPORTED int Add_Txchannel(
+__declspec(dllexport) int Add_Txchannel(
     float *location, float *polar_real, float *polar_imag, float *phi,
     float *phi_ptn, int phi_length, float *theta, float *theta_ptn,
     int theta_length, float antenna_gain, float *mod_t, float *mod_var_real,
@@ -117,14 +117,14 @@ EXPORTED int Add_Txchannel(
  * @param ptr_tx_c Pointer to the Transmitter
  * @return int Number of Tx channels
  */
-EXPORTED int Get_Num_Txchannel(t_Transmitter *ptr_tx_c);
+__declspec(dllexport) int Get_Num_Txchannel(t_Transmitter *ptr_tx_c);
 
 /**
  * @brief Free the memory of Transmitter
  *
  * @param ptr_tx_c Pointer to the Transmitter
  */
-EXPORTED void Free_Transmitter(t_Transmitter *ptr_tx_c);
+__declspec(dllexport) void Free_Transmitter(t_Transmitter *ptr_tx_c);
 
 /*********************************************
  *
@@ -143,7 +143,7 @@ typedef struct s_Receiver t_Receiver;
  * @param baseband_gain Baseband gain (dB)
  * @return t_Receiver* Pointer to Receiver
  */
-EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain,
+__declspec(dllexport) t_Receiver *Create_Receiver(float fs, float rf_gain,
                                                   float resistor,
                                                   float baseband_gain);
 
@@ -163,7 +163,7 @@ EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain,
  * @param antenna_gain Antenna gain (dB)
  * @param ptr_rx_c Pointer to Receiver
  */
-EXPORTED int Add_Rxchannel(float *location, float *polar_real,
+__declspec(dllexport) int Add_Rxchannel(float *location, float *polar_real,
                                         float *polar_imag, float *phi,
                                         float *phi_ptn, int phi_length,
                                         float *theta, float *theta_ptn,
@@ -176,14 +176,14 @@ EXPORTED int Add_Rxchannel(float *location, float *polar_real,
  * @param ptr_rx_c Pointer to the Receiver
  * @return int Number of Rx channels
  */
-EXPORTED int Get_Num_Rxchannel(t_Receiver *ptr_rx_c);
+__declspec(dllexport) int Get_Num_Rxchannel(t_Receiver *ptr_rx_c);
 
 /**
  * @brief Free the memory of Receiver
  *
  * @param ptr_rx_c Pointer to the Receiver
  */
-EXPORTED void Free_Receiver(t_Receiver *ptr_rx_c);
+__declspec(dllexport) void Free_Receiver(t_Receiver *ptr_rx_c);
 
 /*********************************************
  *
@@ -200,7 +200,7 @@ typedef struct s_Radar t_Radar;
  * @param ptr_rx_c Pointer to the Receiver
  * @return t_Radar* Pointer to the Radar
  */
-EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c,
+__declspec(dllexport) t_Radar *Create_Radar(t_Transmitter *ptr_tx_c,
                                             t_Receiver *ptr_rx_c);
 
 /**
@@ -212,7 +212,7 @@ EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c,
  * @param rotation_rate Radar's rotation rate {x, y, z} (rad/s)
  * @param ptr_radar_c Pointer to the Radar
  */
-EXPORTED void Set_Radar_Motion(float *location, float *speed,
+__declspec(dllexport) void Set_Radar_Motion(float *location, float *speed,
                                             float *rotation,
                                             float *rotation_rate,
                                             t_Radar *ptr_radar_c);
@@ -222,7 +222,7 @@ EXPORTED void Set_Radar_Motion(float *location, float *speed,
  *
  * @param ptr_radar_c Pointer to the Radar
  */
-EXPORTED void Free_Radar(t_Radar *ptr_radar_c);
+__declspec(dllexport) void Free_Radar(t_Radar *ptr_radar_c);
 
 /*********************************************
  *
@@ -237,7 +237,7 @@ typedef struct s_Targets t_Targets;
  *
  * @return t_Targets* Pointer to the target list
  */
-EXPORTED t_Targets *Init_Targets();
+__declspec(dllexport) t_Targets *Init_Targets();
 
 /**
  * @brief Add an ideal point target to the target list
@@ -248,7 +248,7 @@ EXPORTED t_Targets *Init_Targets();
  * @param phs Target's phase (rad)
  * @param ptr_targets_c Pointer to the target list
  */
-EXPORTED int Add_Point_Target(float *location, float *speed,
+__declspec(dllexport) int Add_Point_Target(float *location, float *speed,
                                            float rcs, float phs,
                                            t_Targets *ptr_targets_c);
 
@@ -270,7 +270,7 @@ EXPORTED int Add_Point_Target(float *location, float *speed,
  * @param is_ground Flag to identify if the target is ground
  * @param ptr_targets_c Pointer to the target list
  */
-EXPORTED int Add_Mesh_Target(
+__declspec(dllexport) int Add_Mesh_Target(
     float *points, int *cells, int cell_size, float *origin, float *location,
     float *speed, float *rotation, float *rotation_rate, float ep_real,
     float ep_imag, float mu_real, float mu_imag, bool is_ground,
@@ -281,7 +281,7 @@ EXPORTED int Add_Mesh_Target(
  *
  * @param ptr_targets_c Pointer to the target list
  */
-EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
+__declspec(dllexport) void Free_Targets(t_Targets *ptr_targets_c);
 
 /*********************************************
  *
@@ -296,12 +296,12 @@ EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
  * @param ptr_bb_real Real part of baseband samples
  * @param ptr_bb_imag Imag part of baseband samples
  */
-EXPORTED void Run_Simulator(t_Radar *ptr_radar_c,
+__declspec(dllexport) void Run_Simulator(t_Radar *ptr_radar_c,
                                          t_Targets *ptr_targets_c, int level,
                                          float density, double *ptr_bb_real,
                                          double *ptr_bb_imag);
 
-EXPORTED void Run_Interference(t_Radar *ptr_radar_c,
+__declspec(dllexport) void Run_Interference(t_Radar *ptr_radar_c,
                                             t_Radar *ptr_interf_radar_c,
                                             double *ptr_bb_real,
                                             double *ptr_bb_imag);
