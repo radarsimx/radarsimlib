@@ -11,7 +11,6 @@ Help()
    echo "   --help	Show the usages of the parameters"
    echo "   --tier	Build tier, choose 'standard' or 'free'. Default is 'standard'"
    echo "   --arch	Build architecture, choose 'cpu' or 'gpu'. Default is 'cpu'"
-   echo "   --test	Enable or disable unit test, choose 'on' or 'off'. Default is 'on'"
    echo
 }
 
