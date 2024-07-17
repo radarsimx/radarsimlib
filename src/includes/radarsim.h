@@ -298,16 +298,17 @@ EXPORTED void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
                             double *ptr_bb_imag);
 
 /**
- * @brief
+ * @brief Run interference simulation
  *
- * @param ptr_radar_c
- * @param ptr_interf_radar_c
- * @param ptr_bb_real
- * @param ptr_bb_imag
+ * @param ptr_radar_c Pointer to the victim radar
+ * @param ptr_interf_radar_c Pointer to the interference radar
+ * @param ptr_interf_real Real part of the interference baseband
+ * @param ptr_interf_imag Imag part of the interference baseband
  */
 EXPORTED void Run_Interference(t_Radar *ptr_radar_c,
-                               t_Radar *ptr_interf_radar_c, double *ptr_bb_real,
-                               double *ptr_bb_imag);
+                               t_Radar *ptr_interf_radar_c,
+                               double *ptr_interf_real,
+                               double *ptr_interf_imag);
 
 #ifdef __cplusplus
 }

@@ -583,12 +583,20 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
   }
 }
 
+/**
+ * @brief Run interference simulation
+ *
+ * @param ptr_radar_c Pointer to the victim radar
+ * @param ptr_interf_radar_c Pointer to the interference radar
+ * @param ptr_interf_real Real part of the interference baseband
+ * @param ptr_interf_imag Imag part of the interference baseband
+ */
 void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
-                      double *ptr_bb_real, double *ptr_bb_imag) {
+                      double *ptr_interf_real, double *ptr_interf_imag) {
   Simulator<float> simc = Simulator<float>();
 
   simc.Interference(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar,
-                    ptr_bb_real, ptr_bb_imag);
+                    ptr_interf_real, ptr_interf_imag);
 }
 
 /*********************************************
