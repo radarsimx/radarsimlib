@@ -301,6 +301,14 @@ EXPORTED void Run_Simulator(t_Radar *ptr_radar_c,
                                          float density, double *ptr_bb_real,
                                          double *ptr_bb_imag);
 
+/**
+ * @brief 
+ * 
+ * @param ptr_radar_c 
+ * @param ptr_interf_radar_c 
+ * @param ptr_bb_real 
+ * @param ptr_bb_imag 
+ */
 EXPORTED void Run_Interference(t_Radar *ptr_radar_c,
                                             t_Radar *ptr_interf_radar_c,
                                             double *ptr_bb_real,
