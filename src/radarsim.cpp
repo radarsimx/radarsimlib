@@ -22,6 +22,7 @@
 #include <iostream>
 #include <vector>
 
+#include "libs/free_tier.hpp"
 #include "point.hpp"
 #include "radar.hpp"
 #include "receiver.hpp"
@@ -140,12 +141,15 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
  * @param grid Ray occupancy checking grid (rad)
  * @param ptr_tx_c Pointer to the Transmitter
  */
-void Add_Txchannel(float *location, float *polar_real, float *polar_imag,
-                   float *phi, float *phi_ptn, int phi_length, float *theta,
-                   float *theta_ptn, int theta_length, float antenna_gain,
-                   float *mod_t, float *mod_var_real, float *mod_var_imag,
-                   int mod_length, float *pulse_mod_real, float *pulse_mod_imag,
-                   float delay, float grid, t_Transmitter *ptr_tx_c) {
+int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
+                  float *phi, float *phi_ptn, int phi_length, float *theta,
+                  float *theta_ptn, int theta_length, float antenna_gain,
+                  float *mod_t, float *mod_var_real, float *mod_var_imag,
+                  int mod_length, float *pulse_mod_real, float *pulse_mod_imag,
+                  float delay, float grid, t_Transmitter *ptr_tx_c) {
+  if (IsFreeTier() && ptr_tx_c->_ptr_transmitter->channel_size_ > 0) {
+    return 1;
+  }
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
   phi_ptn_vt.reserve(phi_length);
@@ -188,6 +192,7 @@ void Add_Txchannel(float *location, float *polar_real, float *polar_imag,
       zpv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
       phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain, mod_t_vt,
       mod_var_vt, pulse_mod_vt, delay, grid));
+  return 0;
 }
 
 /**
@@ -258,10 +263,13 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
  * @param antenna_gain Antenna gain (dB)
  * @param ptr_rx_c Pointer to Receiver
  */
-void Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
-                   float *phi, float *phi_ptn, int phi_length, float *theta,
-                   float *theta_ptn, int theta_length, float antenna_gain,
-                   t_Receiver *ptr_rx_c) {
+int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
+                  float *phi, float *phi_ptn, int phi_length, float *theta,
+                  float *theta_ptn, int theta_length, float antenna_gain,
+                  t_Receiver *ptr_rx_c) {
+  if (IsFreeTier() && ptr_rx_c->_ptr_receiver->channel_size_ > 0) {
+    return 1;
+  }
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
   phi_ptn_vt.reserve(phi_length);
@@ -286,6 +294,7 @@ void Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
   ptr_rx_c->_ptr_receiver->AddChannel(RxChannel<float>(
       zpv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
       phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
+  return 0;
 }
 
 /**
@@ -367,8 +376,6 @@ void Set_Radar_Motion(float *location, float *speed, float *rotation,
  * @param ptr_radar_c Pointer to the Radar
  */
 void Free_Radar(t_Radar *ptr_radar_c) {
-  Free_Transmitter(ptr_radar_c->_ptr_tx);
-  Free_Receiver(ptr_radar_c->_ptr_rx);
   if (ptr_radar_c == NULL) {
     return;
   }
@@ -409,11 +416,15 @@ t_Targets *Init_Targets() {
  * @param phs Target's phase (rad)
  * @param ptr_targets_c Pointer to the target list
  */
-void Add_Point_Target(float *location, float *speed, float rcs, float phs,
-                      t_Targets *ptr_targets_c) {
+int Add_Point_Target(float *location, float *speed, float rcs, float phs,
+                     t_Targets *ptr_targets_c) {
+  if (IsFreeTier() && ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
+    return 1;
+  }
   ptr_targets_c->_ptr_points->Add_Point(
       Point<float>(zpv::Vec3<float>(location[0], location[1], location[2]),
                    zpv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs));
+  return 0;
 }
 
 /**
@@ -434,11 +445,18 @@ void Add_Point_Target(float *location, float *speed, float rcs, float phs,
  * @param is_ground Flag to identify if the target is ground
  * @param ptr_targets_c Pointer to the target list
  */
-void Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
-                     float *location, float *speed, float *rotation,
-                     float *rotation_rate, float ep_real, float ep_imag,
-                     float mu_real, float mu_imag, bool is_ground,
-                     t_Targets *ptr_targets_c) {
+int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
+                    float *location, float *speed, float *rotation,
+                    float *rotation_rate, float ep_real, float ep_imag,
+                    float mu_real, float mu_imag, bool is_ground,
+                    t_Targets *ptr_targets_c) {
+  if (IsFreeTier() && ptr_targets_c->_ptr_targets->ptr_targets_.size() > 0) {
+    return 1;
+  }
+
+  if (IsFreeTier() && cell_size > 32) {
+    return 1;
+  }
   std::vector<zpv::Vec3<float>> loc_vt;
   loc_vt.push_back(zpv::Vec3<float>(location[0], location[1], location[2]));
 
@@ -460,6 +478,7 @@ void Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
       Target<float>(points, cells, cell_size,
                     zpv::Vec3<float>(origin[0], origin[1], origin[2]), loc_vt,
                     spd_vt, rot_vt, rrt_vt, ep, mu, is_ground));
+  return 0;
 }
 
 /**
@@ -562,6 +581,14 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
     scene_c.RunSimulator(level, false, snap_list.ptr_snapshots_, density, "",
                          ptr_bb_real, ptr_bb_imag);
   }
+}
+
+void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
+                      double *ptr_bb_real, double *ptr_bb_imag) {
+  Simulator<float> simc = Simulator<float>();
+
+  simc.Interference(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar,
+                    ptr_bb_real, ptr_bb_imag);
 }
 
 /*********************************************

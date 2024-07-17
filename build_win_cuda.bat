@@ -30,7 +30,7 @@ MD ".\build"
 CD ".\build"
 
 @REM MSVC needs to set the build type using '--config Relesae' 
-cmake -DGPU_BUILD=ON ..
+cmake -DGPU_BUILD=ON -DFREETIER=ON ..
 cmake --build . --config Release
 
 CD %pwd%

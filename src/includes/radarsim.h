@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-#define VERSION_MAJOR 2
+#define VERSION_MAJOR 3
 #define VERSION_MINOR 0
 
 /*********************************************
@@ -98,7 +98,7 @@ __declspec(dllexport) t_Transmitter *Create_Transmitter(
  * @param grid Ray occupancy checking grid (rad)
  * @param ptr_tx_c Pointer to the Transmitter
  */
-__declspec(dllexport) void Add_Txchannel(
+__declspec(dllexport) int Add_Txchannel(
     float *location, float *polar_real, float *polar_imag, float *phi,
     float *phi_ptn, int phi_length, float *theta, float *theta_ptn,
     int theta_length, float antenna_gain, float *mod_t, float *mod_var_real,
@@ -157,12 +157,12 @@ __declspec(dllexport) t_Receiver *Create_Receiver(float fs, float rf_gain,
  * @param antenna_gain Antenna gain (dB)
  * @param ptr_rx_c Pointer to Receiver
  */
-__declspec(dllexport) void Add_Rxchannel(float *location, float *polar_real,
-                                         float *polar_imag, float *phi,
-                                         float *phi_ptn, int phi_length,
-                                         float *theta, float *theta_ptn,
-                                         int theta_length, float antenna_gain,
-                                         t_Receiver *ptr_rx_c);
+__declspec(dllexport) int Add_Rxchannel(float *location, float *polar_real,
+                                        float *polar_imag, float *phi,
+                                        float *phi_ptn, int phi_length,
+                                        float *theta, float *theta_ptn,
+                                        int theta_length, float antenna_gain,
+                                        t_Receiver *ptr_rx_c);
 
 /**
  * @brief Get the number of Rx channels
@@ -242,9 +242,9 @@ __declspec(dllexport) t_Targets *Init_Targets();
  * @param phs Target's phase (rad)
  * @param ptr_targets_c Pointer to the target list
  */
-__declspec(dllexport) void Add_Point_Target(float *location, float *speed,
-                                            float rcs, float phs,
-                                            t_Targets *ptr_targets_c);
+__declspec(dllexport) int Add_Point_Target(float *location, float *speed,
+                                           float rcs, float phs,
+                                           t_Targets *ptr_targets_c);
 
 /**
  * @brief Add a 3D mesh target to the target list
@@ -264,7 +264,7 @@ __declspec(dllexport) void Add_Point_Target(float *location, float *speed,
  * @param is_ground Flag to identify if the target is ground
  * @param ptr_targets_c Pointer to the target list
  */
-__declspec(dllexport) void Add_Mesh_Target(
+__declspec(dllexport) int Add_Mesh_Target(
     float *points, int *cells, int cell_size, float *origin, float *location,
     float *speed, float *rotation, float *rotation_rate, float ep_real,
     float ep_imag, float mu_real, float mu_imag, bool is_ground,
@@ -294,6 +294,11 @@ __declspec(dllexport) void Run_Simulator(t_Radar *ptr_radar_c,
                                          t_Targets *ptr_targets_c, int level,
                                          float density, double *ptr_bb_real,
                                          double *ptr_bb_imag);
+
+__declspec(dllexport) void Run_Interference(t_Radar *ptr_radar_c,
+                                            t_Radar *ptr_interf_radar_c,
+                                            double *ptr_bb_real,
+                                            double *ptr_bb_imag);
 
 #ifdef __cplusplus
 }

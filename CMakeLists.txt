@@ -1,16 +1,20 @@
 cmake_minimum_required(VERSION 3.14)
 
-# ## Config for radarsimc
+# Config for radarsimc
 project(radarsimc LANGUAGES CXX)
 
-# ## force GPU build
+# force GPU build
 # set(GPU_BUILD OFF)
 
-# ## bypass CUDA compiler check
+# bypass CUDA compiler check
 # set(CMAKE_CUDA_COMPILER_WORKS 1)
 if(GPU_BUILD)
-    # ## add _CUDA_ micro to the compiler
+    # add _CUDA_ micro to the compiler
     add_definitions(-D_CUDA_)
+endif()
+
+if(FREETIER)
+    add_definitions(-D_FREETIER_)
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
@@ -44,37 +48,37 @@ endif()
 if(GPU_BUILD)
     enable_language(CUDA)
 
-    # ## add source files, ".cpp" and ".cu"
+    # add source files, ".cpp" and ".cu"
     file(GLOB SOURCES "./src/*.cu" "./src/*.cpp" "./src/radarsimcpp/src/*.cu" "./src/radarsimcpp/src/*.cpp")
 
-    # ## use nvcc to compile all the *.cpp files
+    # use nvcc to compile all the *.cpp files
     set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE CUDA)
 
-    # ## build executable
+    # build executable
     add_library(radarsimc SHARED ${SOURCES})
 
-    # ## set CUDA building properties
+    # set CUDA building properties
     set_target_properties(radarsimc PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES all-major)
 
-    # ## add CUDA includes path
+    # add CUDA includes path
     include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
-    # ## add _CUDA_ micro to the compiler
+    # add _CUDA_ micro to the compiler
     target_compile_definitions(radarsimc PRIVATE _CUDA_ _CUDATEST_)
 
-    # ## for MSVC, remove default libs
+    # for MSVC, remove default libs
     if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         set_target_properties(radarsimc PROPERTIES LINK_FLAGS "/NODEFAULTLIB:\"LIBCMT\"")
     endif()
 
     target_link_libraries(radarsimc PUBLIC ${_hdf5_libs})
 else()
-    # ## add source files, ".cpp"
+    # add source files, ".cpp"
     file(GLOB SOURCES "./src/*.cpp" "./src/radarsimcpp/src/*.cpp")
 
-    # ## build executable
+    # build library
     add_library(radarsimc SHARED ${SOURCES})
     target_link_libraries(radarsimc PUBLIC ${_hdf5_libs})
 
