@@ -6,16 +6,28 @@ This library serves as the C wrapper for RadarSimCpp, offering a C interface to 
 
 ## Build
 
-**Building `RadarSimLib` requires to access the source code of `RadarSimCpp`. If you don't have access to `RadarSimCpp`, please download the pre-built module instead**
+**Building `RadarSimLib` requires to access the source code of `RadarSimCpp`.**
 
 - Windows CPU
 
 ```batch
-build_win.bat
+build_win.bat --arch cpu
 ```
 
-- Windows CUDA
+- Windows GPU
 
 ```batch
-build_win_cuda.bat
+build_win.bat --arch gpu
+```
+
+- Linux CPU
+
+```bash
+./build_linux.sh --arch=cpu
+```
+
+- Linux GPU
+
+```bash
+./build_linux.sh --arch=gpu
 ```
