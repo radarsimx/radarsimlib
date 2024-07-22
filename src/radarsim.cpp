@@ -234,15 +234,16 @@ struct s_Receiver {
  * @param rf_gain RF gain (dB)
  * @param resistor Load resistor (Ohm)
  * @param baseband_gain Baseband gain (dB)
+ * @param baseband_bw Baseband bandwidth (Hz)
  * @return t_Receiver* Pointer to Receiver
  */
 t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
-                            float baseband_gain) {
+                            float baseband_gain, float baseband_bw) {
   t_Receiver *ptr_rx_c;
   ptr_rx_c = (t_Receiver *)malloc(sizeof(t_Receiver));
 
   ptr_rx_c->_ptr_receiver =
-      new Receiver<float>(fs, rf_gain, resistor, baseband_gain);
+      new Receiver<float>(fs, rf_gain, resistor, baseband_gain, baseband_bw);
 
   return ptr_rx_c;
 }

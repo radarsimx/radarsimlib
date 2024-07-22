@@ -143,10 +143,11 @@ typedef struct s_Receiver t_Receiver;
  * @param rf_gain RF gain (dB)
  * @param resistor Load resistor (Ohm)
  * @param baseband_gain Baseband gain (dB)
+ * @param baseband_bw Baseband bandwidth (Hz)
  * @return t_Receiver* Pointer to Receiver
  */
 EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
-                                     float baseband_gain);
+                                     float baseband_gain, float baseband_bw);
 
 /**
  * @brief Add a receiver channel to Receiver
