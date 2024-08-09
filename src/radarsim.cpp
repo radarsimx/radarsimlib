@@ -26,7 +26,6 @@
 #include "point.hpp"
 #include "radar.hpp"
 #include "receiver.hpp"
-#include "scene.hpp"
 #include "simulator.hpp"
 #include "snapshot.hpp"
 #include "transmitter.hpp"
@@ -337,38 +336,33 @@ struct s_Radar {
  *
  * @param ptr_tx_c Pointer to the Transmitter
  * @param ptr_rx_c Pointer to the Receiver
- * @return t_Radar* Pointer to the Radar
- */
-t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c) {
-  t_Radar *ptr_radar_c;
-  ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar));
-  ptr_radar_c->_ptr_tx = ptr_tx_c;
-  ptr_radar_c->_ptr_rx = ptr_rx_c;
-
-  ptr_radar_c->_ptr_radar =
-      new Radar<float>(*ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver);
-
-  return ptr_radar_c;
-}
-
-/**
- * @brief Set radar's location and motion
- *
  * @param location Radar's location {x, y, z} (m)
  * @param speed Radar's speed {x, y, z} (m/s)
  * @param rotation Radar's rotation {x, y, z} (rad)
  * @param rotation_rate Radar's rotation rate {x, y, z} (rad/s)
- * @param ptr_radar_c Pointer to the Radar
+ * @return t_Radar* Pointer to the Radar
  */
-void Set_Radar_Motion(float *location, float *speed, float *rotation,
-                      float *rotation_rate, t_Radar *ptr_radar_c) {
+t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
+                      float *location, float *speed, float *rotation,
+                      float *rotation_rate) {
+  t_Radar *ptr_radar_c;
   std::vector<zpv::Vec3<float>> loc_vt, spd_vt, rot_vt, rrt_vt;
+
+  ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar));
+  ptr_radar_c->_ptr_tx = ptr_tx_c;
+  ptr_radar_c->_ptr_rx = ptr_rx_c;
+
   loc_vt.push_back(zpv::Vec3<float>(location[0], location[1], location[2]));
   spd_vt.push_back(zpv::Vec3<float>(speed[0], speed[1], speed[2]));
   rot_vt.push_back(zpv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
   rrt_vt.push_back(
       zpv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
-  ptr_radar_c->_ptr_radar->SetMotion(loc_vt, spd_vt, rot_vt, rrt_vt);
+
+  ptr_radar_c->_ptr_radar =
+      new Radar<float>(*ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver,
+                       loc_vt, spd_vt, rot_vt, rrt_vt);
+
+  return ptr_radar_c;
 }
 
 /**

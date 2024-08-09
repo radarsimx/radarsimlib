@@ -199,21 +199,15 @@ typedef struct s_Radar t_Radar;
  *
  * @param ptr_tx_c Pointer to the Transmitter
  * @param ptr_rx_c Pointer to the Receiver
- * @return t_Radar* Pointer to the Radar
- */
-EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c);
-
-/**
- * @brief Set radar's location and motion
- *
  * @param location Radar's location {x, y, z} (m)
  * @param speed Radar's speed {x, y, z} (m/s)
  * @param rotation Radar's rotation {x, y, z} (rad)
  * @param rotation_rate Radar's rotation rate {x, y, z} (rad/s)
- * @param ptr_radar_c Pointer to the Radar
+ * @return t_Radar* Pointer to the Radar
  */
-EXPORTED void Set_Radar_Motion(float *location, float *speed, float *rotation,
-                               float *rotation_rate, t_Radar *ptr_radar_c);
+EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
+                               float *location, float *speed, float *rotation,
+                               float *rotation_rate);
 
 /**
  * @brief Free the memory of Radar
