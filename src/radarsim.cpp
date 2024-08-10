@@ -26,7 +26,9 @@
 #include "point.hpp"
 #include "radar.hpp"
 #include "receiver.hpp"
-#include "simulator.hpp"
+#include "simulator_ideal.hpp"
+#include "simulator_interference.hpp"
+#include "simulator_scene.hpp"
 #include "snapshot.hpp"
 #include "transmitter.hpp"
 
@@ -508,19 +510,20 @@ void Free_Targets(t_Targets *ptr_targets_c) {
 void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
                    float density, double *ptr_bb_real, double *ptr_bb_imag) {
   if (ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
-    Simulator<float> simc = Simulator<float>();
+    IdealSimulator<float> simc = IdealSimulator<float>();
 
     simc.Run(*ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points->ptr_points_,
              ptr_bb_real, ptr_bb_imag);
   }
 
   if (ptr_targets_c->_ptr_targets->ptr_targets_.size() > 0) {
-    Scene<double, float> scene_c;
-    for (int tg_idx = 0;
-         tg_idx < ptr_targets_c->_ptr_targets->ptr_targets_.size(); tg_idx++) {
-      scene_c.AddTarget(ptr_targets_c->_ptr_targets->ptr_targets_[tg_idx]);
-    }
-    scene_c.SetRadar(*ptr_radar_c->_ptr_radar);
+    SceneSimulator<double, float> scene_c = SceneSimulator<double, float>();
+    // for (int tg_idx = 0;
+    //      tg_idx < ptr_targets_c->_ptr_targets->ptr_targets_.size(); tg_idx++)
+    //      {
+    //   scene_c.AddTarget(ptr_targets_c->_ptr_targets->ptr_targets_[tg_idx]);
+    // }
+    // scene_c.SetRadar(*ptr_radar_c->_ptr_radar);
 
     SnapshotList<float> snap_list;
     if (level == 0) {
@@ -573,8 +576,10 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
       }
     }
 
-    scene_c.RunSimulator(level, false, snap_list.ptr_snapshots_, density, "",
-                         ptr_bb_real, ptr_bb_imag);
+    scene_c.Run(*ptr_radar_c->_ptr_radar,
+                ptr_targets_c->_ptr_targets->ptr_targets_, level, false,
+                snap_list.ptr_snapshots_, density, "", ptr_bb_real,
+                ptr_bb_imag);
   }
 }
 
@@ -588,10 +593,10 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
  */
 void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
                       double *ptr_interf_real, double *ptr_interf_imag) {
-  Simulator<float> simc = Simulator<float>();
+  InterferenceSimulator<float> simc = InterferenceSimulator<float>();
 
-  simc.Interference(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar,
-                    ptr_interf_real, ptr_interf_imag);
+  simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar,
+           ptr_interf_real, ptr_interf_imag);
 }
 
 /*********************************************
