@@ -508,7 +508,8 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  * @param ptr_bb_imag Imag part of baseband samples
  */
 void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
-                   float density, double *ptr_bb_real, double *ptr_bb_imag) {
+                   float density, int *ray_filter, double *ptr_bb_real,
+                   double *ptr_bb_imag) {
   if (ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
     IdealSimulator<float> simc = IdealSimulator<float>();
 
@@ -576,10 +577,13 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
       }
     }
 
+    zpv::Vec2<int> ray_filter_vec2 =
+        zpv::Vec2<int>(ray_filter[0], ray_filter[1]);
+
     scene_c.Run(*ptr_radar_c->_ptr_radar,
                 ptr_targets_c->_ptr_targets->ptr_targets_, level, false,
-                snap_list.ptr_snapshots_, density, "", ptr_bb_real,
-                ptr_bb_imag);
+                snap_list.ptr_snapshots_, density, ray_filter_vec2, "",
+                ptr_bb_real, ptr_bb_imag);
   }
 }
 

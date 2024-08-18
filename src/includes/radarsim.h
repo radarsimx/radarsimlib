@@ -289,8 +289,8 @@ EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
  * @param ptr_bb_imag Imag part of baseband samples
  */
 EXPORTED void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
-                            int level, float density, double *ptr_bb_real,
-                            double *ptr_bb_imag);
+                            int level, float density, int *ray_filter,
+                            double *ptr_bb_real, double *ptr_bb_imag);
 
 /**
  * @brief Run interference simulation
