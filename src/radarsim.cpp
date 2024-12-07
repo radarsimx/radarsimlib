@@ -53,7 +53,7 @@ void Get_Version(int version[2]) {
  *
  *********************************************/
 struct s_Transmitter {
-  Transmitter<float> *_ptr_transmitter;
+  Transmitter<double, float> *_ptr_transmitter;
 };
 
 /**
@@ -106,9 +106,9 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     frame_start_time_vt.push_back(frame_start_time[idx]);
   }
 
-  ptr_tx_c->_ptr_transmitter =
-      new Transmitter<float>(tx_power, freq_vt, freq_time_vt, freq_offset_vt,
-                             pulse_start_time_vt, frame_start_time_vt);
+  ptr_tx_c->_ptr_transmitter = new Transmitter<double, float>(
+      tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt,
+      frame_start_time_vt);
 
   return ptr_tx_c;
 }
@@ -215,7 +215,7 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == NULL) {
     return;
   }
-  delete static_cast<Transmitter<float> *>(ptr_tx_c->_ptr_transmitter);
+  delete static_cast<Transmitter<double, float> *>(ptr_tx_c->_ptr_transmitter);
   free(ptr_tx_c);
 }
 
@@ -330,7 +330,7 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
 struct s_Radar {
   t_Transmitter *_ptr_tx;
   t_Receiver *_ptr_rx;
-  Radar<float> *_ptr_radar;
+  Radar<double, float> *_ptr_radar;
 };
 
 /**
@@ -348,21 +348,19 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                       float *location, float *speed, float *rotation,
                       float *rotation_rate) {
   t_Radar *ptr_radar_c;
-  std::vector<rsv::Vec3<float>> loc_vt, spd_vt, rot_vt, rrt_vt;
+  std::vector<rsv::Vec3<float>> loc_vt, rot_vt;
 
   ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar));
   ptr_radar_c->_ptr_tx = ptr_tx_c;
   ptr_radar_c->_ptr_rx = ptr_rx_c;
 
   loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
-  spd_vt.push_back(rsv::Vec3<float>(speed[0], speed[1], speed[2]));
   rot_vt.push_back(rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
-  rrt_vt.push_back(
-      rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
 
-  ptr_radar_c->_ptr_radar =
-      new Radar<float>(*ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver,
-                       loc_vt, spd_vt, rot_vt, rrt_vt);
+  ptr_radar_c->_ptr_radar = new Radar<double, float>(
+      *ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver, loc_vt,
+      rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
+      rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
 
   return ptr_radar_c;
 }
@@ -376,7 +374,7 @@ void Free_Radar(t_Radar *ptr_radar_c) {
   if (ptr_radar_c == NULL) {
     return;
   }
-  delete static_cast<Radar<float> *>(ptr_radar_c->_ptr_radar);
+  delete static_cast<Radar<double, float> *>(ptr_radar_c->_ptr_radar);
   free(ptr_radar_c);
 }
 
@@ -511,7 +509,7 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
                    float density, int *ray_filter, double *ptr_bb_real,
                    double *ptr_bb_imag) {
   if (ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
-    IdealSimulator<float> simc = IdealSimulator<float>();
+    IdealSimulator<double, float> simc = IdealSimulator<double, float>();
 
     simc.Run(*ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points->ptr_points_,
              ptr_bb_real, ptr_bb_imag);
@@ -597,7 +595,8 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
  */
 void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
                       double *ptr_interf_real, double *ptr_interf_imag) {
-  InterferenceSimulator<float> simc = InterferenceSimulator<float>();
+  InterferenceSimulator<double, float> simc =
+      InterferenceSimulator<double, float>();
 
   simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar,
            ptr_interf_real, ptr_interf_imag);
