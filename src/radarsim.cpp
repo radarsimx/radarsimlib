@@ -413,7 +413,7 @@ t_Targets *Init_Targets() {
  */
 int Add_Point_Target(float *location, float *speed, float rcs, float phs,
                      t_Targets *ptr_targets_c) {
-  if (IsFreeTier() && ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
+  if (IsFreeTier() && ptr_targets_c->_ptr_points->ptr_points_.size() > 1) {
     return 1;
   }
   ptr_targets_c->_ptr_points->Add_Point(
@@ -445,11 +445,11 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
                     float *rotation_rate, float ep_real, float ep_imag,
                     float mu_real, float mu_imag, bool is_ground,
                     t_Targets *ptr_targets_c) {
-  if (IsFreeTier() && ptr_targets_c->_ptr_targets->ptr_targets_.size() > 0) {
+  if (IsFreeTier() && ptr_targets_c->_ptr_targets->ptr_targets_.size() > 1) {
     return 1;
   }
 
-  if (IsFreeTier() && cell_size > 32) {
+  if (IsFreeTier() && cell_size > 8) {
     return 1;
   }
   std::vector<rsv::Vec3<float>> loc_vt;
@@ -595,8 +595,7 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
  */
 void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
                       double *ptr_interf_real, double *ptr_interf_imag) {
-  InterferenceSimulator<double, float> simc =
-      InterferenceSimulator<double, float>();
+  InterferenceSimulator<double, float> simc = InterferenceSimulator<double, float>();
 
   simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar,
            ptr_interf_real, ptr_interf_imag);
