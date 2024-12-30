@@ -59,16 +59,13 @@ typedef struct s_Transmitter t_Transmitter;
  * @param freq Frequency vector (Hz)
  * @param freq_time Timestamp vector for the frequency vector (s)
  * @param waveform_size Length of the frequency and timestamp vector
- * @param freq_offset Frequency offset per pulse (Hz)
- * length should equal to the number of pulses
- * @param pulse_start_time Pulse start time vector (s)
- * length should equal to the number of pulses
+ * @param freq_offset Frequency offset per pulse (Hz), length should equal to the number of pulses
+ * @param pulse_start_time Pulse start time vector (s), length should equal to the number of pulses
  * @param num_pulses Number of pulses
- * @param frame_start_time Frame start time vector (s)
- * length should equal to the number of frames
+ * @param frame_start_time Frame start time vector (s), length should equal to the number of frames
  * @param num_frames Number of frames
  * @param tx_power Transmitter power (dBm)
- * @return t_Transmitter* Ponter to the Transmitter
+ * @return t_Transmitter* Pointer to the Transmitter
  */
 EXPORTED t_Transmitter *Create_Transmitter(
     double *freq, double *freq_time, int waveform_size, double *freq_offset,
@@ -79,30 +76,25 @@ EXPORTED t_Transmitter *Create_Transmitter(
  * @brief Add a transmitter channel to Transmitter
  *
  * @param location Location of the channel [x, y, z] (m)
- * @param polar Polarization of the channel [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad)
- * angles must be equal-spaced incremental array
+ * @param polar_real Real part of the polarization vector [x, y, z]
+ * @param polar_imag Imaginary part of the polarization vector [x, y, z]
+ * @param phi Phi angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
  * @param phi_ptn Normalized radiation pattern along phi (dB)
  * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad)
- * angles must be equal-spaced incremental array
+ * @param theta Theta angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
  * @param theta_ptn Normalized radiation pattern along theta (dB)
  * @param theta_length Length of theta and theta_ptn
  * @param antenna_gain Antenna gain (dB)
- * @param mod_t Timestamp of the modulation data (s)
- * mod_t must be equal-spaced incremental array
+ * @param mod_t Timestamp of the modulation data (s), mod_t must be equal-spaced incremental array
  * @param mod_var_real Real part of modulation value vector
- * @param mod_var_imag Imag part of modulation value vector
+ * @param mod_var_imag Imaginary part of modulation value vector
  * @param mod_length Length of mod_t, mod_var_real and mod_var_imag
- * @param pulse_mod_real Real part of pulse modulation vector
- * the length should be the same
- * as the number of pulses defined in Transmitter
- * @param pulse_mod_imag Imag part of pulse modulation vector
- * the length should be the same
- * as the number of pulses defined in Transmitter
+ * @param pulse_mod_real Real part of pulse modulation vector,the length should be the same as the number of pulses defined in Transmitter
+ * @param pulse_mod_imag Imaginary part of pulse modulation vector, the length should be the same as the number of pulses defined in Transmitter
  * @param delay Transmitting delay (s)
  * @param grid Ray occupancy checking grid (rad)
  * @param ptr_tx_c Pointer to the Transmitter
+ * @return int Status code (0 for success, 1 for failure)
  */
 EXPORTED int Add_Txchannel(float *location, float *polar_real,
                            float *polar_imag, float *phi, float *phi_ptn,
@@ -144,7 +136,7 @@ typedef struct s_Receiver t_Receiver;
  * @param resistor Load resistor (Ohm)
  * @param baseband_gain Baseband gain (dB)
  * @param baseband_bw Baseband bandwidth (Hz)
- * @return t_Receiver* Pointer to Receiver
+ * @return t_Receiver* Pointer to the Receiver
  */
 EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                                      float baseband_gain, float baseband_bw);
@@ -153,17 +145,17 @@ EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
  * @brief Add a receiver channel to Receiver
  *
  * @param location Location of the channel [x, y, z] (m)
- * @param polar Polarization of the channel [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad)
- * angles must be equal-spaced incremental array
+ * @param polar_real Real part of the polarization vector [x, y, z]
+ * @param polar_imag Imaginary part of the polarization vector [x, y, z]
+ * @param phi Phi angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
  * @param phi_ptn Normalized radiation pattern along phi (dB)
  * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad)
- * angles must be equal-spaced incremental array
+ * @param theta Theta angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
  * @param theta_ptn Normalized radiation pattern along theta (dB)
  * @param theta_length Length of theta and theta_ptn
  * @param antenna_gain Antenna gain (dB)
- * @param ptr_rx_c Pointer to Receiver
+ * @param ptr_rx_c Pointer to the Receiver
+ * @return int Status code (0 for success, 1 for failure)
  */
 EXPORTED int Add_Rxchannel(float *location, float *polar_real,
                            float *polar_imag, float *phi, float *phi_ptn,
@@ -239,6 +231,7 @@ EXPORTED t_Targets *Init_Targets();
  * @param rcs Target's RCS (dBsm)
  * @param phs Target's phase (rad)
  * @param ptr_targets_c Pointer to the target list
+ * @return int Status code (0 for success, 1 for failure)
  */
 EXPORTED int Add_Point_Target(float *location, float *speed, float rcs,
                               float phs, t_Targets *ptr_targets_c);
@@ -255,11 +248,12 @@ EXPORTED int Add_Point_Target(float *location, float *speed, float rcs,
  * @param rotation Target rotation (rad)
  * @param rotation_rate Target rotation rate (rad/s)
  * @param ep_real Real part of Permittivity
- * @param ep_imag Image part of Permittivity
+ * @param ep_imag Imaginary part of Permittivity
  * @param mu_real Real part of Permeability
- * @param mu_imag Image part of Permeability
+ * @param mu_imag Imaginary part of Permeability
  * @param is_ground Flag to identify if the target is ground
  * @param ptr_targets_c Pointer to the target list
+ * @return int Status code (0 for success, 1 for failure)
  */
 EXPORTED int Add_Mesh_Target(float *points, int *cells, int cell_size,
                              float *origin, float *location, float *speed,
@@ -285,8 +279,11 @@ EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
  *
  * @param ptr_radar_c Pointer to the radar
  * @param ptr_targets_c Pointer to the target list
+ * @param level Fidelity level of ray tracing
+ * @param density Ray density
+ * @param ray_filter Ray filter parameters
  * @param ptr_bb_real Real part of baseband samples
- * @param ptr_bb_imag Imag part of baseband samples
+ * @param ptr_bb_imag Imaginary part of baseband samples
  */
 EXPORTED void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
                             int level, float density, int *ray_filter,
@@ -298,7 +295,7 @@ EXPORTED void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
  * @param ptr_radar_c Pointer to the victim radar
  * @param ptr_interf_radar_c Pointer to the interference radar
  * @param ptr_interf_real Real part of the interference baseband
- * @param ptr_interf_imag Imag part of the interference baseband
+ * @param ptr_interf_imag Imaginary part of the interference baseband
  */
 EXPORTED void Run_Interference(t_Radar *ptr_radar_c,
                                t_Radar *ptr_interf_radar_c,
