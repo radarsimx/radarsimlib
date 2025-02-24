@@ -26,9 +26,9 @@
 #include "point.hpp"
 #include "radar.hpp"
 #include "receiver.hpp"
-#include "simulator_ideal.hpp"
 #include "simulator_interference.hpp"
-#include "simulator_scene.hpp"
+#include "simulator_mesh.hpp"
+#include "simulator_point.hpp"
 #include "snapshot.hpp"
 #include "transmitter.hpp"
 
@@ -62,10 +62,13 @@ struct s_Transmitter {
  * @param freq Frequency vector (Hz)
  * @param freq_time Timestamp vector for the frequency vector (s)
  * @param waveform_size Length of the frequency and timestamp vector
- * @param freq_offset Frequency offset per pulse (Hz), length should equal to the number of pulses
- * @param pulse_start_time Pulse start time vector (s), length should equal to the number of pulses
+ * @param freq_offset Frequency offset per pulse (Hz), length should equal to
+ * the number of pulses
+ * @param pulse_start_time Pulse start time vector (s), length should equal to
+ * the number of pulses
  * @param num_pulses Number of pulses
- * @param frame_start_time Frame start time vector (s), length should equal to the number of frames
+ * @param frame_start_time Frame start time vector (s), length should equal to
+ * the number of frames
  * @param num_frames Number of frames
  * @param tx_power Transmitter power (dBm)
  * @return t_Transmitter* Pointer to the Transmitter
@@ -116,19 +119,24 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
  * @param location Location of the channel [x, y, z] (m)
  * @param polar_real Real part of the polarization vector [x, y, z]
  * @param polar_imag Imaginary part of the polarization vector [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
+ * @param phi Phi angles of the channel's radiation pattern (rad), angles must
+ * be equal-spaced incremental array
  * @param phi_ptn Normalized radiation pattern along phi (dB)
  * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
+ * @param theta Theta angles of the channel's radiation pattern (rad), angles
+ * must be equal-spaced incremental array
  * @param theta_ptn Normalized radiation pattern along theta (dB)
  * @param theta_length Length of theta and theta_ptn
  * @param antenna_gain Antenna gain (dB)
- * @param mod_t Timestamp of the modulation data (s), mod_t must be equal-spaced incremental array
+ * @param mod_t Timestamp of the modulation data (s), mod_t must be equal-spaced
+ * incremental array
  * @param mod_var_real Real part of modulation value vector
  * @param mod_var_imag Imaginary part of modulation value vector
  * @param mod_length Length of mod_t, mod_var_real and mod_var_imag
- * @param pulse_mod_real Real part of pulse modulation vector, the length should be the same as the number of pulses defined in Transmitter
- * @param pulse_mod_imag Imaginary part of pulse modulation vector, the length should be the same as the number of pulses defined in Transmitter
+ * @param pulse_mod_real Real part of pulse modulation vector, the length should
+ * be the same as the number of pulses defined in Transmitter
+ * @param pulse_mod_imag Imaginary part of pulse modulation vector, the length
+ * should be the same as the number of pulses defined in Transmitter
  * @param delay Transmitting delay (s)
  * @param grid Ray occupancy checking grid (rad)
  * @param ptr_tx_c Pointer to the Transmitter
@@ -247,10 +255,12 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
  * @param location Location of the channel [x, y, z] (m)
  * @param polar_real Real part of the polarization vector [x, y, z]
  * @param polar_imag Imaginary part of the polarization vector [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
+ * @param phi Phi angles of the channel's radiation pattern (rad), angles must
+ * be equal-spaced incremental array
  * @param phi_ptn Normalized radiation pattern along phi (dB)
  * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
+ * @param theta Theta angles of the channel's radiation pattern (rad), angles
+ * must be equal-spaced incremental array
  * @param theta_ptn Normalized radiation pattern along theta (dB)
  * @param theta_length Length of theta and theta_ptn
  * @param antenna_gain Antenna gain (dB)
@@ -366,6 +376,7 @@ void Free_Radar(t_Radar *ptr_radar_c) {
   if (ptr_radar_c == NULL) {
     return;
   }
+  ptr_radar_c->_ptr_radar->FreeDeviceMemory();
   delete static_cast<Radar<double, float> *>(ptr_radar_c->_ptr_radar);
   free(ptr_radar_c);
 }
@@ -503,15 +514,15 @@ void Free_Targets(t_Targets *ptr_targets_c) {
 void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
                    float density, int *ray_filter, double *ptr_bb_real,
                    double *ptr_bb_imag) {
+  ptr_radar_c->_ptr_radar->InitBaseband(ptr_bb_real, ptr_bb_imag);
   if (ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
-    IdealSimulator<double, float> simc = IdealSimulator<double, float>();
+    PointSimulator<double, float> simc = PointSimulator<double, float>();
 
-    simc.Run(*ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points->ptr_points_,
-             ptr_bb_real, ptr_bb_imag);
+    simc.Run(*ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points->ptr_points_);
   }
 
   if (ptr_targets_c->_ptr_targets->ptr_targets_.size() > 0) {
-    SceneSimulator<double, float> scene_c = SceneSimulator<double, float>();
+    MeshSimulator<double, float> scene_c = MeshSimulator<double, float>();
     // for (int tg_idx = 0;
     //      tg_idx < ptr_targets_c->_ptr_targets->ptr_targets_.size(); tg_idx++)
     //      {
@@ -575,9 +586,9 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
 
     scene_c.Run(*ptr_radar_c->_ptr_radar,
                 ptr_targets_c->_ptr_targets->ptr_targets_, level, false,
-                snap_list.ptr_snapshots_, density, ray_filter_vec2, "",
-                ptr_bb_real, ptr_bb_imag);
+                snap_list.ptr_snapshots_, density, ray_filter_vec2, "");
   }
+  ptr_radar_c->_ptr_radar->SyncBaseband();
 }
 
 /**
@@ -590,10 +601,11 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
  */
 void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
                       double *ptr_interf_real, double *ptr_interf_imag) {
-  InterferenceSimulator<double, float> simc = InterferenceSimulator<double, float>();
-
-  simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar,
-           ptr_interf_real, ptr_interf_imag);
+  InterferenceSimulator<double, float> simc =
+      InterferenceSimulator<double, float>();
+  ptr_radar_c->_ptr_radar->ResetBaseband();
+  simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar);
+  ptr_radar_c->_ptr_radar->SyncBaseband();
 }
 
 /*********************************************
