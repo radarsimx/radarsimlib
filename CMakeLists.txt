@@ -23,8 +23,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows") # Windows
     include_directories("./src/includes"
         "./src/radarsimcpp/includes"
-        "./src/radarsimcpp/hdf5/lib_win_x86_64/include")
-    link_directories(${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5/lib_win_x86_64/lib)
+        "./src/radarsimcpp/hdf5-lib-build/libs/lib_win_x86_64/include")
+    link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_win_x86_64/lib")
     set(_hdf5_libs
         libhdf5
         libhdf5_cpp
@@ -35,8 +35,8 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows") # Windows
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux") # Linux
     include_directories("./src/includes"
         "./src/radarsimcpp/includes"
-        "./src/radarsimcpp/hdf5/lib_linux_x86_64/include")
-    link_directories(${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5/lib_linux_x86_64/lib)
+        "./src/radarsimcpp/hdf5-lib-build/libs/lib_linux_x86_64/include")
+    link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_x86_64/lib")
     set(_hdf5_libs
         hdf5
         hdf5_cpp
