@@ -76,7 +76,6 @@ struct s_Transmitter {
 t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   int waveform_size, double *freq_offset,
                                   double *pulse_start_time, int num_pulses,
-                                  double *frame_start_time, int num_frames,
                                   float tx_power) {
   t_Transmitter *ptr_tx_c;
 
@@ -100,15 +99,14 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     pulse_start_time_vt.push_back(pulse_start_time[idx]);
   }
 
-  std::vector<double> frame_start_time_vt;
-  frame_start_time_vt.reserve(num_frames);
-  for (int idx = 0; idx < num_frames; idx++) {
-    frame_start_time_vt.push_back(frame_start_time[idx]);
-  }
+  // std::vector<double> frame_start_time_vt;
+  // frame_start_time_vt.reserve(num_frames);
+  // for (int idx = 0; idx < num_frames; idx++) {
+  //   frame_start_time_vt.push_back(frame_start_time[idx]);
+  // }
 
   ptr_tx_c->_ptr_transmitter = new Transmitter<double, float>(
-      tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt,
-      frame_start_time_vt);
+      tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt);
 
   return ptr_tx_c;
 }
@@ -347,8 +345,8 @@ struct s_Radar {
  * @return t_Radar* Pointer to the Radar
  */
 t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
-                      float *location, float *speed, float *rotation,
-                      float *rotation_rate) {
+                      double *frame_start_time, int num_frames, float *location,
+                      float *speed, float *rotation, float *rotation_rate) {
   t_Radar *ptr_radar_c;
   std::vector<rsv::Vec3<float>> loc_vt, rot_vt;
 
@@ -356,11 +354,18 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
   ptr_radar_c->_ptr_tx = ptr_tx_c;
   ptr_radar_c->_ptr_rx = ptr_rx_c;
 
+  std::vector<double> frame_start_time_vt;
+  frame_start_time_vt.reserve(num_frames);
+  for (int idx = 0; idx < num_frames; idx++) {
+    frame_start_time_vt.push_back(frame_start_time[idx]);
+  }
+
   loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
   rot_vt.push_back(rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
 
   ptr_radar_c->_ptr_radar = new Radar<double, float>(
-      *ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver, loc_vt,
+      *ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver,
+      frame_start_time_vt, loc_vt,
       rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
       rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
 
@@ -530,63 +535,12 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
     // }
     // scene_c.SetRadar(*ptr_radar_c->_ptr_radar);
 
-    SnapshotList<float> snap_list;
-    if (level == 0) {
-      for (int fm_idx = 0; fm_idx < ptr_radar_c->_ptr_radar->tx_.frame_size_;
-           fm_idx++) {
-        for (int tx_idx = 0;
-             tx_idx < ptr_radar_c->_ptr_radar->tx_.channel_size_; tx_idx++) {
-          double timesatmp =
-              ptr_radar_c->_ptr_radar->tx_.ptrh_frame_start_time_[fm_idx] +
-              ptr_radar_c->_ptr_radar->tx_.ptrh_channels_[tx_idx].delay_;
-          snap_list.Add_Snapshot(
-              Snapshot<float>(timesatmp, fm_idx, tx_idx, 0, 0));
-        }
-      }
-    } else if (level == 1) {
-      for (int fm_idx = 0; fm_idx < ptr_radar_c->_ptr_radar->tx_.frame_size_;
-           fm_idx++) {
-        for (int tx_idx = 0;
-             tx_idx < ptr_radar_c->_ptr_radar->tx_.channel_size_; tx_idx++) {
-          for (int ps_idx = 0;
-               ps_idx < ptr_radar_c->_ptr_radar->tx_.pulse_size_; ps_idx++) {
-            double timesatmp =
-                ptr_radar_c->_ptr_radar->tx_.ptrh_frame_start_time_[fm_idx] +
-                ptr_radar_c->_ptr_radar->tx_.ptrh_channels_[tx_idx].delay_ +
-                ptr_radar_c->_ptr_radar->tx_.ptrh_pulse_start_time_[ps_idx];
-            snap_list.Add_Snapshot(
-                Snapshot<float>(timesatmp, fm_idx, tx_idx, ps_idx, 0));
-          }
-        }
-      }
-    } else if (level == 2) {
-      for (int fm_idx = 0; fm_idx < ptr_radar_c->_ptr_radar->tx_.frame_size_;
-           fm_idx++) {
-        for (int tx_idx = 0;
-             tx_idx < ptr_radar_c->_ptr_radar->tx_.channel_size_; tx_idx++) {
-          for (int ps_idx = 0;
-               ps_idx < ptr_radar_c->_ptr_radar->tx_.pulse_size_; ps_idx++) {
-            for (int sp_idx = 0; sp_idx < ptr_radar_c->_ptr_radar->sample_size_;
-                 sp_idx++) {
-              double timesatmp =
-                  ptr_radar_c->_ptr_radar->tx_.ptrh_frame_start_time_[fm_idx] +
-                  ptr_radar_c->_ptr_radar->tx_.ptrh_channels_[tx_idx].delay_ +
-                  ptr_radar_c->_ptr_radar->tx_.ptrh_pulse_start_time_[ps_idx] +
-                  sp_idx / ptr_radar_c->_ptr_radar->rx_.fs_;
-              snap_list.Add_Snapshot(
-                  Snapshot<float>(timesatmp, fm_idx, tx_idx, ps_idx, sp_idx));
-            }
-          }
-        }
-      }
-    }
-
     rsv::Vec2<int> ray_filter_vec2 =
         rsv::Vec2<int>(ray_filter[0], ray_filter[1]);
 
     scene_c.Run(*ptr_radar_c->_ptr_radar,
-                ptr_targets_c->_ptr_targets->ptr_targets_, level, false,
-                snap_list.ptr_snapshots_, density, ray_filter_vec2, "");
+                ptr_targets_c->_ptr_targets->ptr_targets_, level, density,
+                ray_filter_vec2, false, "", false);
   }
   ptr_radar_c->_ptr_radar->SyncBaseband();
 }
@@ -603,7 +557,7 @@ void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
                       double *ptr_interf_real, double *ptr_interf_imag) {
   InterferenceSimulator<double, float> simc =
       InterferenceSimulator<double, float>();
-  ptr_radar_c->_ptr_radar->ResetBaseband();
+  ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
   simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar);
   ptr_radar_c->_ptr_radar->SyncBaseband();
 }

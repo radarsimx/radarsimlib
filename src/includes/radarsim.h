@@ -30,8 +30,8 @@ extern "C" {
 #define EXPORTED
 #endif
 
-#define VERSION_MAJOR 3
-#define VERSION_MINOR 2
+#define VERSION_MAJOR 4
+#define VERSION_MINOR 0
 
 /*********************************************
  *
@@ -59,18 +59,22 @@ typedef struct s_Transmitter t_Transmitter;
  * @param freq Frequency vector (Hz)
  * @param freq_time Timestamp vector for the frequency vector (s)
  * @param waveform_size Length of the frequency and timestamp vector
- * @param freq_offset Frequency offset per pulse (Hz), length should equal to the number of pulses
- * @param pulse_start_time Pulse start time vector (s), length should equal to the number of pulses
+ * @param freq_offset Frequency offset per pulse (Hz), length should equal to
+ * the number of pulses
+ * @param pulse_start_time Pulse start time vector (s), length should equal to
+ * the number of pulses
  * @param num_pulses Number of pulses
- * @param frame_start_time Frame start time vector (s), length should equal to the number of frames
+ * @param frame_start_time Frame start time vector (s), length should equal to
+ * the number of frames
  * @param num_frames Number of frames
  * @param tx_power Transmitter power (dBm)
  * @return t_Transmitter* Pointer to the Transmitter
  */
-EXPORTED t_Transmitter *Create_Transmitter(
-    double *freq, double *freq_time, int waveform_size, double *freq_offset,
-    double *pulse_start_time, int num_pulses, double *frame_start_time,
-    int num_frames, float tx_power);
+EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
+                                           int waveform_size,
+                                           double *freq_offset,
+                                           double *pulse_start_time,
+                                           int num_pulses, float tx_power);
 
 /**
  * @brief Add a transmitter channel to Transmitter
@@ -78,19 +82,24 @@ EXPORTED t_Transmitter *Create_Transmitter(
  * @param location Location of the channel [x, y, z] (m)
  * @param polar_real Real part of the polarization vector [x, y, z]
  * @param polar_imag Imaginary part of the polarization vector [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
+ * @param phi Phi angles of the channel's radiation pattern (rad), angles must
+ * be equal-spaced incremental array
  * @param phi_ptn Normalized radiation pattern along phi (dB)
  * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
+ * @param theta Theta angles of the channel's radiation pattern (rad), angles
+ * must be equal-spaced incremental array
  * @param theta_ptn Normalized radiation pattern along theta (dB)
  * @param theta_length Length of theta and theta_ptn
  * @param antenna_gain Antenna gain (dB)
- * @param mod_t Timestamp of the modulation data (s), mod_t must be equal-spaced incremental array
+ * @param mod_t Timestamp of the modulation data (s), mod_t must be equal-spaced
+ * incremental array
  * @param mod_var_real Real part of modulation value vector
  * @param mod_var_imag Imaginary part of modulation value vector
  * @param mod_length Length of mod_t, mod_var_real and mod_var_imag
- * @param pulse_mod_real Real part of pulse modulation vector,the length should be the same as the number of pulses defined in Transmitter
- * @param pulse_mod_imag Imaginary part of pulse modulation vector, the length should be the same as the number of pulses defined in Transmitter
+ * @param pulse_mod_real Real part of pulse modulation vector,the length should
+ * be the same as the number of pulses defined in Transmitter
+ * @param pulse_mod_imag Imaginary part of pulse modulation vector, the length
+ * should be the same as the number of pulses defined in Transmitter
  * @param delay Transmitting delay (s)
  * @param grid Ray occupancy checking grid (rad)
  * @param ptr_tx_c Pointer to the Transmitter
@@ -147,10 +156,12 @@ EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
  * @param location Location of the channel [x, y, z] (m)
  * @param polar_real Real part of the polarization vector [x, y, z]
  * @param polar_imag Imaginary part of the polarization vector [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
+ * @param phi Phi angles of the channel's radiation pattern (rad), angles must
+ * be equal-spaced incremental array
  * @param phi_ptn Normalized radiation pattern along phi (dB)
  * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad), angles must be equal-spaced incremental array
+ * @param theta Theta angles of the channel's radiation pattern (rad), angles
+ * must be equal-spaced incremental array
  * @param theta_ptn Normalized radiation pattern along theta (dB)
  * @param theta_length Length of theta and theta_ptn
  * @param antenna_gain Antenna gain (dB)
@@ -198,6 +209,7 @@ typedef struct s_Radar t_Radar;
  * @return t_Radar* Pointer to the Radar
  */
 EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
+                               double *frame_start_time, int num_frames,
                                float *location, float *speed, float *rotation,
                                float *rotation_rate);
 
