@@ -99,12 +99,6 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     pulse_start_time_vt.push_back(pulse_start_time[idx]);
   }
 
-  // std::vector<double> frame_start_time_vt;
-  // frame_start_time_vt.reserve(num_frames);
-  // for (int idx = 0; idx < num_frames; idx++) {
-  //   frame_start_time_vt.push_back(frame_start_time[idx]);
-  // }
-
   ptr_tx_c->_ptr_transmitter = new Transmitter<double, float>(
       tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt);
 
@@ -528,12 +522,6 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
 
   if (ptr_targets_c->_ptr_targets->ptr_targets_.size() > 0) {
     MeshSimulator<double, float> scene_c = MeshSimulator<double, float>();
-    // for (int tg_idx = 0;
-    //      tg_idx < ptr_targets_c->_ptr_targets->ptr_targets_.size(); tg_idx++)
-    //      {
-    //   scene_c.AddTarget(ptr_targets_c->_ptr_targets->ptr_targets_[tg_idx]);
-    // }
-    // scene_c.SetRadar(*ptr_radar_c->_ptr_radar);
 
     rsv::Vec2<int> ray_filter_vec2 =
         rsv::Vec2<int>(ray_filter[0], ray_filter[1]);
