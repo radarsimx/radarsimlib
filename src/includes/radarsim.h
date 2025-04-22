@@ -31,7 +31,7 @@ extern "C" {
 #endif
 
 #define VERSION_MAJOR 4
-#define VERSION_MINOR 1
+#define VERSION_MINOR 2
 
 /*********************************************
  *
