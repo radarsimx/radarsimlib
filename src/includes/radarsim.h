@@ -33,6 +33,14 @@ extern "C" {
 #define VERSION_MAJOR 4
 #define VERSION_MINOR 2
 
+// Error codes
+#define RADARSIM_SUCCESS 0
+#define RADARSIM_ERROR_NULL_POINTER 1
+#define RADARSIM_ERROR_INVALID_PARAMETER 2
+#define RADARSIM_ERROR_MEMORY_ALLOCATION 3
+#define RADARSIM_ERROR_FREE_TIER_LIMIT 4
+#define RADARSIM_ERROR_EXCEPTION 5
+
 /*********************************************
  *
  *  Version
@@ -41,9 +49,17 @@ extern "C" {
 /**
  * @brief Get the version of RadarSimLib
  *
- * @param version Version numbers {major, minor}
+ * @param version Version numbers {major, minor}, must not be NULL
  */
 EXPORTED void Get_Version(int version[2]);
+
+/**
+ * @brief Get error message string for error code
+ *
+ * @param error_code Error code from RadarSim functions
+ * @return const char* Human-readable error message
+ */
+EXPORTED const char* Get_Error_Message(int error_code);
 
 /*********************************************
  *
@@ -56,19 +72,19 @@ typedef struct s_Transmitter t_Transmitter;
 /**
  * @brief Create a Transmitter, return the pointer of the Transmitter
  *
- * @param freq Frequency vector (Hz)
- * @param freq_time Timestamp vector for the frequency vector (s)
- * @param waveform_size Length of the frequency and timestamp vector
+ * @param freq Frequency vector (Hz), must not be NULL
+ * @param freq_time Timestamp vector for the frequency vector (s), must not be NULL
+ * @param waveform_size Length of the frequency and timestamp vector, must be > 0
  * @param freq_offset Frequency offset per pulse (Hz), length should equal to
- * the number of pulses
+ * the number of pulses, must not be NULL
  * @param pulse_start_time Pulse start time vector (s), length should equal to
- * the number of pulses
- * @param num_pulses Number of pulses
- * @param frame_start_time Frame start time vector (s), length should equal to
- * the number of frames
- * @param num_frames Number of frames
+ * the number of pulses, must not be NULL
+ * @param num_pulses Number of pulses, must be > 0
  * @param tx_power Transmitter power (dBm)
- * @return t_Transmitter* Pointer to the Transmitter
+ * @return t_Transmitter* Pointer to the Transmitter, NULL on failure
+ * 
+ * @note This function performs input validation and returns NULL if any
+ *       parameter is invalid or memory allocation fails
  */
 EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                            int waveform_size,
@@ -313,6 +329,21 @@ EXPORTED void Run_Interference(t_Radar *ptr_radar_c,
                                t_Radar *ptr_interf_radar_c,
                                double *ptr_interf_real,
                                double *ptr_interf_imag);
+
+/**
+ * @brief Check if a pointer is valid (non-NULL)
+ *
+ * @param ptr Pointer to check
+ * @return int 1 if valid, 0 if NULL
+ */
+EXPORTED int Is_Valid_Pointer(void *ptr);
+
+/**
+ * @brief Get the number of available CPU cores for simulation
+ *
+ * @return int Number of CPU cores
+ */
+EXPORTED int Get_CPU_Core_Count();
 
 #ifdef __cplusplus
 }

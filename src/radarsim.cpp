@@ -21,6 +21,8 @@
 
 #include <iostream>
 #include <vector>
+#include <stdexcept>
+#include <thread>
 
 #include "libs/free_tier.hpp"
 #include "point.hpp"
@@ -31,6 +33,16 @@
 #include "simulator_point.hpp"
 #include "snapshot.hpp"
 #include "transmitter.hpp"
+
+// Ensure error constants are defined if not included from header
+#ifndef RADARSIM_SUCCESS
+#define RADARSIM_SUCCESS 0
+#define RADARSIM_ERROR_NULL_POINTER 1
+#define RADARSIM_ERROR_INVALID_PARAMETER 2
+#define RADARSIM_ERROR_MEMORY_ALLOCATION 3
+#define RADARSIM_ERROR_FREE_TIER_LIMIT 4
+#define RADARSIM_ERROR_EXCEPTION 5
+#endif
 
 /*********************************************
  *
@@ -43,8 +55,36 @@
  * @param version Version numbers {major, minor}
  */
 void Get_Version(int version[2]) {
+  if (!version) {
+    return;
+  }
   version[0] = VERSION_MAJOR;
   version[1] = VERSION_MINOR;
+}
+
+/**
+ * @brief Get error message string for error code
+ *
+ * @param error_code Error code from RadarSim functions
+ * @return const char* Human-readable error message
+ */
+const char* Get_Error_Message(int error_code) {
+  switch (error_code) {
+    case RADARSIM_SUCCESS:
+      return "Success";
+    case RADARSIM_ERROR_NULL_POINTER:
+      return "Null pointer provided";
+    case RADARSIM_ERROR_INVALID_PARAMETER:
+      return "Invalid parameter value";
+    case RADARSIM_ERROR_MEMORY_ALLOCATION:
+      return "Memory allocation failed";
+    case RADARSIM_ERROR_FREE_TIER_LIMIT:
+      return "Free tier limit exceeded";
+    case RADARSIM_ERROR_EXCEPTION:
+      return "Internal exception occurred";
+    default:
+      return "Unknown error";
+  }
 }
 
 /*********************************************
@@ -77,9 +117,18 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   int waveform_size, double *freq_offset,
                                   double *pulse_start_time, int num_pulses,
                                   float tx_power) {
+  // Input validation
+  if (!freq || !freq_time || !freq_offset || !pulse_start_time || 
+      waveform_size <= 0 || num_pulses <= 0) {
+    return nullptr;
+  }
+
   t_Transmitter *ptr_tx_c;
 
   ptr_tx_c = (t_Transmitter *)malloc(sizeof(t_Transmitter));
+  if (!ptr_tx_c) {
+    return nullptr;
+  }
 
   std::vector<double> freq_vt;
   std::vector<double> freq_time_vt;
@@ -99,8 +148,13 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     pulse_start_time_vt.push_back(pulse_start_time[idx]);
   }
 
-  ptr_tx_c->_ptr_transmitter = new Transmitter<double, float>(
-      tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt);
+  try {
+    ptr_tx_c->_ptr_transmitter = new Transmitter<double, float>(
+        tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt);
+  } catch (const std::exception& e) {
+    free(ptr_tx_c);
+    return nullptr;
+  }
 
   return ptr_tx_c;
 }
@@ -140,8 +194,15 @@ int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
                   float *mod_t, float *mod_var_real, float *mod_var_imag,
                   int mod_length, float *pulse_mod_real, float *pulse_mod_imag,
                   float delay, float grid, t_Transmitter *ptr_tx_c) {
+  // Input validation
+  if (!ptr_tx_c || !ptr_tx_c->_ptr_transmitter || !location || !polar_real || 
+      !polar_imag || !phi || !phi_ptn || !theta || !theta_ptn ||
+      phi_length <= 0 || theta_length <= 0) {
+    return RADARSIM_ERROR_INVALID_PARAMETER;
+  }
+  
   if (IsFreeTier() && ptr_tx_c->_ptr_transmitter->channel_size_ > 0) {
-    return 1;
+    return RADARSIM_ERROR_FREE_TIER_LIMIT;
   }
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
@@ -181,11 +242,15 @@ int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
       std::complex<float>(polar_real[1], polar_imag[1]),
       std::complex<float>(polar_real[2], polar_imag[2]));
 
-  ptr_tx_c->_ptr_transmitter->AddChannel(TxChannel<float>(
-      rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
-      phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain, mod_t_vt,
-      mod_var_vt, pulse_mod_vt, delay, grid));
-  return 0;
+  try {
+    ptr_tx_c->_ptr_transmitter->AddChannel(TxChannel<float>(
+        rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
+        phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain, mod_t_vt,
+        mod_var_vt, pulse_mod_vt, delay, grid));
+  } catch (const std::exception& e) {
+    return RADARSIM_ERROR_EXCEPTION;
+  }
+  return RADARSIM_SUCCESS;
 }
 
 /**
@@ -232,11 +297,24 @@ struct s_Receiver {
  */
 t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                             float baseband_gain, float baseband_bw) {
+  // Input validation
+  if (fs <= 0 || resistor <= 0) {
+    return nullptr;
+  }
+
   t_Receiver *ptr_rx_c;
   ptr_rx_c = (t_Receiver *)malloc(sizeof(t_Receiver));
+  if (!ptr_rx_c) {
+    return nullptr;
+  }
 
-  ptr_rx_c->_ptr_receiver =
-      new Receiver<float>(fs, rf_gain, resistor, baseband_gain, baseband_bw);
+  try {
+    ptr_rx_c->_ptr_receiver =
+        new Receiver<float>(fs, rf_gain, resistor, baseband_gain, baseband_bw);
+  } catch (const std::exception& e) {
+    free(ptr_rx_c);
+    return nullptr;
+  }
 
   return ptr_rx_c;
 }
@@ -263,8 +341,15 @@ int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
                   float *phi, float *phi_ptn, int phi_length, float *theta,
                   float *theta_ptn, int theta_length, float antenna_gain,
                   t_Receiver *ptr_rx_c) {
+  // Input validation
+  if (!ptr_rx_c || !ptr_rx_c->_ptr_receiver || !location || !polar_real || 
+      !polar_imag || !phi || !phi_ptn || !theta || !theta_ptn ||
+      phi_length <= 0 || theta_length <= 0) {
+    return RADARSIM_ERROR_INVALID_PARAMETER;
+  }
+
   if (IsFreeTier() && ptr_rx_c->_ptr_receiver->channel_size_ > 0) {
-    return 1;
+    return RADARSIM_ERROR_FREE_TIER_LIMIT;
   }
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
@@ -287,10 +372,14 @@ int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
       std::complex<float>(polar_real[1], polar_imag[1]),
       std::complex<float>(polar_real[2], polar_imag[2]));
 
-  ptr_rx_c->_ptr_receiver->AddChannel(RxChannel<float>(
-      rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
-      phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
-  return 0;
+  try {
+    ptr_rx_c->_ptr_receiver->AddChannel(RxChannel<float>(
+        rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
+        phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
+  } catch (const std::exception& e) {
+    return RADARSIM_ERROR_EXCEPTION;
+  }
+  return RADARSIM_SUCCESS;
 }
 
 /**
@@ -341,10 +430,21 @@ struct s_Radar {
 t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                       double *frame_start_time, int num_frames, float *location,
                       float *speed, float *rotation, float *rotation_rate) {
+  // Input validation
+  if (!ptr_tx_c || !ptr_tx_c->_ptr_transmitter || !ptr_rx_c || 
+      !ptr_rx_c->_ptr_receiver || !frame_start_time || !location || 
+      !speed || !rotation || !rotation_rate || num_frames <= 0) {
+    return nullptr;
+  }
+
   t_Radar *ptr_radar_c;
   std::vector<rsv::Vec3<float>> loc_vt, rot_vt;
 
   ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar));
+  if (!ptr_radar_c) {
+    return nullptr;
+  }
+  
   ptr_radar_c->_ptr_tx = ptr_tx_c;
   ptr_radar_c->_ptr_rx = ptr_rx_c;
 
@@ -357,11 +457,16 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
   loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
   rot_vt.push_back(rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
 
-  ptr_radar_c->_ptr_radar = new Radar<double, float>(
-      *ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver,
-      frame_start_time_vt, loc_vt,
-      rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
-      rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
+  try {
+    ptr_radar_c->_ptr_radar = new Radar<double, float>(
+        *ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver,
+        frame_start_time_vt, loc_vt,
+        rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
+        rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
+  } catch (const std::exception& e) {
+    free(ptr_radar_c);
+    return nullptr;
+  }
 
   return ptr_radar_c;
 }
@@ -398,9 +503,17 @@ struct s_Targets {
 t_Targets *Init_Targets() {
   t_Targets *ptr_targets_c;
   ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets));
+  if (!ptr_targets_c) {
+    return nullptr;
+  }
 
-  ptr_targets_c->_ptr_points = new PointList<float>();
-  ptr_targets_c->_ptr_targets = new TargetList<float>();
+  try {
+    ptr_targets_c->_ptr_points = new PointList<float>();
+    ptr_targets_c->_ptr_targets = new TargetList<float>();
+  } catch (const std::exception& e) {
+    free(ptr_targets_c);
+    return nullptr;
+  }
   return ptr_targets_c;
 }
 
@@ -416,13 +529,23 @@ t_Targets *Init_Targets() {
  */
 int Add_Point_Target(float *location, float *speed, float rcs, float phs,
                      t_Targets *ptr_targets_c) {
-  if (IsFreeTier() && ptr_targets_c->_ptr_points->ptr_points_.size() > 1) {
-    return 1;
+  // Input validation
+  if (!ptr_targets_c || !ptr_targets_c->_ptr_points || !location || !speed) {
+    return RADARSIM_ERROR_INVALID_PARAMETER;
   }
-  ptr_targets_c->_ptr_points->Add_Point(
-      Point<float>(rsv::Vec3<float>(location[0], location[1], location[2]),
-                   rsv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs));
-  return 0;
+
+  if (IsFreeTier() && ptr_targets_c->_ptr_points->ptr_points_.size() > 1) {
+    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+  }
+  
+  try {
+    ptr_targets_c->_ptr_points->Add_Point(
+        Point<float>(rsv::Vec3<float>(location[0], location[1], location[2]),
+                     rsv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs));
+  } catch (const std::exception& e) {
+    return RADARSIM_ERROR_EXCEPTION;
+  }
+  return RADARSIM_SUCCESS;
 }
 
 /**
@@ -449,12 +572,19 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
                     float *rotation_rate, float ep_real, float ep_imag,
                     float mu_real, float mu_imag, bool is_ground,
                     t_Targets *ptr_targets_c) {
+  // Input validation
+  if (!ptr_targets_c || !ptr_targets_c->_ptr_targets || !points || !cells || 
+      !origin || !location || !speed || !rotation || !rotation_rate || 
+      cell_size <= 0) {
+    return RADARSIM_ERROR_INVALID_PARAMETER;
+  }
+
   if (IsFreeTier() && ptr_targets_c->_ptr_targets->ptr_targets_.size() > 1) {
-    return 1;
+    return RADARSIM_ERROR_FREE_TIER_LIMIT;
   }
 
   if (IsFreeTier() && cell_size > 8) {
-    return 1;
+    return RADARSIM_ERROR_FREE_TIER_LIMIT;
   }
   std::vector<rsv::Vec3<float>> loc_vt;
   loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
@@ -473,11 +603,15 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
 
   std::complex<float> mu = std::complex(mu_real, mu_imag);
 
-  ptr_targets_c->_ptr_targets->Add_Target(
-      Target<float>(points, cells, cell_size,
-                    rsv::Vec3<float>(origin[0], origin[1], origin[2]), loc_vt,
-                    spd_vt, rot_vt, rrt_vt, ep, mu, is_ground));
-  return 0;
+  try {
+    ptr_targets_c->_ptr_targets->Add_Target(
+        Target<float>(points, cells, cell_size,
+                      rsv::Vec3<float>(origin[0], origin[1], origin[2]), loc_vt,
+                      spd_vt, rot_vt, rrt_vt, ep, mu, is_ground));
+  } catch (const std::exception& e) {
+    return RADARSIM_ERROR_EXCEPTION;
+  }
+  return RADARSIM_SUCCESS;
 }
 
 /**
@@ -513,7 +647,14 @@ void Free_Targets(t_Targets *ptr_targets_c) {
 void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
                    float density, int *ray_filter, double *ptr_bb_real,
                    double *ptr_bb_imag) {
+  // Input validation
+  if (!ptr_radar_c || !ptr_radar_c->_ptr_radar || !ptr_targets_c || 
+      !ray_filter || !ptr_bb_real || !ptr_bb_imag || density <= 0) {
+    return;
+  }
+
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_bb_real, ptr_bb_imag);
+  
   if (ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
     PointSimulator<double, float> simc = PointSimulator<double, float>();
 
@@ -543,11 +684,41 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
  */
 void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
                       double *ptr_interf_real, double *ptr_interf_imag) {
+  // Input validation
+  if (!ptr_radar_c || !ptr_radar_c->_ptr_radar || !ptr_interf_radar_c || 
+      !ptr_interf_radar_c->_ptr_radar || !ptr_interf_real || !ptr_interf_imag) {
+    return;
+  }
+
   InterferenceSimulator<double, float> simc =
       InterferenceSimulator<double, float>();
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
   simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar);
   ptr_radar_c->_ptr_radar->SyncBaseband();
+}
+
+/*********************************************
+ *
+ *  Utility Functions
+ *
+ *********************************************/
+/**
+ * @brief Check if a pointer is valid (non-NULL)
+ *
+ * @param ptr Pointer to check
+ * @return int 1 if valid, 0 if NULL
+ */
+int Is_Valid_Pointer(void *ptr) {
+  return (ptr != nullptr) ? 1 : 0;
+}
+
+/**
+ * @brief Get the number of available CPU cores for simulation
+ *
+ * @return int Number of CPU cores
+ */
+int Get_CPU_Core_Count() {
+  return static_cast<int>(std::thread::hardware_concurrency());
 }
 
 /*********************************************
