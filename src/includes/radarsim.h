@@ -34,12 +34,14 @@ extern "C" {
 #define VERSION_MINOR 2
 
 // Error codes
+// Note: These values must match RadarSimErrorCode enum in type_def.hpp
 #define RADARSIM_SUCCESS 0
 #define RADARSIM_ERROR_NULL_POINTER 1
 #define RADARSIM_ERROR_INVALID_PARAMETER 2
 #define RADARSIM_ERROR_MEMORY_ALLOCATION 3
 #define RADARSIM_ERROR_FREE_TIER_LIMIT 4
 #define RADARSIM_ERROR_EXCEPTION 5
+#define RADARSIM_ERROR_TOO_MANY_RAYS_PER_GRID 6
 
 /*********************************************
  *
@@ -312,10 +314,11 @@ EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
  * @param ray_filter Ray filter parameters
  * @param ptr_bb_real Real part of baseband samples
  * @param ptr_bb_imag Imaginary part of baseband samples
+ * @return int Error code (RADARSIM_SUCCESS on success, error code on failure)
  */
-EXPORTED void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
-                            int level, float density, int *ray_filter,
-                            double *ptr_bb_real, double *ptr_bb_imag);
+EXPORTED int Run_Radar_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
+                           int level, float density, int *ray_filter,
+                           double *ptr_bb_real, double *ptr_bb_imag);
 
 /**
  * @brief Run interference simulation
@@ -325,7 +328,7 @@ EXPORTED void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
  * @param ptr_interf_real Real part of the interference baseband
  * @param ptr_interf_imag Imaginary part of the interference baseband
  */
-EXPORTED void Run_Interference(t_Radar *ptr_radar_c,
+EXPORTED void Run_Interference_Simulator(t_Radar *ptr_radar_c,
                                t_Radar *ptr_interf_radar_c,
                                double *ptr_interf_real,
                                double *ptr_interf_imag);
