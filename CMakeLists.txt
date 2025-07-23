@@ -3,6 +3,11 @@ cmake_minimum_required(VERSION 3.14)
 # Config for radarsimc
 project(radarsimc LANGUAGES CXX)
 
+# Options
+option(GPU_BUILD "Enable GPU/CUDA build" OFF)
+option(GTEST "Enable Google Test" OFF)
+option(FREETIER "Enable free tier build" OFF)
+
 # force GPU build
 # set(GPU_BUILD OFF)
 
@@ -83,4 +88,49 @@ else()
     target_link_libraries(radarsimc PUBLIC ${_hdf5_libs})
 
     # add_executable(radarsimc ${SOURCES})
+endif()
+
+# Google Test setup for C wrapper
+if(GTEST)
+    message(STATUS "Enabling Google Test for RadarSim C wrapper")
+
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+    )
+
+    # For Windows: Prevent overriding the parent project's compiler/linker settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+    # Include test directory if it exists
+    if(EXISTS "${CMAKE_SOURCE_DIR}/tests")
+        # Collect test sources from tests directory
+        file(GLOB_RECURSE C_TEST_SOURCES "tests/*.cpp" "tests/*.c")
+        
+        if(C_TEST_SOURCES)
+            # Create test executable
+            add_executable(radarsim_c_test ${C_TEST_SOURCES})
+
+            # Link with gtest and main library
+            target_link_libraries(radarsim_c_test
+                PRIVATE
+                gtest_main
+                radarsimc
+                ${_hdf5_libs}
+            )
+
+            # Add include directories
+            target_include_directories(radarsim_c_test 
+                PRIVATE 
+                "./src/includes"
+                "./src/radarsimcpp/includes"
+            )
+
+            # Enable testing and add test
+            enable_testing()
+            add_test(NAME radarsim_c_test COMMAND radarsim_c_test)
+        endif()
+    endif()
 endif()
