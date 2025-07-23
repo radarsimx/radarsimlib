@@ -30,6 +30,7 @@
 #include "receiver.hpp"
 #include "rsvector/rsvector.hpp"
 #include "simulator_interference.hpp"
+#include "simulator_lidar.hpp"
 #include "simulator_mesh.hpp"
 #include "simulator_point.hpp"
 #include "simulator_rcs.hpp"
@@ -641,7 +642,7 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  * @param ptr_bb_imag Imaginary part of baseband samples
  * @return int Error code (RADARSIM_SUCCESS on success, error code on failure)
  */
-int Run_Radar_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
+int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
                   float density, int *ray_filter, double *ptr_bb_real,
                   double *ptr_bb_imag) {
   // Input validation
@@ -696,7 +697,7 @@ int Run_Radar_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int leve
  * @param ptr_interf_real Real part of the interference baseband
  * @param ptr_interf_imag Imaginary part of the interference baseband
  */
-void Run_Interference_Simulator(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
+void Run_InterferenceSimulator(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
                       double *ptr_interf_real, double *ptr_interf_imag) {
   // Input validation
   if (!ptr_radar_c || !ptr_radar_c->_ptr_radar || !ptr_interf_radar_c ||
@@ -841,6 +842,167 @@ void Free_RcsSimulator(t_RcsSimulator *ptr_rcs_c) {
   }
   delete static_cast<RcsSimulator<double> *>(ptr_rcs_c->_ptr_rcs_simulator);
   free(ptr_rcs_c);
+}
+
+/*********************************************
+ *
+ *  LiDAR Simulator
+ *
+ *********************************************/
+struct s_LidarSimulator {
+  LidarSimulator<float> *_ptr_lidar_simulator;
+};
+
+/**
+ * @brief Create a LiDAR Simulator, return the pointer to the LiDAR Simulator
+ *
+ * @return t_LidarSimulator* Pointer to the LiDAR Simulator
+ */
+t_LidarSimulator *Create_LidarSimulator() {
+  t_LidarSimulator *ptr_lidar_c;
+  ptr_lidar_c = (t_LidarSimulator *)malloc(sizeof(t_LidarSimulator));
+  if (!ptr_lidar_c) {
+    return nullptr;
+  }
+
+  try {
+    ptr_lidar_c->_ptr_lidar_simulator = new LidarSimulator<float>();
+  } catch (const std::exception &) {
+    free(ptr_lidar_c);
+    return nullptr;
+  }
+  return ptr_lidar_c;
+}
+
+/**
+ * @brief Add a target to the LiDAR Simulator
+ *
+ * @param ptr_lidar_c Pointer to the LiDAR Simulator
+ * @param ptr_targets_c Pointer to the target list
+ * @return int Status code (0 for success, error code for failure)
+ */
+int Add_Target_To_LidarSimulator(t_LidarSimulator *ptr_lidar_c, t_Targets *ptr_targets_c) {
+  // Input validation
+  if (!ptr_lidar_c || !ptr_lidar_c->_ptr_lidar_simulator || !ptr_targets_c ||
+      !ptr_targets_c->_ptr_targets) {
+    return RADARSIM_ERROR_INVALID_PARAMETER;
+  }
+
+  if (IsFreeTier() && ptr_targets_c->_ptr_targets->ptr_targets_.size() > 2) {
+    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+  }
+
+  try {
+    // Add all mesh targets from the target list
+    for (const auto& target : ptr_targets_c->_ptr_targets->ptr_targets_) {
+      ptr_lidar_c->_ptr_lidar_simulator->AddTarget(target);
+    }
+    return RADARSIM_SUCCESS;
+  } catch (const std::exception &) {
+    return RADARSIM_ERROR_EXCEPTION;
+  }
+}
+
+/**
+ * @brief Run LiDAR point cloud simulation
+ *
+ * @param ptr_lidar_c Pointer to the LiDAR Simulator
+ * @param phi Array of azimuth angles (rad)
+ * @param theta Array of elevation angles (rad)
+ * @param num_rays Number of rays (length of phi and theta arrays)
+ * @param location LiDAR location [x, y, z] (m)
+ * @param ptr_points_x Array to store point cloud x coordinates (m), size should be >= num_rays
+ * @param ptr_points_y Array to store point cloud y coordinates (m), size should be >= num_rays
+ * @param ptr_points_z Array to store point cloud z coordinates (m), size should be >= num_rays
+ * @param ptr_ranges Array to store point ranges (m), size should be >= num_rays
+ * @param ptr_num_points Pointer to store the actual number of points generated
+ * @return int Status code (0 for success, error code for failure)
+ */
+int Run_LidarSimulator(t_LidarSimulator *ptr_lidar_c,
+                       double *phi, double *theta, int num_rays,
+                       double *location,
+                       double *ptr_points_x, double *ptr_points_y, double *ptr_points_z,
+                       double *ptr_ranges, int *ptr_num_points) {
+  // Input validation
+  if (!ptr_lidar_c || !ptr_lidar_c->_ptr_lidar_simulator || !phi || !theta ||
+      !location || !ptr_points_x || !ptr_points_y || !ptr_points_z ||
+      !ptr_ranges || !ptr_num_points || num_rays <= 0) {
+    return RADARSIM_ERROR_INVALID_PARAMETER;
+  }
+
+  if (IsFreeTier() && num_rays > 1000) {
+    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+  }
+
+  try {
+    // Convert arrays to vectors with float precision
+    std::vector<float> phi_vec(num_rays);
+    std::vector<float> theta_vec(num_rays);
+    
+    for (int i = 0; i < num_rays; i++) {
+      phi_vec[i] = static_cast<float>(phi[i]);
+      theta_vec[i] = static_cast<float>(theta[i]);
+    }
+    
+    // Convert location to Vec3 with float precision
+    rsv::Vec3<float> lidar_location(static_cast<float>(location[0]), 
+                                    static_cast<float>(location[1]), 
+                                    static_cast<float>(location[2]));
+    
+    // Run the simulation
+    ptr_lidar_c->_ptr_lidar_simulator->Run(phi_vec, theta_vec, lidar_location);
+    
+    // Extract point cloud results
+    const auto& cloud = ptr_lidar_c->_ptr_lidar_simulator->cloud_;
+    int actual_points = static_cast<int>(cloud.size());
+    *ptr_num_points = actual_points;
+    
+    // Copy point cloud data to output arrays
+    for (int i = 0; i < actual_points; i++) {
+      const auto& ray = cloud[i];
+      if (ray.reflections_ > 0) {
+        // Use the last reflection point
+        ptr_points_x[i] = static_cast<double>(ray.location_[ray.reflections_][0]);
+        ptr_points_y[i] = static_cast<double>(ray.location_[ray.reflections_][1]);
+        ptr_points_z[i] = static_cast<double>(ray.location_[ray.reflections_][2]);
+        ptr_ranges[i] = static_cast<double>(ray.range_[ray.reflections_]);
+      }
+    }
+    
+    return RADARSIM_SUCCESS;
+  } catch (const std::exception &) {
+    return RADARSIM_ERROR_EXCEPTION;
+  }
+}
+
+/**
+ * @brief Clear the point cloud in the LiDAR Simulator
+ *
+ * @param ptr_lidar_c Pointer to the LiDAR Simulator
+ */
+void Clear_LidarSimulator_Cloud(t_LidarSimulator *ptr_lidar_c) {
+  if (!ptr_lidar_c || !ptr_lidar_c->_ptr_lidar_simulator) {
+    return;
+  }
+  
+  try {
+    ptr_lidar_c->_ptr_lidar_simulator->cloud_.clear();
+  } catch (const std::exception &) {
+    // Silently ignore exceptions in clear operation
+  }
+}
+
+/**
+ * @brief Free the memory of LiDAR Simulator
+ *
+ * @param ptr_lidar_c Pointer to the LiDAR Simulator
+ */
+void Free_LidarSimulator(t_LidarSimulator *ptr_lidar_c) {
+  if (ptr_lidar_c == nullptr) {
+    return;
+  }
+  delete static_cast<LidarSimulator<float> *>(ptr_lidar_c->_ptr_lidar_simulator);
+  free(ptr_lidar_c);
 }
 
 /*********************************************
@@ -1003,7 +1165,7 @@ int Get_CPU_Core_Count() {
 //     }
 //   }
 
-//   Run_Radar_Simulator(radar_ptr, targets_ptr, &bb_real[0][0], &bb_imag[0][0]);
+//   Run_RadarSimulator(radar_ptr, targets_ptr, &bb_real[0][0], &bb_imag[0][0]);
 
 //   return 0;
 // }

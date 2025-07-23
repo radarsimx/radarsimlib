@@ -30,8 +30,9 @@ extern "C" {
 #define EXPORTED
 #endif
 
-#define VERSION_MAJOR 4
-#define VERSION_MINOR 2
+#define VERSION_MAJOR 13
+#define VERSION_MINOR 1
+#define VERSION_PATCH 0
 
 // Error codes
 // Note: These values must match RadarSimErrorCode enum in type_def.hpp
@@ -316,7 +317,7 @@ EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
  * @param ptr_bb_imag Imaginary part of baseband samples
  * @return int Error code (RADARSIM_SUCCESS on success, error code on failure)
  */
-EXPORTED int Run_Radar_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
+EXPORTED int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
                            int level, float density, int *ray_filter,
                            double *ptr_bb_real, double *ptr_bb_imag);
 
@@ -328,7 +329,7 @@ EXPORTED int Run_Radar_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
  * @param ptr_interf_real Real part of the interference baseband
  * @param ptr_interf_imag Imaginary part of the interference baseband
  */
-EXPORTED void Run_Interference_Simulator(t_Radar *ptr_radar_c,
+EXPORTED void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
                                t_Radar *ptr_interf_radar_c,
                                double *ptr_interf_real,
                                double *ptr_interf_imag);
@@ -382,6 +383,64 @@ EXPORTED int Run_RcsSimulator(t_RcsSimulator *ptr_rcs_c, t_Targets *ptr_targets_
  * @param ptr_rcs_c Pointer to the RCS Simulator
  */
 EXPORTED void Free_RcsSimulator(t_RcsSimulator *ptr_rcs_c);
+
+/*********************************************
+ *
+ *  LiDAR Simulator
+ *
+ *********************************************/
+typedef struct s_LidarSimulator t_LidarSimulator;
+
+/**
+ * @brief Create a LiDAR Simulator, return the pointer to the LiDAR Simulator
+ *
+ * @return t_LidarSimulator* Pointer to the LiDAR Simulator
+ */
+EXPORTED t_LidarSimulator *Create_LidarSimulator();
+
+/**
+ * @brief Add a target to the LiDAR Simulator
+ *
+ * @param ptr_lidar_c Pointer to the LiDAR Simulator
+ * @param ptr_targets_c Pointer to the target list
+ * @return int Status code (0 for success, error code for failure)
+ */
+EXPORTED int Add_Target_To_LidarSimulator(t_LidarSimulator *ptr_lidar_c, t_Targets *ptr_targets_c);
+
+/**
+ * @brief Run LiDAR point cloud simulation
+ *
+ * @param ptr_lidar_c Pointer to the LiDAR Simulator
+ * @param phi Array of azimuth angles (rad)
+ * @param theta Array of elevation angles (rad)
+ * @param num_rays Number of rays (length of phi and theta arrays)
+ * @param location LiDAR location [x, y, z] (m)
+ * @param ptr_points_x Array to store point cloud x coordinates (m), size should be >= num_rays
+ * @param ptr_points_y Array to store point cloud y coordinates (m), size should be >= num_rays
+ * @param ptr_points_z Array to store point cloud z coordinates (m), size should be >= num_rays
+ * @param ptr_ranges Array to store point ranges (m), size should be >= num_rays
+ * @param ptr_num_points Pointer to store the actual number of points generated
+ * @return int Status code (0 for success, error code for failure)
+ */
+EXPORTED int Run_LidarSimulator(t_LidarSimulator *ptr_lidar_c,
+                       double *phi, double *theta, int num_rays,
+                       double *location,
+                       double *ptr_points_x, double *ptr_points_y, double *ptr_points_z,
+                       double *ptr_ranges, int *ptr_num_points);
+
+/**
+ * @brief Clear the point cloud in the LiDAR Simulator
+ *
+ * @param ptr_lidar_c Pointer to the LiDAR Simulator
+ */
+EXPORTED void Clear_LidarSimulator_Cloud(t_LidarSimulator *ptr_lidar_c);
+
+/**
+ * @brief Free the memory of LiDAR Simulator
+ *
+ * @param ptr_lidar_c Pointer to the LiDAR Simulator
+ */
+EXPORTED void Free_LidarSimulator(t_LidarSimulator *ptr_lidar_c);
 
 /*********************************************
  *
