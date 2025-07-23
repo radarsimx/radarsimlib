@@ -28,10 +28,13 @@
 #include "point.hpp"
 #include "radar.hpp"
 #include "receiver.hpp"
+#include "rsvector/rsvector.hpp"
 #include "simulator_interference.hpp"
 #include "simulator_mesh.hpp"
 #include "simulator_point.hpp"
+#include "simulator_rcs.hpp"
 #include "snapshot.hpp"
+#include "target.hpp"
 #include "transmitter.hpp"
 #include "type_def.hpp"
 
@@ -706,6 +709,138 @@ void Run_Interference_Simulator(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
   simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar);
   ptr_radar_c->_ptr_radar->SyncBaseband();
+}
+
+/*********************************************
+ *
+ *  RCS Simulator
+ *
+ *********************************************/
+struct s_RcsSimulator {
+  RcsSimulator<double> *_ptr_rcs_simulator;
+};
+
+/**
+ * @brief Create an RCS Simulator, return the pointer to the RCS Simulator
+ *
+ * @return t_RcsSimulator* Pointer to the RCS Simulator
+ */
+t_RcsSimulator *Create_RcsSimulator() {
+  t_RcsSimulator *ptr_rcs_c;
+  ptr_rcs_c = (t_RcsSimulator *)malloc(sizeof(t_RcsSimulator));
+  if (!ptr_rcs_c) {
+    return nullptr;
+  }
+
+  try {
+    ptr_rcs_c->_ptr_rcs_simulator = new RcsSimulator<double>();
+  } catch (const std::exception &) {
+    free(ptr_rcs_c);
+    return nullptr;
+  }
+  return ptr_rcs_c;
+}
+
+/**
+ * @brief Calculate target RCS
+ *
+ * @param ptr_rcs_c Pointer to the RCS Simulator
+ * @param ptr_targets_c Pointer to the target list
+ * @param inc_dir_x Array of incident direction x components
+ * @param inc_dir_y Array of incident direction y components  
+ * @param inc_dir_z Array of incident direction z components
+ * @param obs_dir_x Array of observation direction x components
+ * @param obs_dir_y Array of observation direction y components
+ * @param obs_dir_z Array of observation direction z components
+ * @param num_directions Number of direction pairs
+ * @param inc_polar_real Real part of incident polarization vector [x, y, z]
+ * @param inc_polar_imag Imaginary part of incident polarization vector [x, y, z]
+ * @param obs_polar_real Real part of observation polarization vector [x, y, z]
+ * @param obs_polar_imag Imaginary part of observation polarization vector [x, y, z]
+ * @param frequency Frequency (Hz)
+ * @param density Ray density, number of rays per wavelength
+ * @param ptr_rcs_results Array to store RCS results (m^2), size should be num_directions
+ * @return int Status code (0 for success, error code for failure)
+ */
+int Run_RcsSimulator(t_RcsSimulator *ptr_rcs_c, t_Targets *ptr_targets_c,
+                     double *inc_dir_x, double *inc_dir_y, double *inc_dir_z,
+                     double *obs_dir_x, double *obs_dir_y, double *obs_dir_z,
+                     int num_directions,
+                     double *inc_polar_real, double *inc_polar_imag,
+                     double *obs_polar_real, double *obs_polar_imag,
+                     double frequency, double density, double *ptr_rcs_results) {
+  // Input validation
+  if (!ptr_rcs_c || !ptr_rcs_c->_ptr_rcs_simulator || !ptr_targets_c || 
+      !ptr_targets_c->_ptr_targets || !inc_dir_x || !inc_dir_y || !inc_dir_z ||
+      !obs_dir_x || !obs_dir_y || !obs_dir_z || !inc_polar_real || 
+      !inc_polar_imag || !obs_polar_real || !obs_polar_imag || 
+      !ptr_rcs_results || num_directions <= 0 || frequency <= 0 || density <= 0) {
+    return RADARSIM_ERROR_INVALID_PARAMETER;
+  }
+
+  if (IsFreeTier() && num_directions > 10) {
+    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+  }
+
+  try {
+    // Convert direction arrays to vector format
+    std::vector<rsv::Vec3<double>> inc_dir_array;
+    std::vector<rsv::Vec3<double>> obs_dir_array;
+    
+    inc_dir_array.reserve(num_directions);
+    obs_dir_array.reserve(num_directions);
+    
+    for (int i = 0; i < num_directions; i++) {
+      inc_dir_array.push_back(rsv::Vec3<double>(inc_dir_x[i], inc_dir_y[i], inc_dir_z[i]));
+      obs_dir_array.push_back(rsv::Vec3<double>(obs_dir_x[i], obs_dir_y[i], obs_dir_z[i]));
+    }
+
+    // Convert polarization vectors
+    rsv::Vec3<std::complex<double>> inc_polar(
+      std::complex<double>(inc_polar_real[0], inc_polar_imag[0]),
+      std::complex<double>(inc_polar_real[1], inc_polar_imag[1]),
+      std::complex<double>(inc_polar_real[2], inc_polar_imag[2])
+    );
+    
+    rsv::Vec3<std::complex<double>> obs_polar(
+      std::complex<double>(obs_polar_real[0], obs_polar_imag[0]),
+      std::complex<double>(obs_polar_real[1], obs_polar_imag[1]),
+      std::complex<double>(obs_polar_real[2], obs_polar_imag[2])
+    );
+
+    // Run RCS simulation
+    std::vector<double> rcs_results = ptr_rcs_c->_ptr_rcs_simulator->Run(
+      ptr_targets_c->_ptr_targets->ptr_targets_,
+      inc_dir_array,
+      obs_dir_array,
+      inc_polar,
+      obs_polar,
+      frequency,
+      density
+    );
+
+    // Copy results to output array
+    for (int i = 0; i < num_directions; i++) {
+      ptr_rcs_results[i] = rcs_results[i];
+    }
+
+    return RADARSIM_SUCCESS;
+  } catch (const std::exception &) {
+    return RADARSIM_ERROR_EXCEPTION;
+  }
+}
+
+/**
+ * @brief Free the memory of RCS Simulator
+ *
+ * @param ptr_rcs_c Pointer to the RCS Simulator
+ */
+void Free_RcsSimulator(t_RcsSimulator *ptr_rcs_c) {
+  if (ptr_rcs_c == nullptr) {
+    return;
+  }
+  delete static_cast<RcsSimulator<double> *>(ptr_rcs_c->_ptr_rcs_simulator);
+  free(ptr_rcs_c);
 }
 
 /*********************************************

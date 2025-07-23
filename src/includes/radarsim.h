@@ -333,6 +333,61 @@ EXPORTED void Run_Interference_Simulator(t_Radar *ptr_radar_c,
                                double *ptr_interf_real,
                                double *ptr_interf_imag);
 
+/*********************************************
+ *
+ *  RCS Simulator
+ *
+ *********************************************/
+typedef struct s_RcsSimulator t_RcsSimulator;
+
+/**
+ * @brief Create an RCS Simulator, return the pointer to the RCS Simulator
+ *
+ * @return t_RcsSimulator* Pointer to the RCS Simulator
+ */
+EXPORTED t_RcsSimulator *Create_RcsSimulator();
+
+/**
+ * @brief Calculate target RCS
+ *
+ * @param ptr_rcs_c Pointer to the RCS Simulator
+ * @param ptr_targets_c Pointer to the target list
+ * @param inc_dir_x Array of incident direction x components
+ * @param inc_dir_y Array of incident direction y components  
+ * @param inc_dir_z Array of incident direction z components
+ * @param obs_dir_x Array of observation direction x components
+ * @param obs_dir_y Array of observation direction y components
+ * @param obs_dir_z Array of observation direction z components
+ * @param num_directions Number of direction pairs
+ * @param inc_polar_real Real part of incident polarization vector [x, y, z]
+ * @param inc_polar_imag Imaginary part of incident polarization vector [x, y, z]
+ * @param obs_polar_real Real part of observation polarization vector [x, y, z]
+ * @param obs_polar_imag Imaginary part of observation polarization vector [x, y, z]
+ * @param frequency Frequency (Hz)
+ * @param density Ray density, number of rays per wavelength
+ * @param ptr_rcs_results Array to store RCS results (m^2), size should be num_directions
+ * @return int Status code (0 for success, error code for failure)
+ */
+EXPORTED int Run_RcsSimulator(t_RcsSimulator *ptr_rcs_c, t_Targets *ptr_targets_c,
+                     double *inc_dir_x, double *inc_dir_y, double *inc_dir_z,
+                     double *obs_dir_x, double *obs_dir_y, double *obs_dir_z,
+                     int num_directions,
+                     double *inc_polar_real, double *inc_polar_imag,
+                     double *obs_polar_real, double *obs_polar_imag,
+                     double frequency, double density, double *ptr_rcs_results);
+
+/**
+ * @brief Free the memory of RCS Simulator
+ *
+ * @param ptr_rcs_c Pointer to the RCS Simulator
+ */
+EXPORTED void Free_RcsSimulator(t_RcsSimulator *ptr_rcs_c);
+
+/*********************************************
+ *
+ *  Utility Functions
+ *
+ *********************************************/
 /**
  * @brief Check if a pointer is valid (non-NULL)
  *
