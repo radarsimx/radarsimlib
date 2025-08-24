@@ -11,12 +11,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Remove Windows OpenSSH and use the default ssh in git
-        run: Remove-WindowsCapability -Online -Name OpenSSH.Client
       - uses: actions/checkout@v4
         with:
           ssh-key: ${{ secrets.RADARSIMCPP }}
-          submodules: true
+          submodules: recursive
       - name: Build
         run: |
           .\build.bat --arch cpu --tier free
