@@ -77,7 +77,7 @@ jobs:
           CUDA_TOOLKIT_ROOT_DIR: ${{ matrix.arch == 'gpu' && env.CUDA_PATH || '' }}
         run: |
           echo "::group::Build Process"
-          .\build_win.bat --arch ${{ matrix.arch }} --tier ${{ matrix.tier }}
+          .\build.bat --arch ${{ matrix.arch }} --tier ${{ matrix.tier }}
           echo "::endgroup::"
         shell: cmd
 
