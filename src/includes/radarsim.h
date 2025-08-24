@@ -320,6 +320,53 @@ EXPORTED void Run_Interference(t_Radar *ptr_radar_c,
                                double *ptr_interf_real,
                                double *ptr_interf_imag);
 
+/**
+ * @brief Execute Radar Cross Section (RCS) simulation
+ *
+ * @param ptr_targets_c Pointer to the target management system
+ * @param inc_dir_array Array of incident direction vectors {x, y, z}
+ * @param obs_dir_array Array of observation direction vectors {x, y, z}
+ * @param num_directions Number of direction pairs
+ * @param inc_polar_real Real part of incident polarization vector {x, y, z}
+ * @param inc_polar_imag Imaginary part of incident polarization vector {x, y,
+ * z}
+ * @param obs_polar_real Real part of observation polarization vector {x, y, z}
+ * @param obs_polar_imag Imaginary part of observation polarization vector {x,
+ * y, z}
+ * @param frequency Electromagnetic frequency (Hz)
+ * @param density Ray density for Physical Optics (rays per wavelength)
+ * @param rcs_result Output array for RCS values (m²)
+ * @return int Status code (0 for success, 1 for failure)
+ */
+EXPORTED int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
+                              double *obs_dir_array, int num_directions,
+                              double *inc_polar_real, double *inc_polar_imag,
+                              double *obs_polar_real, double *obs_polar_imag,
+                              double frequency, double density,
+                              double *rcs_result);
+
+/**
+ * @brief Execute LiDAR point cloud simulation
+ *
+ * @param ptr_targets_c Pointer to the target management system
+ * @param phi_array Array of azimuth angles (rad)
+ * @param theta_array Array of elevation angles (rad)
+ * @param num_rays Number of rays to shoot
+ * @param sensor_location LiDAR sensor position {x, y, z} (m)
+ * @param cloud_points Output array for point cloud coordinates {x, y, z}
+ * @param cloud_distances Output array for point distances (m)
+ * @param cloud_intensities Output array for point intensities
+ * @param max_points Maximum number of points to return
+ * @param actual_points Output: actual number of points found
+ * @return int Status code (0 for success, 1 for failure)
+ */
+EXPORTED int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
+                                double *theta_array, int num_rays,
+                                double *sensor_location, double *cloud_points,
+                                double *cloud_distances,
+                                double *cloud_intensities, int max_points,
+                                int *actual_points);
+
 #ifdef __cplusplus
 }
 #endif

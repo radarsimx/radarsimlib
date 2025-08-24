@@ -39,8 +39,10 @@
 #include "radar.hpp"
 #include "receiver.hpp"
 #include "simulator_interference.hpp"
+#include "simulator_lidar.hpp"
 #include "simulator_mesh.hpp"
 #include "simulator_point.hpp"
+#include "simulator_rcs.hpp"
 #include "snapshot.hpp"
 #include "targets_manager.hpp"
 #include "transmitter.hpp"
@@ -795,6 +797,233 @@ void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
   simc.Run(ptr_radar_c->_ptr_radar, ptr_interf_radar_c->_ptr_radar);
   ptr_radar_c->_ptr_radar->SyncBaseband();
+}
+
+/**
+ * @brief Execute Radar Cross Section (RCS) simulation
+ *
+ * @details Calculates the Radar Cross Section of targets using Physical Optics
+ * ray tracing method. Supports multiple incident and observation directions
+ * for comprehensive RCS analysis. Uses BVH acceleration for efficient
+ * computation.
+ *
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @param inc_dir_array Array of incident direction vectors {x, y, z} - must not
+ * be NULL
+ * @param obs_dir_array Array of observation direction vectors {x, y, z} - must
+ * not be NULL
+ * @param num_directions Number of direction pairs - must be > 0
+ * @param inc_polar_real Real part of incident polarization vector {x, y, z} -
+ * must not be NULL
+ * @param inc_polar_imag Imaginary part of incident polarization vector {x, y,
+ * z} - must not be NULL
+ * @param obs_polar_real Real part of observation polarization vector {x, y, z}
+ * - must not be NULL
+ * @param obs_polar_imag Imaginary part of observation polarization vector {x,
+ * y, z} - must not be NULL
+ * @param frequency Electromagnetic frequency (Hz) - must be > 0
+ * @param density Ray density for Physical Optics (rays per wavelength) - must
+ * be > 0
+ * @param rcs_result Output array for RCS values (m²) - must not be NULL, size
+ * >= num_directions
+ * @return int Status code (0 for success, 1 for failure)
+ */
+int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
+                     double *obs_dir_array, int num_directions,
+                     double *inc_polar_real, double *inc_polar_imag,
+                     double *obs_polar_real, double *obs_polar_imag,
+                     double frequency, double density, double *rcs_result) {
+  // Input validation
+  if (ptr_targets_c == nullptr || inc_dir_array == nullptr ||
+      obs_dir_array == nullptr || num_directions <= 0 ||
+      inc_polar_real == nullptr || inc_polar_imag == nullptr ||
+      obs_polar_real == nullptr || obs_polar_imag == nullptr ||
+      frequency <= 0 || density <= 0 || rcs_result == nullptr) {
+    return 1;
+  }
+
+  try {
+    // Create RCS simulator
+    RcsSimulator<double> rcs_sim;
+
+    // Convert C arrays to C++ vectors for incident directions
+    std::vector<rsv::Vec3<double>> inc_dir_vect;
+    inc_dir_vect.reserve(num_directions);
+    for (int i = 0; i < num_directions; i++) {
+      inc_dir_vect.push_back(rsv::Vec3<double>(inc_dir_array[i * 3],
+                                               inc_dir_array[i * 3 + 1],
+                                               inc_dir_array[i * 3 + 2]));
+    }
+
+    // Convert C arrays to C++ vectors for observation directions
+    std::vector<rsv::Vec3<double>> obs_dir_vect;
+    obs_dir_vect.reserve(num_directions);
+    for (int i = 0; i < num_directions; i++) {
+      obs_dir_vect.push_back(rsv::Vec3<double>(obs_dir_array[i * 3],
+                                               obs_dir_array[i * 3 + 1],
+                                               obs_dir_array[i * 3 + 2]));
+    }
+
+    // Create complex polarization vectors
+    rsv::Vec3<std::complex<double>> inc_polar(
+        std::complex<double>(inc_polar_real[0], inc_polar_imag[0]),
+        std::complex<double>(inc_polar_real[1], inc_polar_imag[1]),
+        std::complex<double>(inc_polar_real[2], inc_polar_imag[2]));
+
+    rsv::Vec3<std::complex<double>> obs_polar(
+        std::complex<double>(obs_polar_real[0], obs_polar_imag[0]),
+        std::complex<double>(obs_polar_real[1], obs_polar_imag[1]),
+        std::complex<double>(obs_polar_real[2], obs_polar_imag[2]));
+
+    // Run RCS simulation
+    std::vector<double> rcs_values =
+        rcs_sim.Run(ptr_targets_c->_ptr_targets, inc_dir_vect, obs_dir_vect,
+                    inc_polar, obs_polar, frequency, density);
+
+    // Copy results back to C array
+    for (size_t i = 0;
+         i < rcs_values.size() && i < static_cast<size_t>(num_directions);
+         i++) {
+      rcs_result[i] = rcs_values[i];
+    }
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Run_RcsSimulator: Memory allocation failed: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to simulator
+    std::cerr << "Run_RcsSimulator: Invalid argument: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Run_RcsSimulator: Unexpected error: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Run_RcsSimulator: Unknown error occurred" << std::endl;
+    return 1;
+  }
+
+  return 0;
+}
+
+/**
+ * @brief Execute LiDAR point cloud simulation
+ *
+ * @details Performs LiDAR point cloud generation using ray tracing simulation.
+ * Shoots rays from the sensor position in specified directions and records
+ * hit points on target surfaces. Uses BVH acceleration for efficient
+ * computation.
+ *
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @param phi_array Array of azimuth angles (rad) - must not be NULL
+ * @param theta_array Array of elevation angles (rad) - must not be NULL
+ * @param num_rays Number of rays to shoot - must be > 0
+ * @param sensor_location LiDAR sensor position {x, y, z} (m) - must not be NULL
+ * @param cloud_points Output array for point cloud coordinates {x, y, z} - must
+ * not be NULL
+ * @param cloud_distances Output array for point distances (m) - must not be
+ * NULL
+ * @param cloud_intensities Output array for point intensities - must not be
+ * NULL
+ * @param max_points Maximum number of points to return - must be > 0
+ * @param actual_points Output: actual number of points found - must not be NULL
+ * @return int Status code (0 for success, 1 for failure)
+ */
+int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
+                       double *theta_array, int num_rays,
+                       double *sensor_location, double *cloud_points,
+                       double *cloud_distances, double *cloud_intensities,
+                       int max_points, int *actual_points) {
+  // Input validation
+  if (ptr_targets_c == nullptr || phi_array == nullptr ||
+      theta_array == nullptr || num_rays <= 0 || sensor_location == nullptr ||
+      cloud_points == nullptr || cloud_distances == nullptr ||
+      cloud_intensities == nullptr || max_points <= 0 ||
+      actual_points == nullptr) {
+    return 1;
+  }
+
+  try {
+    // Create LiDAR simulator
+    LidarSimulator<float> lidar_sim;
+
+    // Convert C arrays to C++ vectors
+    std::vector<float> phi_vect;
+    std::vector<float> theta_vect;
+    phi_vect.reserve(num_rays);
+    theta_vect.reserve(num_rays);
+
+    for (int i = 0; i < num_rays; i++) {
+      phi_vect.push_back(static_cast<float>(phi_array[i]));
+      theta_vect.push_back(static_cast<float>(theta_array[i]));
+    }
+
+    // Create sensor position vector
+    rsv::Vec3<float> location(static_cast<float>(sensor_location[0]),
+                              static_cast<float>(sensor_location[1]),
+                              static_cast<float>(sensor_location[2]));
+
+    // Run LiDAR simulation
+    lidar_sim.Run(ptr_targets_c->_ptr_targets, phi_vect, theta_vect, location);
+
+    // Extract results from point cloud
+    int point_count = 0;
+    for (size_t i = 0; i < lidar_sim.cloud_.size() && point_count < max_points;
+         i++) {
+      const auto &ray = lidar_sim.cloud_[i];
+
+      // Calculate hit point coordinates using the final location from the ray
+      // arrays The final hit point is at location_[reflections_] and uses array
+      // indexing [0], [1], [2]
+      cloud_points[point_count * 3] =
+          static_cast<double>(ray.location_[ray.reflections_][0]);
+      cloud_points[point_count * 3 + 1] =
+          static_cast<double>(ray.location_[ray.reflections_][1]);
+      cloud_points[point_count * 3 + 2] =
+          static_cast<double>(ray.location_[ray.reflections_][2]);
+
+      // Store distance using the final range
+      cloud_distances[point_count] =
+          static_cast<double>(ray.range_[ray.reflections_]);
+
+      // Store intensity (use 1.0 as default since Ray doesn't have amplitude)
+      cloud_intensities[point_count] = 1.0;
+
+      point_count++;
+    }
+
+    // Return actual number of points found
+    *actual_points = point_count;
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Run_LidarSimulator: Memory allocation failed: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to simulator
+    std::cerr << "Run_LidarSimulator: Invalid argument: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Run_LidarSimulator: Unexpected error: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Run_LidarSimulator: Unknown error occurred" << std::endl;
+    return 1;
+  }
+
+  return 0;
 }
 
 /*********************************************
