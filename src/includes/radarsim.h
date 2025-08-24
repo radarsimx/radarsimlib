@@ -281,6 +281,13 @@ EXPORTED int Add_Mesh_Target(float *points, int *cells, int cell_size,
  */
 EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
 
+/**
+ * @brief Complete the initialization of targets
+ *
+ * @param ptr_targets_c Pointer to the target list
+ */
+EXPORTED void Complete_Targets_Initialization(t_Targets *ptr_targets_c);
+
 /*********************************************
  *
  *  Simulator

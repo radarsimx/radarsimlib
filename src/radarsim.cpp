@@ -19,17 +19,22 @@
 
 #include "radarsim.h"
 
+#include <cstdlib>
+#include <exception>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 #include "libs/free_tier.hpp"
 #include "point.hpp"
+#include "points_manager.hpp"
 #include "radar.hpp"
 #include "receiver.hpp"
 #include "simulator_interference.hpp"
 #include "simulator_mesh.hpp"
 #include "simulator_point.hpp"
 #include "snapshot.hpp"
+#include "targets_manager.hpp"
 #include "transmitter.hpp"
 
 /*********************************************
@@ -53,7 +58,7 @@ void Get_Version(int version[2]) {
  *
  *********************************************/
 struct s_Transmitter {
-  Transmitter<double, float> *_ptr_transmitter;
+  std::shared_ptr<Transmitter<double, float>> _ptr_transmitter;
 };
 
 /**
@@ -67,9 +72,6 @@ struct s_Transmitter {
  * @param pulse_start_time Pulse start time vector (s), length should equal to
  * the number of pulses
  * @param num_pulses Number of pulses
- * @param frame_start_time Frame start time vector (s), length should equal to
- * the number of frames
- * @param num_frames Number of frames
  * @param tx_power Transmitter power (dBm)
  * @return t_Transmitter* Pointer to the Transmitter
  */
@@ -77,30 +79,66 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   int waveform_size, double *freq_offset,
                                   double *pulse_start_time, int num_pulses,
                                   float tx_power) {
-  t_Transmitter *ptr_tx_c;
-
-  ptr_tx_c = (t_Transmitter *)malloc(sizeof(t_Transmitter));
-
-  std::vector<double> freq_vt;
-  std::vector<double> freq_time_vt;
-  freq_vt.reserve(waveform_size);
-  freq_time_vt.reserve(waveform_size);
-  for (int idx = 0; idx < waveform_size; idx++) {
-    freq_vt.push_back(freq[idx]);
-    freq_time_vt.push_back(freq_time[idx]);
+  // Input validation
+  if (freq == nullptr || freq_time == nullptr || waveform_size <= 0) {
+    return nullptr;
+  }
+  if (freq_offset == nullptr || pulse_start_time == nullptr ||
+      num_pulses <= 0) {
+    return nullptr;
   }
 
-  std::vector<double> freq_offset_vt;
-  std::vector<double> pulse_start_time_vt;
-  freq_offset_vt.reserve(num_pulses);
-  pulse_start_time_vt.reserve(num_pulses);
-  for (int idx = 0; idx < num_pulses; idx++) {
-    freq_offset_vt.push_back(freq_offset[idx]);
-    pulse_start_time_vt.push_back(pulse_start_time[idx]);
+  // Allocate memory for the wrapper struct
+  t_Transmitter *ptr_tx_c = (t_Transmitter *)malloc(sizeof(t_Transmitter));
+  if (ptr_tx_c == nullptr) {
+    return nullptr;
   }
 
-  ptr_tx_c->_ptr_transmitter = new Transmitter<double, float>(
-      tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt);
+  try {
+    // Convert C arrays to C++ vectors
+    std::vector<double> freq_vt;
+    std::vector<double> freq_time_vt;
+    freq_vt.reserve(waveform_size);
+    freq_time_vt.reserve(waveform_size);
+    for (int idx = 0; idx < waveform_size; idx++) {
+      freq_vt.push_back(freq[idx]);
+      freq_time_vt.push_back(freq_time[idx]);
+    }
+
+    std::vector<double> freq_offset_vt;
+    std::vector<double> pulse_start_time_vt;
+    freq_offset_vt.reserve(num_pulses);
+    pulse_start_time_vt.reserve(num_pulses);
+    for (int idx = 0; idx < num_pulses; idx++) {
+      freq_offset_vt.push_back(freq_offset[idx]);
+      pulse_start_time_vt.push_back(pulse_start_time[idx]);
+    }
+
+    // Create the Transmitter object with correct parameter order
+    ptr_tx_c->_ptr_transmitter = std::make_shared<Transmitter<double, float>>(
+        tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt);
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Create_Transmitter: Memory allocation failed: " << e.what() << std::endl;
+    free(ptr_tx_c);
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to constructor
+    std::cerr << "Create_Transmitter: Invalid argument: " << e.what() << std::endl;
+    free(ptr_tx_c);
+    return nullptr;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Create_Transmitter: Unexpected error: " << e.what() << std::endl;
+    free(ptr_tx_c);
+    return nullptr;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Create_Transmitter: Unknown error occurred" << std::endl;
+    free(ptr_tx_c);
+    return nullptr;
+  }
 
   return ptr_tx_c;
 }
@@ -181,10 +219,10 @@ int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
       std::complex<float>(polar_real[1], polar_imag[1]),
       std::complex<float>(polar_real[2], polar_imag[2]));
 
-  ptr_tx_c->_ptr_transmitter->AddChannel(TxChannel<float>(
+  ptr_tx_c->_ptr_transmitter->AddChannel(
       rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
       phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain, mod_t_vt,
-      mod_var_vt, pulse_mod_vt, delay, grid));
+      mod_var_vt, pulse_mod_vt, delay, grid);
   return 0;
 }
 
@@ -207,7 +245,8 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == NULL) {
     return;
   }
-  delete static_cast<Transmitter<double, float> *>(ptr_tx_c->_ptr_transmitter);
+  // shared_ptr automatically handles cleanup, just reset it
+  ptr_tx_c->_ptr_transmitter.reset();
   free(ptr_tx_c);
 }
 
@@ -217,7 +256,7 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
  *
  *********************************************/
 struct s_Receiver {
-  Receiver<float> *_ptr_receiver;
+  std::shared_ptr<Receiver<float>> _ptr_receiver;
 };
 
 /**
@@ -232,11 +271,43 @@ struct s_Receiver {
  */
 t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                             float baseband_gain, float baseband_bw) {
-  t_Receiver *ptr_rx_c;
-  ptr_rx_c = (t_Receiver *)malloc(sizeof(t_Receiver));
+  // Input validation
+  if (fs <= 0 || resistor <= 0) {
+    return nullptr;
+  }
 
-  ptr_rx_c->_ptr_receiver =
-      new Receiver<float>(fs, rf_gain, resistor, baseband_gain, baseband_bw);
+  // Allocate memory for the wrapper struct
+  t_Receiver *ptr_rx_c = (t_Receiver *)malloc(sizeof(t_Receiver));
+  if (ptr_rx_c == nullptr) {
+    return nullptr;
+  }
+
+  try {
+    // Create the Receiver object using shared_ptr
+    ptr_rx_c->_ptr_receiver = std::make_shared<Receiver<float>>(
+        fs, rf_gain, resistor, baseband_gain, baseband_bw);
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Create_Receiver: Memory allocation failed: " << e.what() << std::endl;
+    free(ptr_rx_c);
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to constructor
+    std::cerr << "Create_Receiver: Invalid argument: " << e.what() << std::endl;
+    free(ptr_rx_c);
+    return nullptr;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Create_Receiver: Unexpected error: " << e.what() << std::endl;
+    free(ptr_rx_c);
+    return nullptr;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Create_Receiver: Unknown error occurred" << std::endl;
+    free(ptr_rx_c);
+    return nullptr;
+  }
 
   return ptr_rx_c;
 }
@@ -287,9 +358,9 @@ int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
       std::complex<float>(polar_real[1], polar_imag[1]),
       std::complex<float>(polar_real[2], polar_imag[2]));
 
-  ptr_rx_c->_ptr_receiver->AddChannel(RxChannel<float>(
+  ptr_rx_c->_ptr_receiver->AddChannel(
       rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
-      phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
+      phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain);
   return 0;
 }
 
@@ -312,7 +383,8 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
   if (ptr_rx_c == NULL) {
     return;
   }
-  delete static_cast<Receiver<float> *>(ptr_rx_c->_ptr_receiver);
+  // shared_ptr automatically handles cleanup, just reset it
+  ptr_rx_c->_ptr_receiver.reset();
   free(ptr_rx_c);
 }
 
@@ -324,7 +396,7 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
 struct s_Radar {
   t_Transmitter *_ptr_tx;
   t_Receiver *_ptr_rx;
-  Radar<double, float> *_ptr_radar;
+  std::shared_ptr<Radar<double, float>> _ptr_radar;
 };
 
 /**
@@ -341,27 +413,62 @@ struct s_Radar {
 t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                       double *frame_start_time, int num_frames, float *location,
                       float *speed, float *rotation, float *rotation_rate) {
-  t_Radar *ptr_radar_c;
-  std::vector<rsv::Vec3<float>> loc_vt, rot_vt;
+  // Input validation
+  if (ptr_tx_c == nullptr || ptr_rx_c == nullptr ||
+      frame_start_time == nullptr || num_frames <= 0 || location == nullptr ||
+      speed == nullptr || rotation == nullptr || rotation_rate == nullptr) {
+    return nullptr;
+  }
 
-  ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar));
+  // Allocate memory for the wrapper struct
+  t_Radar *ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar));
+  if (ptr_radar_c == nullptr) {
+    return nullptr;
+  }
+
   ptr_radar_c->_ptr_tx = ptr_tx_c;
   ptr_radar_c->_ptr_rx = ptr_rx_c;
 
-  std::vector<double> frame_start_time_vt;
-  frame_start_time_vt.reserve(num_frames);
-  for (int idx = 0; idx < num_frames; idx++) {
-    frame_start_time_vt.push_back(frame_start_time[idx]);
+  try {
+    // Convert C arrays to C++ vectors
+    std::vector<double> frame_start_time_vt;
+    frame_start_time_vt.reserve(num_frames);
+    for (int idx = 0; idx < num_frames; idx++) {
+      frame_start_time_vt.push_back(frame_start_time[idx]);
+    }
+
+    std::vector<rsv::Vec3<float>> loc_vt, rot_vt;
+    loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
+    rot_vt.push_back(rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
+
+    // Create the Radar object using shared_ptr and pass shared_ptr objects
+    ptr_radar_c->_ptr_radar = std::make_shared<Radar<double, float>>(
+        ptr_tx_c->_ptr_transmitter, ptr_rx_c->_ptr_receiver,
+        frame_start_time_vt, loc_vt,
+        rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
+        rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Create_Radar: Memory allocation failed: " << e.what() << std::endl;
+    free(ptr_radar_c);
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to constructor
+    std::cerr << "Create_Radar: Invalid argument: " << e.what() << std::endl;
+    free(ptr_radar_c);
+    return nullptr;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Create_Radar: Unexpected error: " << e.what() << std::endl;
+    free(ptr_radar_c);
+    return nullptr;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Create_Radar: Unknown error occurred" << std::endl;
+    free(ptr_radar_c);
+    return nullptr;
   }
-
-  loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
-  rot_vt.push_back(rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
-
-  ptr_radar_c->_ptr_radar = new Radar<double, float>(
-      *ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver,
-      frame_start_time_vt, loc_vt,
-      rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
-      rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
 
   return ptr_radar_c;
 }
@@ -375,8 +482,8 @@ void Free_Radar(t_Radar *ptr_radar_c) {
   if (ptr_radar_c == NULL) {
     return;
   }
-  ptr_radar_c->_ptr_radar->FreeDeviceMemory();
-  delete static_cast<Radar<double, float> *>(ptr_radar_c->_ptr_radar);
+  // shared_ptr automatically handles cleanup, just reset it
+  ptr_radar_c->_ptr_radar.reset();
   free(ptr_radar_c);
 }
 
@@ -386,8 +493,8 @@ void Free_Radar(t_Radar *ptr_radar_c) {
  *
  *********************************************/
 struct s_Targets {
-  PointList<float> *_ptr_points;
-  TargetList<float> *_ptr_targets;
+  std::shared_ptr<PointsManager<float>> _ptr_points;
+  std::shared_ptr<TargetsManager<float>> _ptr_targets;
 };
 
 /**
@@ -396,11 +503,39 @@ struct s_Targets {
  * @return t_Targets* Pointer to the target list
  */
 t_Targets *Init_Targets() {
-  t_Targets *ptr_targets_c;
-  ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets));
+  // Allocate memory for the wrapper struct
+  t_Targets *ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets));
+  if (ptr_targets_c == nullptr) {
+    return nullptr;
+  }
 
-  ptr_targets_c->_ptr_points = new PointList<float>();
-  ptr_targets_c->_ptr_targets = new TargetList<float>();
+  try {
+    // Create the manager objects using shared_ptr
+    ptr_targets_c->_ptr_points = std::make_shared<PointsManager<float>>();
+    ptr_targets_c->_ptr_targets = std::make_shared<TargetsManager<float>>();
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Init_Targets: Memory allocation failed: " << e.what() << std::endl;
+    free(ptr_targets_c);
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to constructor
+    std::cerr << "Init_Targets: Invalid argument: " << e.what() << std::endl;
+    free(ptr_targets_c);
+    return nullptr;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Init_Targets: Unexpected error: " << e.what() << std::endl;
+    free(ptr_targets_c);
+    return nullptr;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Init_Targets: Unknown error occurred" << std::endl;
+    free(ptr_targets_c);
+    return nullptr;
+  }
+
   return ptr_targets_c;
 }
 
@@ -416,12 +551,12 @@ t_Targets *Init_Targets() {
  */
 int Add_Point_Target(float *location, float *speed, float rcs, float phs,
                      t_Targets *ptr_targets_c) {
-  if (IsFreeTier() && ptr_targets_c->_ptr_points->ptr_points_.size() > 1) {
+  if (IsFreeTier() && ptr_targets_c->_ptr_points->vect_points_.size() > 1) {
     return 1;
   }
-  ptr_targets_c->_ptr_points->Add_Point(
-      Point<float>(rsv::Vec3<float>(location[0], location[1], location[2]),
-                   rsv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs));
+  ptr_targets_c->_ptr_points->AddPointSimple(
+      rsv::Vec3<float>(location[0], location[1], location[2]),
+      rsv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs);
   return 0;
 }
 
@@ -449,34 +584,37 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
                     float *rotation_rate, float ep_real, float ep_imag,
                     float mu_real, float mu_imag, bool is_ground,
                     t_Targets *ptr_targets_c) {
-  if (IsFreeTier() && ptr_targets_c->_ptr_targets->ptr_targets_.size() > 1) {
+  if (IsFreeTier() && ptr_targets_c->_ptr_targets->vect_targets_.size() > 1) {
     return 1;
   }
 
   if (IsFreeTier() && cell_size > 8) {
     return 1;
   }
-  std::vector<rsv::Vec3<float>> loc_vt;
-  loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
 
-  std::vector<rsv::Vec3<float>> spd_vt;
-  spd_vt.push_back(rsv::Vec3<float>(speed[0], speed[1], speed[2]));
+  // Create single-element arrays for the time-varying parameters
+  std::vector<rsv::Vec3<float>> location_array;
+  location_array.push_back(
+      rsv::Vec3<float>(location[0], location[1], location[2]));
 
-  std::vector<rsv::Vec3<float>> rot_vt;
-  rot_vt.push_back(rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
+  std::vector<rsv::Vec3<float>> speed_array;
+  speed_array.push_back(rsv::Vec3<float>(speed[0], speed[1], speed[2]));
 
-  std::vector<rsv::Vec3<float>> rrt_vt;
-  rrt_vt.push_back(
+  std::vector<rsv::Vec3<float>> rotation_array;
+  rotation_array.push_back(
+      rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
+
+  std::vector<rsv::Vec3<float>> rotrate_array;
+  rotrate_array.push_back(
       rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
 
   std::complex<float> ep = std::complex(ep_real, ep_imag);
-
   std::complex<float> mu = std::complex(mu_real, mu_imag);
 
-  ptr_targets_c->_ptr_targets->Add_Target(
-      Target<float>(points, cells, cell_size,
-                    rsv::Vec3<float>(origin[0], origin[1], origin[2]), loc_vt,
-                    spd_vt, rot_vt, rrt_vt, ep, mu, is_ground));
+  ptr_targets_c->_ptr_targets->AddTarget(
+      points, cells, cell_size,
+      rsv::Vec3<float>(origin[0], origin[1], origin[2]), location_array,
+      speed_array, rotation_array, rotrate_array, ep, mu, is_ground);
   return 0;
 }
 
@@ -489,9 +627,23 @@ void Free_Targets(t_Targets *ptr_targets_c) {
   if (ptr_targets_c == NULL) {
     return;
   }
-  delete static_cast<TargetList<float> *>(ptr_targets_c->_ptr_targets);
-  delete static_cast<PointList<float> *>(ptr_targets_c->_ptr_points);
+  // shared_ptr automatically handles cleanup, just reset them
+  ptr_targets_c->_ptr_targets.reset();
+  ptr_targets_c->_ptr_points.reset();
   free(ptr_targets_c);
+}
+
+/**
+ * @brief Complete the initialization of targets
+ *
+ * @param ptr_targets_c Pointer to the target list
+ */
+void Complete_Targets_Initialization(t_Targets *ptr_targets_c) {
+  if (ptr_targets_c == NULL) {
+    return;
+  }
+  ptr_targets_c->_ptr_points->CompletePointInitialization();
+  ptr_targets_c->_ptr_targets->CompleteTargetInitialization();
 }
 
 /*********************************************
@@ -514,21 +666,20 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
                    float density, int *ray_filter, double *ptr_bb_real,
                    double *ptr_bb_imag) {
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_bb_real, ptr_bb_imag);
-  if (ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
+  if (ptr_targets_c->_ptr_points->vect_points_.size() > 0) {
     PointSimulator<double, float> simc = PointSimulator<double, float>();
 
-    simc.Run(*ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points->ptr_points_);
+    simc.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points);
   }
 
-  if (ptr_targets_c->_ptr_targets->ptr_targets_.size() > 0) {
+  if (ptr_targets_c->_ptr_targets->vect_targets_.size() > 0) {
     MeshSimulator<double, float> scene_c = MeshSimulator<double, float>();
 
     rsv::Vec2<int> ray_filter_vec2 =
         rsv::Vec2<int>(ray_filter[0], ray_filter[1]);
 
-    scene_c.Run(*ptr_radar_c->_ptr_radar,
-                ptr_targets_c->_ptr_targets->ptr_targets_, level, density,
-                ray_filter_vec2, false, "", false);
+    scene_c.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_targets, level,
+                density, ray_filter_vec2, false, "", false);
   }
   ptr_radar_c->_ptr_radar->SyncBaseband();
 }
@@ -546,7 +697,7 @@ void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
   InterferenceSimulator<double, float> simc =
       InterferenceSimulator<double, float>();
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
-  simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar);
+  simc.Run(ptr_radar_c->_ptr_radar, ptr_interf_radar_c->_ptr_radar);
   ptr_radar_c->_ptr_radar->SyncBaseband();
 }
 
