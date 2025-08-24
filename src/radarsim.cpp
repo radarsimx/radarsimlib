@@ -1,6 +1,14 @@
 /*
+ * @file radarsim.cpp
+ * @brief C wrapper implementation for RadarSimCpp library
  *
- *    C wrapper of RadarSimCpp
+ * @details
+ * This file provides a C-compatible interface for the RadarSimCpp library,
+ * enabling radar simulation functionality for C applications. Features include:
+ * - Transmitter and receiver configuration
+ * - Radar system modeling
+ * - Point and mesh target management
+ * - Simulation execution
  *
  *    ----------
  *
@@ -57,23 +65,31 @@ void Get_Version(int version[2]) {
  *  Transmitter
  *
  *********************************************/
+/**
+ * @brief Internal structure for Transmitter C wrapper
+ * @details Contains shared_ptr to Transmitter object for memory management
+ */
 struct s_Transmitter {
   std::shared_ptr<Transmitter<double, float>> _ptr_transmitter;
 };
 
 /**
- * @brief Create a Transmitter, return the pointer of the Transmitter
+ * @brief Create a Transmitter object
  *
- * @param freq Frequency vector (Hz)
- * @param freq_time Timestamp vector for the frequency vector (s)
- * @param waveform_size Length of the frequency and timestamp vector
- * @param freq_offset Frequency offset per pulse (Hz), length should equal to
- * the number of pulses
- * @param pulse_start_time Pulse start time vector (s), length should equal to
- * the number of pulses
- * @param num_pulses Number of pulses
+ * @details Creates a new transmitter with specified waveform and timing
+ * parameters. Performs comprehensive input validation and uses modern C++
+ * memory management.
+ *
+ * @param freq Frequency vector (Hz) - must not be NULL
+ * @param freq_time Timestamp vector for the frequency vector (s) - must not be
+ * NULL
+ * @param waveform_size Length of the frequency and timestamp vector - must be >
+ * 0
+ * @param freq_offset Frequency offset per pulse (Hz) - must not be NULL
+ * @param pulse_start_time Pulse start time vector (s) - must not be NULL
+ * @param num_pulses Number of pulses - must be > 0
  * @param tx_power Transmitter power (dBm)
- * @return t_Transmitter* Pointer to the Transmitter
+ * @return t_Transmitter* Pointer to the Transmitter object, NULL on failure
  */
 t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   int waveform_size, double *freq_offset,
@@ -120,17 +136,20 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
 
   } catch (const std::bad_alloc &e) {
     // Memory allocation failed
-    std::cerr << "Create_Transmitter: Memory allocation failed: " << e.what() << std::endl;
+    std::cerr << "Create_Transmitter: Memory allocation failed: " << e.what()
+              << std::endl;
     free(ptr_tx_c);
     return nullptr;
   } catch (const std::invalid_argument &e) {
     // Invalid parameters passed to constructor
-    std::cerr << "Create_Transmitter: Invalid argument: " << e.what() << std::endl;
+    std::cerr << "Create_Transmitter: Invalid argument: " << e.what()
+              << std::endl;
     free(ptr_tx_c);
     return nullptr;
   } catch (const std::exception &e) {
     // Any other standard exception
-    std::cerr << "Create_Transmitter: Unexpected error: " << e.what() << std::endl;
+    std::cerr << "Create_Transmitter: Unexpected error: " << e.what()
+              << std::endl;
     free(ptr_tx_c);
     return nullptr;
   } catch (...) {
@@ -144,33 +163,36 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
 }
 
 /**
- * @brief Add a transmitter channel to Transmitter
+ * @brief Add a transmitter channel with full configuration
  *
- * @param location Location of the channel [x, y, z] (m)
- * @param polar_real Real part of the polarization vector [x, y, z]
- * @param polar_imag Imaginary part of the polarization vector [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad), angles must
- * be equal-spaced incremental array
- * @param phi_ptn Normalized radiation pattern along phi (dB)
- * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad), angles
- * must be equal-spaced incremental array
- * @param theta_ptn Normalized radiation pattern along theta (dB)
- * @param theta_length Length of theta and theta_ptn
+ * @details Configures a transmitter channel with antenna pattern, polarization,
+ * and modulation parameters. Supports both amplitude and phase modulation.
+ *
+ * @param location Channel location {x, y, z} (m) - must not be NULL
+ * @param polar_real Real part of polarization vector {x, y, z} - must not be
+ * NULL
+ * @param polar_imag Imaginary part of polarization vector {x, y, z} - must not
+ * be NULL
+ * @param phi Phi angles for radiation pattern (rad) - must be equal-spaced -
+ * must not be NULL
+ * @param phi_ptn Normalized phi pattern values (dB) - must not be NULL
+ * @param phi_length Length of phi and phi_ptn arrays - must be > 0
+ * @param theta Theta angles for radiation pattern (rad) - must be equal-spaced
+ * - must not be NULL
+ * @param theta_ptn Normalized theta pattern values (dB) - must not be NULL
+ * @param theta_length Length of theta and theta_ptn arrays - must be > 0
  * @param antenna_gain Antenna gain (dB)
- * @param mod_t Timestamp of the modulation data (s), mod_t must be equal-spaced
- * incremental array
- * @param mod_var_real Real part of modulation value vector
- * @param mod_var_imag Imaginary part of modulation value vector
- * @param mod_length Length of mod_t, mod_var_real and mod_var_imag
- * @param pulse_mod_real Real part of pulse modulation vector, the length should
- * be the same as the number of pulses defined in Transmitter
- * @param pulse_mod_imag Imaginary part of pulse modulation vector, the length
- * should be the same as the number of pulses defined in Transmitter
+ * @param mod_t Modulation timestamps (s) - must be equal-spaced - must not be
+ * NULL
+ * @param mod_var_real Real part of modulation values - must not be NULL
+ * @param mod_var_imag Imaginary part of modulation values - must not be NULL
+ * @param mod_length Length of modulation arrays - must be > 0
+ * @param pulse_mod_real Real part of pulse modulation - must not be NULL
+ * @param pulse_mod_imag Imaginary part of pulse modulation - must not be NULL
  * @param delay Transmitting delay (s)
- * @param grid Ray occupancy checking grid (rad)
- * @param ptr_tx_c Pointer to the Transmitter
- * @return int Status code (0 for success, 1 for failure)
+ * @param grid Ray occupancy checking grid resolution (rad)
+ * @param ptr_tx_c Pointer to the Transmitter - must not be NULL
+ * @return int Status code (0 for success, 1 for failure/free tier limit)
  */
 int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
                   float *phi, float *phi_ptn, int phi_length, float *theta,
@@ -237,7 +259,10 @@ int Get_Num_Txchannel(t_Transmitter *ptr_tx_c) {
 }
 
 /**
- * @brief Free the memory of Transmitter
+ * @brief Free transmitter memory safely
+ *
+ * @details Safely releases transmitter resources using modern C++
+ * memory management. The shared_ptr automatically handles cleanup.
  *
  * @param ptr_tx_c Pointer to the Transmitter
  */
@@ -255,19 +280,26 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
  *  Receiver
  *
  *********************************************/
+/**
+ * @brief Internal structure for Receiver C wrapper
+ * @details Contains shared_ptr to Receiver object for memory management
+ */
 struct s_Receiver {
   std::shared_ptr<Receiver<float>> _ptr_receiver;
 };
 
 /**
- * @brief Create a Receiver, return the pointer of the Receiver
+ * @brief Create a Receiver object
  *
- * @param fs Sampling rate (Hz)
+ * @details Creates a new receiver with specified RF and baseband parameters.
+ * Includes input validation and modern C++ memory management.
+ *
+ * @param fs Sampling rate (Hz) - must be > 0
  * @param rf_gain RF gain (dB)
- * @param resistor Load resistor (Ohm)
+ * @param resistor Load resistor (Ohm) - must be > 0
  * @param baseband_gain Baseband gain (dB)
  * @param baseband_bw Baseband bandwidth (Hz)
- * @return t_Receiver* Pointer to the Receiver
+ * @return t_Receiver* Pointer to the Receiver object, NULL on failure
  */
 t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                             float baseband_gain, float baseband_bw) {
@@ -289,7 +321,8 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
 
   } catch (const std::bad_alloc &e) {
     // Memory allocation failed
-    std::cerr << "Create_Receiver: Memory allocation failed: " << e.what() << std::endl;
+    std::cerr << "Create_Receiver: Memory allocation failed: " << e.what()
+              << std::endl;
     free(ptr_rx_c);
     return nullptr;
   } catch (const std::invalid_argument &e) {
@@ -313,22 +346,27 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
 }
 
 /**
- * @brief Add a receiver channel to Receiver
+ * @brief Add a receiver channel with antenna configuration
  *
- * @param location Location of the channel [x, y, z] (m)
- * @param polar_real Real part of the polarization vector [x, y, z]
- * @param polar_imag Imaginary part of the polarization vector [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad), angles must
- * be equal-spaced incremental array
- * @param phi_ptn Normalized radiation pattern along phi (dB)
- * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad), angles
- * must be equal-spaced incremental array
- * @param theta_ptn Normalized radiation pattern along theta (dB)
- * @param theta_length Length of theta and theta_ptn
+ * @details Configures a receiver channel with antenna pattern and polarization.
+ * The receiver channel defines how signals are received and processed.
+ *
+ * @param location Channel location {x, y, z} (m) - must not be NULL
+ * @param polar_real Real part of polarization vector {x, y, z} - must not be
+ * NULL
+ * @param polar_imag Imaginary part of polarization vector {x, y, z} - must not
+ * be NULL
+ * @param phi Phi angles for radiation pattern (rad) - must be equal-spaced -
+ * must not be NULL
+ * @param phi_ptn Normalized phi pattern values (dB) - must not be NULL
+ * @param phi_length Length of phi and phi_ptn arrays - must be > 0
+ * @param theta Theta angles for radiation pattern (rad) - must be equal-spaced
+ * - must not be NULL
+ * @param theta_ptn Normalized theta pattern values (dB) - must not be NULL
+ * @param theta_length Length of theta and theta_ptn arrays - must be > 0
  * @param antenna_gain Antenna gain (dB)
- * @param ptr_rx_c Pointer to the Receiver
- * @return int Status code (0 for success, 1 for failure)
+ * @param ptr_rx_c Pointer to the Receiver - must not be NULL
+ * @return int Status code (0 for success, 1 for failure/free tier limit)
  */
 int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
                   float *phi, float *phi_ptn, int phi_length, float *theta,
@@ -375,7 +413,10 @@ int Get_Num_Rxchannel(t_Receiver *ptr_rx_c) {
 }
 
 /**
- * @brief Free the memory of Receiver
+ * @brief Free receiver memory safely
+ *
+ * @details Safely releases receiver resources using modern C++
+ * memory management. The shared_ptr automatically handles cleanup.
  *
  * @param ptr_rx_c Pointer to the Receiver
  */
@@ -393,6 +434,11 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
  *  Radar
  *
  *********************************************/
+/**
+ * @brief Internal structure for Radar C wrapper
+ * @details Contains pointers to transmitter, receiver, and radar objects for
+ * complete system
+ */
 struct s_Radar {
   t_Transmitter *_ptr_tx;
   t_Receiver *_ptr_rx;
@@ -400,15 +446,22 @@ struct s_Radar {
 };
 
 /**
- * @brief Create a Radar, return the pointer of the Radar
+ * @brief Create a Radar system object
  *
- * @param ptr_tx_c Pointer to the Transmitter
- * @param ptr_rx_c Pointer to the Receiver
- * @param location Radar's location {x, y, z} (m)
- * @param speed Radar's speed {x, y, z} (m/s)
- * @param rotation Radar's rotation {x, y, z} (rad)
- * @param rotation_rate Radar's rotation rate {x, y, z} (rad/s)
- * @return t_Radar* Pointer to the Radar
+ * @details Creates a complete radar system by combining transmitter and
+ * receiver with platform motion parameters. Performs comprehensive input
+ * validation.
+ *
+ * @param ptr_tx_c Pointer to the Transmitter - must not be NULL
+ * @param ptr_rx_c Pointer to the Receiver - must not be NULL
+ * @param frame_start_time Frame start time vector (s) - must not be NULL
+ * @param num_frames Number of frames - must be > 0
+ * @param location Radar's location {x, y, z} (m) - must not be NULL
+ * @param speed Radar's speed {x, y, z} (m/s) - must not be NULL
+ * @param rotation Radar's rotation {x, y, z} (rad) - must not be NULL
+ * @param rotation_rate Radar's rotation rate {x, y, z} (rad/s) - must not be
+ * NULL
+ * @return t_Radar* Pointer to the Radar object, NULL on failure
  */
 t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                       double *frame_start_time, int num_frames, float *location,
@@ -450,7 +503,8 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
 
   } catch (const std::bad_alloc &e) {
     // Memory allocation failed
-    std::cerr << "Create_Radar: Memory allocation failed: " << e.what() << std::endl;
+    std::cerr << "Create_Radar: Memory allocation failed: " << e.what()
+              << std::endl;
     free(ptr_radar_c);
     return nullptr;
   } catch (const std::invalid_argument &e) {
@@ -474,9 +528,12 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
 }
 
 /**
- * @brief Free the memory of Radar
+ * @brief Free radar system memory safely
  *
- * @param ptr_radar_c Pointer to the Radar
+ * @details Safely releases radar system resources using modern C++
+ * memory management. The shared_ptr automatically handles cleanup.
+ *
+ * @param ptr_radar_c Pointer to the Radar system
  */
 void Free_Radar(t_Radar *ptr_radar_c) {
   if (ptr_radar_c == NULL) {
@@ -492,15 +549,23 @@ void Free_Radar(t_Radar *ptr_radar_c) {
  *  Targets
  *
  *********************************************/
+/**
+ * @brief Internal structure for Targets C wrapper
+ * @details Contains shared_ptr to PointsManager and TargetsManager for
+ * comprehensive target management including both point targets and mesh targets
+ */
 struct s_Targets {
   std::shared_ptr<PointsManager<float>> _ptr_points;
   std::shared_ptr<TargetsManager<float>> _ptr_targets;
 };
 
 /**
- * @brief Initialize the target list
+ * @brief Initialize the target management system
  *
- * @return t_Targets* Pointer to the target list
+ * @details Creates and initializes both point and mesh target managers.
+ * Must be called before adding any targets to the simulation.
+ *
+ * @return t_Targets* Pointer to the target management system, NULL on failure
  */
 t_Targets *Init_Targets() {
   // Allocate memory for the wrapper struct
@@ -516,7 +581,8 @@ t_Targets *Init_Targets() {
 
   } catch (const std::bad_alloc &e) {
     // Memory allocation failed
-    std::cerr << "Init_Targets: Memory allocation failed: " << e.what() << std::endl;
+    std::cerr << "Init_Targets: Memory allocation failed: " << e.what()
+              << std::endl;
     free(ptr_targets_c);
     return nullptr;
   } catch (const std::invalid_argument &e) {
@@ -540,14 +606,18 @@ t_Targets *Init_Targets() {
 }
 
 /**
- * @brief Add an ideal point target to the target list
+ * @brief Add an ideal point target to the simulation
  *
- * @param location Target's location {x, y, z} (m)
- * @param speed Target's speed {x, y, z} (m/s)
+ * @details Adds a point target with specified radar cross section and motion.
+ * Point targets are ideal scatterers used for basic simulations.
+ *
+ * @param location Target's location {x, y, z} (m) - must not be NULL
+ * @param speed Target's speed {x, y, z} (m/s) - must not be NULL
  * @param rcs Target's RCS (dBsm)
  * @param phs Target's phase (rad)
- * @param ptr_targets_c Pointer to the target list
- * @return int Status code (0 for success, 1 for failure)
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @return int Status code (0 for success, 1 for failure/free tier limit)
  */
 int Add_Point_Target(float *location, float *speed, float rcs, float phs,
                      t_Targets *ptr_targets_c) {
@@ -561,23 +631,28 @@ int Add_Point_Target(float *location, float *speed, float rcs, float phs,
 }
 
 /**
- * @brief Add a 3D mesh target to the target list
+ * @brief Add a 3D mesh target to the simulation
  *
- * @param points Mesh coordinates
- * @param cells Mesh connections
- * @param cell_size Number of meshes
- * @param origin Target origin (m)
- * @param location Target location (m)
- * @param speed Target speed (m/s)
- * @param rotation Target rotation (rad)
- * @param rotation_rate Target rotation rate (rad/s)
- * @param ep_real Real part of Permittivity
- * @param ep_imag Imaginary part of Permittivity
- * @param mu_real Real part of Permeability
- * @param mu_imag Imaginary part of Permeability
- * @param is_ground Flag to identify if the target is ground
- * @param ptr_targets_c Pointer to the target list
- * @return int Status code (0 for success, 1 for failure)
+ * @details Adds a complex 3D mesh target with electromagnetic properties.
+ * Mesh targets provide realistic scattering behavior for detailed simulations.
+ *
+ * @param points Mesh vertex coordinates - must not be NULL
+ * @param cells Mesh triangle connectivity - must not be NULL
+ * @param cell_size Number of mesh triangles - must be > 0
+ * @param origin Target origin point (m) - must not be NULL
+ * @param location Target location {x, y, z} (m) - must not be NULL
+ * @param speed Target speed {x, y, z} (m/s) - must not be NULL
+ * @param rotation Target rotation {x, y, z} (rad) - must not be NULL
+ * @param rotation_rate Target rotation rate {x, y, z} (rad/s) - must not be
+ * NULL
+ * @param ep_real Real part of relative permittivity
+ * @param ep_imag Imaginary part of relative permittivity
+ * @param mu_real Real part of relative permeability
+ * @param mu_imag Imaginary part of relative permeability
+ * @param is_ground Flag to identify if the target represents ground surface
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @return int Status code (0 for success, 1 for failure/free tier limit)
  */
 int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
                     float *location, float *speed, float *rotation,
@@ -619,9 +694,12 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
 }
 
 /**
- * @brief Free the memory of target list
+ * @brief Free target management system memory
  *
- * @param ptr_targets_c Pointer to the target list
+ * @details Safely releases all target-related resources using modern C++
+ * memory management. Automatically handles cleanup of shared_ptr objects.
+ *
+ * @param ptr_targets_c Pointer to the target management system
  */
 void Free_Targets(t_Targets *ptr_targets_c) {
   if (ptr_targets_c == NULL) {
@@ -634,9 +712,14 @@ void Free_Targets(t_Targets *ptr_targets_c) {
 }
 
 /**
- * @brief Complete the initialization of targets
+ * @brief Complete the initialization of all targets
  *
- * @param ptr_targets_c Pointer to the target list
+ * @details Finalizes the setup of both point and mesh targets. This function
+ * must be called after adding all targets and before running simulation.
+ * It prepares the targets for efficient GPU processing if available.
+ *
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
  */
 void Complete_Targets_Initialization(t_Targets *ptr_targets_c) {
   if (ptr_targets_c == NULL) {
@@ -652,15 +735,21 @@ void Complete_Targets_Initialization(t_Targets *ptr_targets_c) {
  *
  *********************************************/
 /**
- * @brief Run simulator for the ideal targets
+ * @brief Execute radar simulation for all configured targets
  *
- * @param ptr_radar_c Pointer to the radar
- * @param ptr_targets_c Pointer to the target list
- * @param level Fidelity level of ray tracing
- * @param density Ray density
- * @param ray_filter Ray filter parameters
- * @param ptr_bb_real Real part of baseband samples
- * @param ptr_bb_imag Imaginary part of baseband samples
+ * @details Runs comprehensive radar simulation including both point and mesh
+ * targets. Initializes baseband buffers, processes targets based on type, and
+ * synchronizes results. Supports GPU acceleration when available.
+ *
+ * @param ptr_radar_c Pointer to the radar system - must not be NULL
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @param level Ray tracing fidelity level (higher = more accurate, slower)
+ * @param density Ray density for mesh target simulation
+ * @param ray_filter Ray filter parameters {min, max} - must not be NULL
+ * @param ptr_bb_real Real part of baseband signal buffer - must not be NULL
+ * @param ptr_bb_imag Imaginary part of baseband signal buffer - must not be
+ * NULL
  */
 void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
                    float density, int *ray_filter, double *ptr_bb_real,
@@ -685,12 +774,19 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
 }
 
 /**
- * @brief Run interference simulation
+ * @brief Execute interference simulation between radar systems
  *
- * @param ptr_radar_c Pointer to the victim radar
- * @param ptr_interf_radar_c Pointer to the interference radar
- * @param ptr_interf_real Real part of the interference baseband
- * @param ptr_interf_imag Imaginary part of the interference baseband
+ * @details Simulates electromagnetic interference between two radar systems.
+ * The victim radar receives interference from the interfering radar, allowing
+ * analysis of interference effects on radar performance.
+ *
+ * @param ptr_radar_c Pointer to the victim radar system - must not be NULL
+ * @param ptr_interf_radar_c Pointer to the interfering radar system - must not
+ * be NULL
+ * @param ptr_interf_real Real part of the interference baseband buffer - must
+ * not be NULL
+ * @param ptr_interf_imag Imaginary part of the interference baseband buffer -
+ * must not be NULL
  */
 void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
                       double *ptr_interf_real, double *ptr_interf_imag) {

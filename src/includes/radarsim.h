@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef RADARSIM_HPP
-#define RADARSIM_HPP
+#ifndef RADARSIM_H
+#define RADARSIM_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,11 +64,8 @@ typedef struct s_Transmitter t_Transmitter;
  * @param pulse_start_time Pulse start time vector (s), length should equal to
  * the number of pulses
  * @param num_pulses Number of pulses
- * @param frame_start_time Frame start time vector (s), length should equal to
- * the number of frames
- * @param num_frames Number of frames
  * @param tx_power Transmitter power (dBm)
- * @return t_Transmitter* Pointer to the Transmitter
+ * @return t_Transmitter* Pointer to the Transmitter, NULL on failure
  */
 EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                            int waveform_size,
@@ -96,7 +93,7 @@ EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
  * @param mod_var_real Real part of modulation value vector
  * @param mod_var_imag Imaginary part of modulation value vector
  * @param mod_length Length of mod_t, mod_var_real and mod_var_imag
- * @param pulse_mod_real Real part of pulse modulation vector,the length should
+ * @param pulse_mod_real Real part of pulse modulation vector, the length should
  * be the same as the number of pulses defined in Transmitter
  * @param pulse_mod_imag Imaginary part of pulse modulation vector, the length
  * should be the same as the number of pulses defined in Transmitter
@@ -145,7 +142,7 @@ typedef struct s_Receiver t_Receiver;
  * @param resistor Load resistor (Ohm)
  * @param baseband_gain Baseband gain (dB)
  * @param baseband_bw Baseband bandwidth (Hz)
- * @return t_Receiver* Pointer to the Receiver
+ * @return t_Receiver* Pointer to the Receiver, NULL on failure
  */
 EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                                      float baseband_gain, float baseband_bw);
@@ -202,11 +199,13 @@ typedef struct s_Radar t_Radar;
  *
  * @param ptr_tx_c Pointer to the Transmitter
  * @param ptr_rx_c Pointer to the Receiver
+ * @param frame_start_time Frame start time vector (s)
+ * @param num_frames Number of frames
  * @param location Radar's location {x, y, z} (m)
  * @param speed Radar's speed {x, y, z} (m/s)
  * @param rotation Radar's rotation {x, y, z} (rad)
  * @param rotation_rate Radar's rotation rate {x, y, z} (rad/s)
- * @return t_Radar* Pointer to the Radar
+ * @return t_Radar* Pointer to the Radar, NULL on failure
  */
 EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                                double *frame_start_time, int num_frames,
@@ -231,7 +230,7 @@ typedef struct s_Targets t_Targets;
 /**
  * @brief Initialize the target list
  *
- * @return t_Targets* Pointer to the target list
+ * @return t_Targets* Pointer to the target list, NULL on failure
  */
 EXPORTED t_Targets *Init_Targets();
 
@@ -325,4 +324,4 @@ EXPORTED void Run_Interference(t_Radar *ptr_radar_c,
 }
 #endif
 
-#endif  // RADARSIM_HPP
+#endif  // RADARSIM_H
