@@ -55,11 +55,12 @@
 /**
  * @brief Get the version of RadarSimLib
  *
- * @param version Version numbers {major, minor}
+ * @param version Version numbers {major, minor, patch}
  */
-void Get_Version(int version[2]) {
+void Get_Version(int version[3]) {
   version[0] = VERSION_MAJOR;
   version[1] = VERSION_MINOR;
+  version[2] = VERSION_PATCH;
 }
 
 /*********************************************

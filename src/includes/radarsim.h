@@ -30,8 +30,9 @@ extern "C" {
 #define EXPORTED
 #endif
 
-#define VERSION_MAJOR 4
-#define VERSION_MINOR 2
+#define VERSION_MAJOR 14
+#define VERSION_MINOR 0
+#define VERSION_PATCH 0
 
 /*********************************************
  *
@@ -41,9 +42,9 @@ extern "C" {
 /**
  * @brief Get the version of RadarSimLib
  *
- * @param version Version numbers {major, minor}
+ * @param version Version numbers {major, minor, patch}
  */
-EXPORTED void Get_Version(int version[2]);
+EXPORTED void Get_Version(int version[3]);
 
 /*********************************************
  *
