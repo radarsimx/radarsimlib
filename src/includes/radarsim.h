@@ -294,7 +294,7 @@ EXPORTED void Complete_Targets_Initialization(t_Targets *ptr_targets_c);
  *
  *********************************************/
 /**
- * @brief Run simulator for the ideal targets
+ * @brief Run simulator for the ideal and mesh targets
  *
  * @param ptr_radar_c Pointer to the radar
  * @param ptr_targets_c Pointer to the target list
@@ -304,9 +304,9 @@ EXPORTED void Complete_Targets_Initialization(t_Targets *ptr_targets_c);
  * @param ptr_bb_real Real part of baseband samples
  * @param ptr_bb_imag Imaginary part of baseband samples
  */
-EXPORTED void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
-                            int level, float density, int *ray_filter,
-                            double *ptr_bb_real, double *ptr_bb_imag);
+EXPORTED void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
+                                 int level, float density, int *ray_filter,
+                                 double *ptr_bb_real, double *ptr_bb_imag);
 
 /**
  * @brief Run interference simulation
@@ -316,10 +316,10 @@ EXPORTED void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
  * @param ptr_interf_real Real part of the interference baseband
  * @param ptr_interf_imag Imaginary part of the interference baseband
  */
-EXPORTED void Run_Interference(t_Radar *ptr_radar_c,
-                               t_Radar *ptr_interf_radar_c,
-                               double *ptr_interf_real,
-                               double *ptr_interf_imag);
+EXPORTED void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
+                                        t_Radar *ptr_interf_radar_c,
+                                        double *ptr_interf_real,
+                                        double *ptr_interf_imag);
 
 /**
  * @brief Execute Radar Cross Section (RCS) simulation

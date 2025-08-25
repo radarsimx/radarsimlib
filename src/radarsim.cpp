@@ -754,9 +754,9 @@ void Complete_Targets_Initialization(t_Targets *ptr_targets_c) {
  * @param ptr_bb_imag Imaginary part of baseband signal buffer - must not be
  * NULL
  */
-void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
-                   float density, int *ray_filter, double *ptr_bb_real,
-                   double *ptr_bb_imag) {
+void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
+                        int level, float density, int *ray_filter,
+                        double *ptr_bb_real, double *ptr_bb_imag) {
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_bb_real, ptr_bb_imag);
   if (ptr_targets_c->_ptr_points->vect_points_.size() > 0) {
     PointSimulator<double, float> simc = PointSimulator<double, float>();
@@ -791,8 +791,10 @@ void Run_Simulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
  * @param ptr_interf_imag Imaginary part of the interference baseband buffer -
  * must not be NULL
  */
-void Run_Interference(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
-                      double *ptr_interf_real, double *ptr_interf_imag) {
+void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
+                               t_Radar *ptr_interf_radar_c,
+                               double *ptr_interf_real,
+                               double *ptr_interf_imag) {
   InterferenceSimulator<double, float> simc =
       InterferenceSimulator<double, float>();
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
@@ -1165,7 +1167,7 @@ int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
 //     }
 //   }
 
-//   Run_Simulator(radar_ptr, targets_ptr, &bb_real[0][0], &bb_imag[0][0]);
+//   Run_RadarSimulator(radar_ptr, targets_ptr, &bb_real[0][0], &bb_imag[0][0]);
 
 //   return 0;
 // }
