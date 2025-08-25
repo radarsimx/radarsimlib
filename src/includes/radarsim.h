@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef RADARSIM_H
-#define RADARSIM_H
+#ifndef RADARSIM_HPP
+#define RADARSIM_HPP
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,7 +30,6 @@ extern "C" {
 #define EXPORTED
 #endif
 
-<<<<<<< HEAD
 #define VERSION_MAJOR 13
 #define VERSION_MINOR 1
 #define VERSION_PATCH 0
@@ -44,11 +43,6 @@ extern "C" {
 #define RADARSIM_ERROR_FREE_TIER_LIMIT 4
 #define RADARSIM_ERROR_EXCEPTION 5
 #define RADARSIM_ERROR_TOO_MANY_RAYS_PER_GRID 6
-=======
-#define VERSION_MAJOR 14
-#define VERSION_MINOR 0
-#define VERSION_PATCH 0
->>>>>>> 9f5e941c61813d8a71009bc77b57c8bb136c2601
 
 /*********************************************
  *
@@ -58,13 +52,9 @@ extern "C" {
 /**
  * @brief Get the version of RadarSimLib
  *
-<<<<<<< HEAD
  * @param version Version numbers {major, minor}, must not be NULL
-=======
- * @param version Version numbers {major, minor, patch}
->>>>>>> 9f5e941c61813d8a71009bc77b57c8bb136c2601
  */
-EXPORTED void Get_Version(int version[3]);
+EXPORTED void Get_Version(int version[2]);
 
 /**
  * @brief Get error message string for error code
@@ -91,7 +81,6 @@ typedef struct s_Transmitter t_Transmitter;
  * @param freq_offset Frequency offset per pulse (Hz), length should equal to
  * the number of pulses, must not be NULL
  * @param pulse_start_time Pulse start time vector (s), length should equal to
-<<<<<<< HEAD
  * the number of pulses, must not be NULL
  * @param num_pulses Number of pulses, must be > 0
  * @param tx_power Transmitter power (dBm)
@@ -99,12 +88,6 @@ typedef struct s_Transmitter t_Transmitter;
  * 
  * @note This function performs input validation and returns NULL if any
  *       parameter is invalid or memory allocation fails
-=======
- * the number of pulses
- * @param num_pulses Number of pulses
- * @param tx_power Transmitter power (dBm)
- * @return t_Transmitter* Pointer to the Transmitter, NULL on failure
->>>>>>> 9f5e941c61813d8a71009bc77b57c8bb136c2601
  */
 EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                            int waveform_size,
@@ -132,7 +115,7 @@ EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
  * @param mod_var_real Real part of modulation value vector
  * @param mod_var_imag Imaginary part of modulation value vector
  * @param mod_length Length of mod_t, mod_var_real and mod_var_imag
- * @param pulse_mod_real Real part of pulse modulation vector, the length should
+ * @param pulse_mod_real Real part of pulse modulation vector,the length should
  * be the same as the number of pulses defined in Transmitter
  * @param pulse_mod_imag Imaginary part of pulse modulation vector, the length
  * should be the same as the number of pulses defined in Transmitter
@@ -181,7 +164,7 @@ typedef struct s_Receiver t_Receiver;
  * @param resistor Load resistor (Ohm)
  * @param baseband_gain Baseband gain (dB)
  * @param baseband_bw Baseband bandwidth (Hz)
- * @return t_Receiver* Pointer to the Receiver, NULL on failure
+ * @return t_Receiver* Pointer to the Receiver
  */
 EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                                      float baseband_gain, float baseband_bw);
@@ -238,13 +221,11 @@ typedef struct s_Radar t_Radar;
  *
  * @param ptr_tx_c Pointer to the Transmitter
  * @param ptr_rx_c Pointer to the Receiver
- * @param frame_start_time Frame start time vector (s)
- * @param num_frames Number of frames
  * @param location Radar's location {x, y, z} (m)
  * @param speed Radar's speed {x, y, z} (m/s)
  * @param rotation Radar's rotation {x, y, z} (rad)
  * @param rotation_rate Radar's rotation rate {x, y, z} (rad/s)
- * @return t_Radar* Pointer to the Radar, NULL on failure
+ * @return t_Radar* Pointer to the Radar
  */
 EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                                double *frame_start_time, int num_frames,
@@ -269,7 +250,7 @@ typedef struct s_Targets t_Targets;
 /**
  * @brief Initialize the target list
  *
- * @return t_Targets* Pointer to the target list, NULL on failure
+ * @return t_Targets* Pointer to the target list
  */
 EXPORTED t_Targets *Init_Targets();
 
@@ -319,20 +300,13 @@ EXPORTED int Add_Mesh_Target(float *points, int *cells, int cell_size,
  */
 EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
 
-/**
- * @brief Complete the initialization of targets
- *
- * @param ptr_targets_c Pointer to the target list
- */
-EXPORTED void Complete_Targets_Initialization(t_Targets *ptr_targets_c);
-
 /*********************************************
  *
  *  Simulator
  *
  *********************************************/
 /**
- * @brief Run simulator for the ideal and mesh targets
+ * @brief Run simulator for the ideal targets
  *
  * @param ptr_radar_c Pointer to the radar
  * @param ptr_targets_c Pointer to the target list
@@ -343,15 +317,9 @@ EXPORTED void Complete_Targets_Initialization(t_Targets *ptr_targets_c);
  * @param ptr_bb_imag Imaginary part of baseband samples
  * @return int Error code (RADARSIM_SUCCESS on success, error code on failure)
  */
-<<<<<<< HEAD
 EXPORTED int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
                            int level, float density, int *ray_filter,
                            double *ptr_bb_real, double *ptr_bb_imag);
-=======
-EXPORTED void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
-                                 int level, float density, int *ray_filter,
-                                 double *ptr_bb_real, double *ptr_bb_imag);
->>>>>>> 9f5e941c61813d8a71009bc77b57c8bb136c2601
 
 /**
  * @brief Run interference simulation
@@ -362,62 +330,9 @@ EXPORTED void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
  * @param ptr_interf_imag Imaginary part of the interference baseband
  */
 EXPORTED void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
-<<<<<<< HEAD
                                t_Radar *ptr_interf_radar_c,
                                double *ptr_interf_real,
                                double *ptr_interf_imag);
-=======
-                                        t_Radar *ptr_interf_radar_c,
-                                        double *ptr_interf_real,
-                                        double *ptr_interf_imag);
-
-/**
- * @brief Execute Radar Cross Section (RCS) simulation
- *
- * @param ptr_targets_c Pointer to the target management system
- * @param inc_dir_array Array of incident direction vectors {x, y, z}
- * @param obs_dir_array Array of observation direction vectors {x, y, z}
- * @param num_directions Number of direction pairs
- * @param inc_polar_real Real part of incident polarization vector {x, y, z}
- * @param inc_polar_imag Imaginary part of incident polarization vector {x, y,
- * z}
- * @param obs_polar_real Real part of observation polarization vector {x, y, z}
- * @param obs_polar_imag Imaginary part of observation polarization vector {x,
- * y, z}
- * @param frequency Electromagnetic frequency (Hz)
- * @param density Ray density for Physical Optics (rays per wavelength)
- * @param rcs_result Output array for RCS values (m²)
- * @return int Status code (0 for success, 1 for failure)
- */
-EXPORTED int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
-                              double *obs_dir_array, int num_directions,
-                              double *inc_polar_real, double *inc_polar_imag,
-                              double *obs_polar_real, double *obs_polar_imag,
-                              double frequency, double density,
-                              double *rcs_result);
-
-/**
- * @brief Execute LiDAR point cloud simulation
- *
- * @param ptr_targets_c Pointer to the target management system
- * @param phi_array Array of azimuth angles (rad)
- * @param theta_array Array of elevation angles (rad)
- * @param num_rays Number of rays to shoot
- * @param sensor_location LiDAR sensor position {x, y, z} (m)
- * @param cloud_points Output array for point cloud coordinates {x, y, z}
- * @param cloud_distances Output array for point distances (m)
- * @param cloud_intensities Output array for point intensities
- * @param max_points Maximum number of points to return
- * @param actual_points Output: actual number of points found
- * @return int Status code (0 for success, 1 for failure)
- */
-EXPORTED int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
-                                double *theta_array, int num_rays,
-                                double *sensor_location, double *cloud_points,
-                                double *cloud_distances,
-                                double *cloud_intensities, int max_points,
-                                int *actual_points);
->>>>>>> 9f5e941c61813d8a71009bc77b57c8bb136c2601
 
 /*********************************************
  *
@@ -551,4 +466,4 @@ EXPORTED int Get_CPU_Core_Count();
 }
 #endif
 
-#endif  // RADARSIM_H
+#endif  // RADARSIM_HPP
