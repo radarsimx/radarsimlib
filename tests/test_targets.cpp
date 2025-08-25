@@ -102,7 +102,7 @@ TEST_F(TargetsTest, InitTargets) {
     valid_targets = Init_Targets();
     
     EXPECT_NE(valid_targets, nullptr);
-    EXPECT_EQ(Is_Valid_Pointer(valid_targets), 1);
+    // Note: No Is_Valid_Pointer function available in the C API
 }
 
 /**
@@ -117,7 +117,7 @@ TEST_F(TargetsTest, AddPointTarget) {
         point_location, point_speed, point_rcs, point_phase, valid_targets
     );
     
-    EXPECT_EQ(result, RADARSIM_SUCCESS);
+    EXPECT_EQ(result, 0); // 0 for success according to API
 }
 
 /**
@@ -131,19 +131,19 @@ TEST_F(TargetsTest, AddPointTargetNullParams) {
     int result = Add_Point_Target(
         nullptr, point_speed, point_rcs, point_phase, valid_targets
     );
-    EXPECT_NE(result, RADARSIM_SUCCESS);
+    EXPECT_NE(result, 0); // Non-zero for failure
 
     // Test with null speed
     result = Add_Point_Target(
         point_location, nullptr, point_rcs, point_phase, valid_targets
     );
-    EXPECT_NE(result, RADARSIM_SUCCESS);
+    EXPECT_NE(result, 0); // Non-zero for failure
 
     // Test with null targets
     result = Add_Point_Target(
         point_location, point_speed, point_rcs, point_phase, nullptr
     );
-    EXPECT_NE(result, RADARSIM_SUCCESS);
+    EXPECT_NE(result, 0); // Non-zero for failure
 }
 
 /**
@@ -162,7 +162,7 @@ TEST_F(TargetsTest, AddMeshTarget) {
         is_ground, valid_targets
     );
     
-    EXPECT_EQ(result, RADARSIM_SUCCESS);
+    EXPECT_EQ(result, 0); // 0 for success according to API
 }
 
 /**
@@ -180,7 +180,7 @@ TEST_F(TargetsTest, AddMeshTargetNullParams) {
         ep_real, ep_imag, mu_real, mu_imag,
         is_ground, valid_targets
     );
-    EXPECT_NE(result, RADARSIM_SUCCESS);
+    EXPECT_NE(result, 0); // Non-zero for failure
 
     // Test with null cells
     result = Add_Mesh_Target(
@@ -190,7 +190,7 @@ TEST_F(TargetsTest, AddMeshTargetNullParams) {
         ep_real, ep_imag, mu_real, mu_imag,
         is_ground, valid_targets
     );
-    EXPECT_NE(result, RADARSIM_SUCCESS);
+    EXPECT_NE(result, 0); // Non-zero for failure
 
     // Test with null targets
     result = Add_Mesh_Target(
@@ -200,7 +200,7 @@ TEST_F(TargetsTest, AddMeshTargetNullParams) {
         ep_real, ep_imag, mu_real, mu_imag,
         is_ground, nullptr
     );
-    EXPECT_NE(result, RADARSIM_SUCCESS);
+    EXPECT_NE(result, 0); // Non-zero for failure
 }
 
 /**
@@ -218,7 +218,7 @@ TEST_F(TargetsTest, AddMeshTargetInvalidParams) {
         ep_real, ep_imag, mu_real, mu_imag,
         is_ground, valid_targets
     );
-    EXPECT_NE(result, RADARSIM_SUCCESS);
+    EXPECT_NE(result, 0); // Non-zero for failure
 
     // Test with negative cell size
     result = Add_Mesh_Target(
@@ -228,7 +228,7 @@ TEST_F(TargetsTest, AddMeshTargetInvalidParams) {
         ep_real, ep_imag, mu_real, mu_imag,
         is_ground, valid_targets
     );
-    EXPECT_NE(result, RADARSIM_SUCCESS);
+    EXPECT_NE(result, 0); // Non-zero for failure
 }
 
 /**
@@ -242,7 +242,7 @@ TEST_F(TargetsTest, MultipleTargets) {
     int result1 = Add_Point_Target(
         point_location, point_speed, point_rcs, point_phase, valid_targets
     );
-    EXPECT_EQ(result1, RADARSIM_SUCCESS);
+    EXPECT_EQ(result1, 0); // 0 for success according to API
 
     // Add mesh target
     int result2 = Add_Mesh_Target(
@@ -252,7 +252,7 @@ TEST_F(TargetsTest, MultipleTargets) {
         ep_real, ep_imag, mu_real, mu_imag,
         is_ground, valid_targets
     );
-    EXPECT_EQ(result2, RADARSIM_SUCCESS);
+    EXPECT_EQ(result2, 0); // 0 for success according to API
 }
 
 /**

@@ -27,7 +27,9 @@
 #include "radarsim.h"
 #include <vector>
 #include <cmath>
-#include "type_def.hpp"
+
+// Define constants since type_def.hpp is not directly accessible
+#define kPI 3.141592653589793
 
 /**
  * @brief Test fixture for Transmitter tests
@@ -128,7 +130,7 @@ TEST_F(TransmitterTest, CreateTransmitterValid) {
     );
     
     EXPECT_NE(valid_transmitter, nullptr);
-    EXPECT_EQ(Is_Valid_Pointer(valid_transmitter), 1);
+    // Note: No Is_Valid_Pointer function available in the C API
 }
 
 /**
@@ -212,7 +214,7 @@ TEST_F(TransmitterTest, AddTxChannel) {
         valid_transmitter
     );
     
-    EXPECT_EQ(result, RADARSIM_SUCCESS);
+    EXPECT_EQ(result, 0); // 0 for success according to API
     EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 1);
 }
 
@@ -231,7 +233,7 @@ TEST_F(TransmitterTest, AddTxChannelNullTransmitter) {
         nullptr
     );
     
-    EXPECT_NE(result, RADARSIM_SUCCESS);
+    EXPECT_NE(result, 0); // Non-zero for failure
 }
 
 /**

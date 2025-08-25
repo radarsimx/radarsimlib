@@ -3,6 +3,15 @@ cmake_minimum_required(VERSION 3.14)
 # Config for radarsimc
 project(radarsimc LANGUAGES CXX)
 
+# Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
+    cmake_policy(SET CMP0135 NEW)
+endif()
+
+# Options
+option(GPU_BUILD "Enable GPU/CUDA build" OFF)
+option(GTEST "Enable Google Test" OFF)
+
 # force GPU build
 # set(GPU_BUILD OFF)
 
@@ -83,4 +92,60 @@ else()
     target_link_libraries(radarsimc PUBLIC ${_hdf5_libs})
 
     # add_executable(radarsimc ${SOURCES})
+endif()
+
+# Google Test setup
+if(GTEST)
+    message(STATUS "Enabling Google Test")
+
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+    )
+
+    # For Windows: Prevent overriding the parent project's compiler/linker settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+    # Collect test sources
+    file(GLOB_RECURSE TEST_SOURCES "tests/*.cpp")
+
+    # Create test executable
+    add_executable(radarsimc_test ${TEST_SOURCES})
+
+    # Link with gtest and main library
+    target_link_libraries(radarsimc_test
+        PRIVATE
+        gtest_main
+        radarsimc
+    )
+
+    # GPU-specific test configuration
+    if(GPU_BUILD)
+        # Add CUDA includes
+        target_include_directories(radarsimc_test PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+
+        # Set CUDA properties for tests
+        set_target_properties(radarsimc_test PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+            CUDA_ARCHITECTURES "75;86") # Limited architectures for tests
+
+        # Mark test sources as CUDA
+        set_source_files_properties(${TEST_SOURCES} PROPERTIES LANGUAGE CUDA)
+
+        # Add CUDA-specific compile definitions
+        target_compile_definitions(radarsimc_test PRIVATE _CUDATEST_ _CUDA_)
+
+        # Handle MSVC-specific linking for tests
+        if(MSVC)
+            # Use proper linker flags for CUDA test builds to avoid runtime library conflicts
+            set_target_properties(radarsimc_test PROPERTIES
+                LINK_FLAGS "/NODEFAULTLIB:LIBCMT")
+        endif()
+    endif()
+
+    # Enable testing and add test
+    enable_testing()
+    add_test(NAME radarsimc_test COMMAND radarsimc_test)
 endif()
