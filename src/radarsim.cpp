@@ -71,9 +71,17 @@ void Get_Version(int version[3]) {
 /**
  * @brief Internal structure for Transmitter C wrapper
  * @details Contains shared_ptr to Transmitter object for memory management
+ * with automatic cleanup
  */
 struct s_Transmitter {
   std::shared_ptr<Transmitter<double, float>> _ptr_transmitter;
+
+  // Destructor to ensure cleanup
+  ~s_Transmitter() {
+    if (_ptr_transmitter) {
+      _ptr_transmitter.reset();
+    }
+  }
 };
 
 /**
@@ -108,12 +116,15 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
   }
 
   // Allocate memory for the wrapper struct
-  t_Transmitter *ptr_tx_c = (t_Transmitter *)malloc(sizeof(t_Transmitter));
-  if (ptr_tx_c == nullptr) {
-    return nullptr;
-  }
+  t_Transmitter *ptr_tx_c = nullptr;
 
   try {
+    // Use new instead of malloc for proper C++ object construction
+    ptr_tx_c = new t_Transmitter();
+
+    if (ptr_tx_c == nullptr) {
+      return nullptr;
+    }
     // Convert C arrays to C++ vectors
     std::vector<double> freq_vt;
     std::vector<double> freq_time_vt;
@@ -141,24 +152,24 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     // Memory allocation failed
     std::cerr << "Create_Transmitter: Memory allocation failed: " << e.what()
               << std::endl;
-    free(ptr_tx_c);
+    delete ptr_tx_c;
     return nullptr;
   } catch (const std::invalid_argument &e) {
     // Invalid parameters passed to constructor
     std::cerr << "Create_Transmitter: Invalid argument: " << e.what()
               << std::endl;
-    free(ptr_tx_c);
+    delete ptr_tx_c;
     return nullptr;
   } catch (const std::exception &e) {
     // Any other standard exception
     std::cerr << "Create_Transmitter: Unexpected error: " << e.what()
               << std::endl;
-    free(ptr_tx_c);
+    delete ptr_tx_c;
     return nullptr;
   } catch (...) {
     // Any non-standard exception
     std::cerr << "Create_Transmitter: Unknown error occurred" << std::endl;
-    free(ptr_tx_c);
+    delete ptr_tx_c;
     return nullptr;
   }
 
@@ -265,17 +276,16 @@ int Get_Num_Txchannel(t_Transmitter *ptr_tx_c) {
  * @brief Free transmitter memory safely
  *
  * @details Safely releases transmitter resources using modern C++
- * memory management. The shared_ptr automatically handles cleanup.
+ * memory management with RAII principles.
  *
  * @param ptr_tx_c Pointer to the Transmitter
  */
 void Free_Transmitter(t_Transmitter *ptr_tx_c) {
-  if (ptr_tx_c == NULL) {
+  if (ptr_tx_c == nullptr) {
     return;
   }
-  // shared_ptr automatically handles cleanup, just reset it
-  ptr_tx_c->_ptr_transmitter.reset();
-  free(ptr_tx_c);
+  // shared_ptr automatically handles cleanup in destructor
+  delete ptr_tx_c;
 }
 
 /*********************************************
@@ -286,12 +296,11 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
 /**
  * @brief Internal structure for Receiver C wrapper
  * @details Contains shared_ptr to Receiver object for memory management
- * with automatic reference counting
+ * with automatic cleanup
  */
 struct s_Receiver {
   std::shared_ptr<Receiver<float>> _ptr_receiver;
-  std::atomic<int> ref_count{1}; // Start with 1 reference
-  
+
   // Destructor to ensure cleanup
   ~s_Receiver() {
     if (_ptr_receiver) {
@@ -325,7 +334,7 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
   try {
     // Use new instead of malloc for proper C++ object construction
     ptr_rx_c = new t_Receiver();
-    
+
     // Create the Receiver object using shared_ptr
     ptr_rx_c->_ptr_receiver = std::make_shared<Receiver<float>>(
         fs, rf_gain, resistor, baseband_gain, baseband_bw);
@@ -452,12 +461,19 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
 /**
  * @brief Internal structure for Radar C wrapper
  * @details Contains pointers to transmitter, receiver, and radar objects for
- * complete system
+ * complete system with automatic memory management
  */
 struct s_Radar {
   t_Transmitter *_ptr_tx;
   t_Receiver *_ptr_rx;
   std::shared_ptr<Radar<double, float>> _ptr_radar;
+
+  // Destructor to ensure cleanup
+  ~s_Radar() {
+    if (_ptr_radar) {
+      _ptr_radar.reset();
+    }
+  }
 };
 
 /**
@@ -489,15 +505,18 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
   }
 
   // Allocate memory for the wrapper struct
-  t_Radar *ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar));
-  if (ptr_radar_c == nullptr) {
-    return nullptr;
-  }
-
-  ptr_radar_c->_ptr_tx = ptr_tx_c;
-  ptr_radar_c->_ptr_rx = ptr_rx_c;
+  t_Radar *ptr_radar_c = nullptr;
 
   try {
+    // Use new instead of malloc for proper C++ object construction
+    ptr_radar_c = new t_Radar();
+    if (ptr_radar_c == nullptr) {
+      return nullptr;
+    }
+
+    ptr_radar_c->_ptr_tx = ptr_tx_c;
+    ptr_radar_c->_ptr_rx = ptr_rx_c;
+
     // Convert C arrays to C++ vectors
     std::vector<double> frame_start_time_vt;
     frame_start_time_vt.reserve(num_frames);
@@ -520,22 +539,22 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
     // Memory allocation failed
     std::cerr << "Create_Radar: Memory allocation failed: " << e.what()
               << std::endl;
-    free(ptr_radar_c);
+    delete ptr_radar_c;
     return nullptr;
   } catch (const std::invalid_argument &e) {
     // Invalid parameters passed to constructor
     std::cerr << "Create_Radar: Invalid argument: " << e.what() << std::endl;
-    free(ptr_radar_c);
+    delete ptr_radar_c;
     return nullptr;
   } catch (const std::exception &e) {
     // Any other standard exception
     std::cerr << "Create_Radar: Unexpected error: " << e.what() << std::endl;
-    free(ptr_radar_c);
+    delete ptr_radar_c;
     return nullptr;
   } catch (...) {
     // Any non-standard exception
     std::cerr << "Create_Radar: Unknown error occurred" << std::endl;
-    free(ptr_radar_c);
+    delete ptr_radar_c;
     return nullptr;
   }
 
@@ -546,17 +565,16 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
  * @brief Free radar system memory safely
  *
  * @details Safely releases radar system resources using modern C++
- * memory management. The shared_ptr automatically handles cleanup.
+ * memory management with RAII principles.
  *
  * @param ptr_radar_c Pointer to the Radar system
  */
 void Free_Radar(t_Radar *ptr_radar_c) {
-  if (ptr_radar_c == NULL) {
+  if (ptr_radar_c == nullptr) {
     return;
   }
-  // shared_ptr automatically handles cleanup, just reset it
-  ptr_radar_c->_ptr_radar.reset();
-  free(ptr_radar_c);
+  // shared_ptr automatically handles cleanup in destructor
+  delete ptr_radar_c;
 }
 
 /*********************************************
@@ -567,11 +585,21 @@ void Free_Radar(t_Radar *ptr_radar_c) {
 /**
  * @brief Internal structure for Targets C wrapper
  * @details Contains shared_ptr to PointsManager and TargetsManager for
- * comprehensive target management including both point targets and mesh targets
+ * comprehensive target management with automatic memory management
  */
 struct s_Targets {
   std::shared_ptr<PointsManager<float>> _ptr_points;
   std::shared_ptr<TargetsManager<float>> _ptr_targets;
+
+  // Destructor to ensure cleanup
+  ~s_Targets() {
+    if (_ptr_points) {
+      _ptr_points.reset();
+    }
+    if (_ptr_targets) {
+      _ptr_targets.reset();
+    }
+  }
 };
 
 /**
@@ -583,37 +611,41 @@ struct s_Targets {
  * @return t_Targets* Pointer to the target management system, NULL on failure
  */
 t_Targets *Init_Targets() {
-  // Allocate memory for the wrapper struct
-  t_Targets *ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets));
-  if (ptr_targets_c == nullptr) {
-    return nullptr;
-  }
+  t_Targets *ptr_targets_c = nullptr;
 
   try {
+    // Use new instead of malloc for proper C++ object construction
+    ptr_targets_c = new t_Targets();
+    if (ptr_targets_c == nullptr) {
+      return nullptr;
+    }
+
     // Create the manager objects using shared_ptr
     ptr_targets_c->_ptr_points = std::make_shared<PointsManager<float>>();
     ptr_targets_c->_ptr_targets = std::make_shared<TargetsManager<float>>();
+
+    return ptr_targets_c;
 
   } catch (const std::bad_alloc &e) {
     // Memory allocation failed
     std::cerr << "Init_Targets: Memory allocation failed: " << e.what()
               << std::endl;
-    free(ptr_targets_c);
+    delete ptr_targets_c;
     return nullptr;
   } catch (const std::invalid_argument &e) {
     // Invalid parameters passed to constructor
     std::cerr << "Init_Targets: Invalid argument: " << e.what() << std::endl;
-    free(ptr_targets_c);
+    delete ptr_targets_c;
     return nullptr;
   } catch (const std::exception &e) {
     // Any other standard exception
     std::cerr << "Init_Targets: Unexpected error: " << e.what() << std::endl;
-    free(ptr_targets_c);
+    delete ptr_targets_c;
     return nullptr;
   } catch (...) {
     // Any non-standard exception
     std::cerr << "Init_Targets: Unknown error occurred" << std::endl;
-    free(ptr_targets_c);
+    delete ptr_targets_c;
     return nullptr;
   }
 
@@ -712,18 +744,16 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
  * @brief Free target management system memory
  *
  * @details Safely releases all target-related resources using modern C++
- * memory management. Automatically handles cleanup of shared_ptr objects.
+ * memory management with RAII principles.
  *
  * @param ptr_targets_c Pointer to the target management system
  */
 void Free_Targets(t_Targets *ptr_targets_c) {
-  if (ptr_targets_c == NULL) {
+  if (ptr_targets_c == nullptr) {
     return;
   }
-  // shared_ptr automatically handles cleanup, just reset them
-  ptr_targets_c->_ptr_targets.reset();
-  ptr_targets_c->_ptr_points.reset();
-  free(ptr_targets_c);
+  // shared_ptr automatically handles cleanup in destructor
+  delete ptr_targets_c;
 }
 
 /**
