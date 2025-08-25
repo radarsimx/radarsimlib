@@ -32,6 +32,8 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <unordered_set>
+#include <mutex>
 
 #include "libs/free_tier.hpp"
 #include "point.hpp"
@@ -49,6 +51,47 @@
 
 /*********************************************
  *
+ *  Automatic Memory Management
+ *
+ *********************************************/
+namespace {
+  // Global containers for automatic cleanup
+  std::unordered_set<t_Transmitter*> g_transmitters;
+  std::unordered_set<t_Receiver*> g_receivers;
+  std::unordered_set<t_Radar*> g_radars;
+  std::unordered_set<t_Targets*> g_targets;
+  std::mutex g_cleanup_mutex;
+  bool g_cleanup_registered = false;
+
+  // Forward declaration - implementation after struct definitions
+  void cleanup_all_objects();
+
+  // Register cleanup function (called once) - assumes mutex is already locked
+  void ensure_cleanup_registered_unsafe() {
+    if (!g_cleanup_registered) {
+      std::atexit(cleanup_all_objects);
+      g_cleanup_registered = true;
+    }
+  }
+
+  // Register object for automatic cleanup
+  template<typename T>
+  void register_for_cleanup(T* obj, std::unordered_set<T*>& container) {
+    std::lock_guard<std::mutex> lock(g_cleanup_mutex);
+    ensure_cleanup_registered_unsafe();
+    container.insert(obj);
+  }
+
+  // Unregister object (for manual cleanup)
+  template<typename T>
+  void unregister_for_cleanup(T* obj, std::unordered_set<T*>& container) {
+    std::lock_guard<std::mutex> lock(g_cleanup_mutex);
+    container.erase(obj);
+  }
+}
+
+/*********************************************
+ *
  *  Version
  *
  *********************************************/
@@ -61,6 +104,19 @@ void Get_Version(int version[3]) {
   version[0] = VERSION_MAJOR;
   version[1] = VERSION_MINOR;
   version[2] = VERSION_PATCH;
+}
+
+/**
+ * @brief Enable or disable automatic cleanup of all RadarSim objects
+ *
+ * @param enable True to enable automatic cleanup, false to disable
+ */
+void Enable_Automatic_Cleanup(bool enable) {
+  std::lock_guard<std::mutex> lock(g_cleanup_mutex);
+  if (enable && !g_cleanup_registered) {
+    ensure_cleanup_registered_unsafe();
+  }
+  // Note: Cannot unregister atexit handlers once registered
 }
 
 /*********************************************
@@ -173,6 +229,9 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     return nullptr;
   }
 
+  // Register for automatic cleanup
+  register_for_cleanup(ptr_tx_c, g_transmitters);
+
   return ptr_tx_c;
 }
 
@@ -284,6 +343,8 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == nullptr) {
     return;
   }
+  // Unregister from automatic cleanup
+  unregister_for_cleanup(ptr_tx_c, g_transmitters);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_tx_c;
 }
@@ -338,6 +399,9 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
     // Create the Receiver object using shared_ptr
     ptr_rx_c->_ptr_receiver = std::make_shared<Receiver<float>>(
         fs, rf_gain, resistor, baseband_gain, baseband_bw);
+
+    // Register for automatic cleanup
+    register_for_cleanup(ptr_rx_c, g_receivers);
 
     return ptr_rx_c;
 
@@ -441,7 +505,7 @@ int Get_Num_Rxchannel(t_Receiver *ptr_rx_c) {
  * @brief Free receiver memory safely
  *
  * @details Safely releases receiver resources using modern C++
- * memory management with RAII principles.
+ * memory management with RAII principles. Also unregisters from automatic cleanup.
  *
  * @param ptr_rx_c Pointer to the Receiver
  */
@@ -449,6 +513,8 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
   if (ptr_rx_c == nullptr) {
     return;
   }
+  // Unregister from automatic cleanup
+  unregister_for_cleanup(ptr_rx_c, g_receivers);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_rx_c;
 }
@@ -601,6 +667,38 @@ struct s_Targets {
     }
   }
 };
+
+/*********************************************
+ *
+ *  Cleanup Implementation
+ *
+ *********************************************/
+namespace {
+  // Implementation of cleanup function - now that all structs are defined
+  void cleanup_all_objects() {
+    std::lock_guard<std::mutex> lock(g_cleanup_mutex);
+    
+    // Clean up all objects - now we have complete type information
+    for (auto* tx : g_transmitters) {
+      delete tx;  // Calls ~s_Transmitter() destructor
+    }
+    for (auto* rx : g_receivers) {
+      delete rx;  // Calls ~s_Receiver() destructor
+    }
+    for (auto* radar : g_radars) {
+      delete radar;  // Calls ~s_Radar() destructor
+    }
+    for (auto* targets : g_targets) {
+      delete targets;  // Calls ~s_Targets() destructor
+    }
+    
+    // Clear containers
+    g_transmitters.clear();
+    g_receivers.clear();
+    g_radars.clear();
+    g_targets.clear();
+  }
+}
 
 /**
  * @brief Initialize the target management system
