@@ -273,6 +273,11 @@ int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
                   float *mod_t, float *mod_var_real, float *mod_var_imag,
                   int mod_length, float *pulse_mod_real, float *pulse_mod_imag,
                   float delay, float grid, t_Transmitter *ptr_tx_c) {
+  // Input validation - check for null transmitter pointer
+  if (ptr_tx_c == nullptr) {
+    return 1;
+  }
+
   if (IsFreeTier() && ptr_tx_c->_ptr_transmitter->channel_size_ > 0) {
     return 1;
   }
@@ -766,6 +771,11 @@ t_Targets *Init_Targets() {
  */
 int Add_Point_Target(float *location, float *speed, float rcs, float phs,
                      t_Targets *ptr_targets_c) {
+  // Input validation - check for null pointers
+  if (ptr_targets_c == nullptr || location == nullptr || speed == nullptr) {
+    return 1;
+  }
+
   if (IsFreeTier() && ptr_targets_c->_ptr_points->vect_points_.size() > 1) {
     return 1;
   }
@@ -804,6 +814,13 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
                     float *rotation_rate, float ep_real, float ep_imag,
                     float mu_real, float mu_imag, bool is_ground,
                     t_Targets *ptr_targets_c) {
+  // Input validation - check for null pointers and invalid parameters
+  if (ptr_targets_c == nullptr || points == nullptr || cells == nullptr ||
+      cell_size <= 0 || origin == nullptr || location == nullptr ||
+      speed == nullptr || rotation == nullptr || rotation_rate == nullptr) {
+    return 1;
+  }
+
   if (IsFreeTier() && ptr_targets_c->_ptr_targets->vect_targets_.size() > 1) {
     return 1;
   }
