@@ -58,3 +58,4 @@ matlab/radarsim.h
 *.asv
 /matlab/debug/
 /radarsimlib_*
+/tests/build

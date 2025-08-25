@@ -1,4 +1,4 @@
-name: Build Standard Library on Windows
+name: Build Windows Libraries
 
 on:
   push:
@@ -9,20 +9,159 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        tier: [standard, free]
+        arch: [cpu, gpu]
+      fail-fast: false
 
     steps:
-      - name: Remove Windows OpenSSH and use the default ssh in git
-        run: Remove-WindowsCapability -Online -Name OpenSSH.Client
       - uses: actions/checkout@v4
         with:
           ssh-key: ${{ secrets.RADARSIMCPP }}
-          submodules: true
-      - name: Build
+          submodules: recursive
+
+      - name: Setup CUDA Toolkit
+        if: matrix.arch == 'gpu'
+        uses: Jimver/cuda-toolkit@v0.2.24
+        with:
+          cuda: "12.8.1"
+          method: "network"
+          sub-packages: '["nvcc", "visual_studio_integration", "cudart"]'
+
+      - name: Verify CUDA installation
+        if: matrix.arch == 'gpu'
         run: |
-          .\build_win.bat --arch cpu --tier standard
-      - name: Archive built module
+          echo "::group::CUDA Verification"
+          nvcc --version
+          echo "CUDA_PATH: %CUDA_PATH%"
+          echo "PATH: %PATH%"
+          if exist "%CUDA_PATH%\bin\" (
+            dir "%CUDA_PATH%\bin\" | findstr nvcc
+          ) else (
+            echo "CUDA bin directory not found"
+          )
+          if exist "%CUDA_PATH%\lib\x64\" (
+            echo "CUDA lib directory found"
+          ) else (
+            echo "CUDA lib directory not found"
+          )
+          echo "::endgroup::"
+        shell: cmd
+
+      - name: Display build information
+        run: |
+          echo "::group::Build Information"
+          echo "OS: windows-latest"
+          echo "Tier: ${{ matrix.tier }}"
+          echo "Architecture: ${{ matrix.arch }}"
+          if "${{ matrix.arch }}" == "gpu" (
+            echo "CUDA Version: $(nvcc --version | findstr "release" | for /f "tokens=5" %%a in ('findstr "release"') do echo %%a)"
+          )
+          echo "::endgroup::"
+
+          echo "::group::System Information"
+          systeminfo | findstr /C:"OS Name" /C:"OS Version"
+          if "${{ matrix.arch }}" == "gpu" (
+            nvcc --version
+          )
+          echo "::endgroup::"
+        shell: cmd
+
+      - name: Build ${{ matrix.tier }} ${{ matrix.arch }} library
+        env:
+          CUDA_PATH: ${{ matrix.arch == 'gpu' && env.CUDA_PATH || '' }}
+          CUDA_HOME: ${{ matrix.arch == 'gpu' && env.CUDA_PATH || '' }}
+          CUDACXX: ${{ matrix.arch == 'gpu' && format('{0}\bin\nvcc.exe', env.CUDA_PATH) || '' }}
+          CUDA_TOOLKIT_ROOT_DIR: ${{ matrix.arch == 'gpu' && env.CUDA_PATH || '' }}
+        run: |
+          echo "::group::Build Process"
+          .\build.bat --arch ${{ matrix.arch }} --tier ${{ matrix.tier }}
+          echo "::endgroup::"
+        shell: cmd
+
+      - name: Verify build artifacts
+        run: |
+          echo "::group::Build Verification"
+          dir /s .\radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}\
+          if exist ".\radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}\radarsimc.dll" (
+            echo "✓ Library DLL found"
+          ) else (
+            echo "✗ Library DLL missing"
+            exit /b 1
+          )
+
+          if exist ".\radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}\radarsim.h" (
+            echo "✓ Header file found"
+          ) else (
+            echo "✗ Header file missing"
+            exit /b 1
+          )
+          echo "::endgroup::"
+        shell: cmd
+
+      - name: Create build summary
+        run: |
+          echo "## Build Summary" >> $env:GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $env:GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $env:GITHUB_STEP_SUMMARY
+          echo "| OS | windows-latest |" >> $env:GITHUB_STEP_SUMMARY
+          echo "| Tier | ${{ matrix.tier }} |" >> $env:GITHUB_STEP_SUMMARY
+          echo "| Architecture | ${{ matrix.arch }} |" >> $env:GITHUB_STEP_SUMMARY
+          echo "| Artifact Name | radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }} |" >> $env:GITHUB_STEP_SUMMARY
+        shell: powershell
+
+      - name: Archive built module (${{ matrix.tier }} ${{ matrix.arch }})
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: radarsimlib_win_x86_64_cpu
-          path: .\radarsimlib_win_x86_64_cpu
+          name: radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}
+          path: .\radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}
+          retention-days: 1
+          compression-level: 6
+
+      - name: Upload build logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-logs-radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}
+          path: |
+            .\build_logs\
+            *.log
+          retention-days: 1
+
+  # Summary job that runs after all builds complete
+  build-summary:
+    needs: build
+    runs-on: windows-latest
+    if: always()
+    steps:
+      - name: Generate build summary
+        run: |
+          echo "# Windows RadarSimLib Build Summary" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "## Build Matrix Results" >> $env:GITHUB_STEP_SUMMARY
+          echo "Total builds: 4 [2 architectures x 2 tiers]" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### Architecture Distribution" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **CPU**: 2 builds (standard + free)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **GPU**: 2 builds (standard + free)" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### Tier Distribution" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Standard**: 2 builds (CPU + GPU)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Free**: 2 builds (CPU + GPU)" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### Artifacts Generated" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ``radarsimlib_win_x86_64_cpu`` (Standard CPU)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ``radarsimlib_win_x86_64_cpu_free`` (Free CPU)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ``radarsimlib_win_x86_64_gpu`` (Standard GPU)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ``radarsimlib_win_x86_64_gpu_free`` (Free GPU)" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### Build Status" >> $env:GITHUB_STEP_SUMMARY
+          if ("${{ needs.build.result }}" -eq "success") {
+            echo "**All builds completed successfully!**" >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            echo "**Some builds may have failed. Check individual job logs for details.**" >> $env:GITHUB_STEP_SUMMARY
+          }
+        shell: powershell
