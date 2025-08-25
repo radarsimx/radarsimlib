@@ -24,35 +24,37 @@
  */
 
 #include <gtest/gtest.h>
-#include "radarsim.h"
+
 #include <string>
+
+#include "radarsim.h"
 
 /**
  * @brief Test fixture for version and utility tests
  */
 class VersionTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        // Setup code if needed
-    }
+ protected:
+  void SetUp() override {
+    // Setup code if needed
+  }
 
-    void TearDown() override {
-        // Cleanup code if needed
-    }
+  void TearDown() override {
+    // Cleanup code if needed
+  }
 };
 
 /**
  * @brief Test version retrieval function
  */
 TEST_F(VersionTest, GetVersion) {
-    int version[3];
-    Get_Version(version);
-    
-    // Check that version numbers are reasonable
-    EXPECT_EQ(version[0], VERSION_MAJOR);
-    EXPECT_EQ(version[1], VERSION_MINOR);
-    EXPECT_EQ(version[2], VERSION_PATCH);
-    EXPECT_GE(version[0], 0);
-    EXPECT_GE(version[1], 0);
-    EXPECT_GE(version[2], 0);
+  int version[3];
+  Get_Version(version);
+
+  // Check that version numbers are reasonable
+  EXPECT_EQ(version[0], VERSION_MAJOR);
+  EXPECT_EQ(version[1], VERSION_MINOR);
+  EXPECT_EQ(version[2], VERSION_PATCH);
+  EXPECT_GE(version[0], 0);
+  EXPECT_GE(version[1], 0);
+  EXPECT_GE(version[2], 0);
 }
