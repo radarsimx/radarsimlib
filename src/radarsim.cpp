@@ -286,66 +286,74 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
 /**
  * @brief Internal structure for Receiver C wrapper
  * @details Contains shared_ptr to Receiver object for memory management
+ * with automatic reference counting
  */
 struct s_Receiver {
   std::shared_ptr<Receiver<float>> _ptr_receiver;
+  std::atomic<int> ref_count{1}; // Start with 1 reference
+  
+  // Destructor to ensure cleanup
+  ~s_Receiver() {
+    if (_ptr_receiver) {
+      _ptr_receiver.reset();
+    }
+  }
 };
 
 /**
- * @brief Create a Receiver object
+ * @brief Create a Receiver object with automatic memory management
  *
  * @details Creates a new receiver with specified RF and baseband parameters.
- * Includes input validation and modern C++ memory management.
+ * Uses RAII principles with shared_ptr for automatic cleanup.
  *
  * @param fs Sampling rate (Hz) - must be > 0
  * @param rf_gain RF gain (dB)
  * @param resistor Load resistor (Ohm) - must be > 0
  * @param baseband_gain Baseband gain (dB)
- * @param baseband_bw Baseband bandwidth (Hz)
+ * @param baseband_bw Baseband bandwidth (Hz) - must be >= 0
  * @return t_Receiver* Pointer to the Receiver object, NULL on failure
  */
 t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                             float baseband_gain, float baseband_bw) {
   // Input validation
-  if (fs <= 0 || resistor <= 0) {
+  if (fs <= 0 || resistor <= 0 || baseband_bw <= 0) {
     return nullptr;
   }
 
-  // Allocate memory for the wrapper struct
-  t_Receiver *ptr_rx_c = (t_Receiver *)malloc(sizeof(t_Receiver));
-  if (ptr_rx_c == nullptr) {
-    return nullptr;
-  }
+  t_Receiver *ptr_rx_c = nullptr;
 
   try {
+    // Use new instead of malloc for proper C++ object construction
+    ptr_rx_c = new t_Receiver();
+    
     // Create the Receiver object using shared_ptr
     ptr_rx_c->_ptr_receiver = std::make_shared<Receiver<float>>(
         fs, rf_gain, resistor, baseband_gain, baseband_bw);
+
+    return ptr_rx_c;
 
   } catch (const std::bad_alloc &e) {
     // Memory allocation failed
     std::cerr << "Create_Receiver: Memory allocation failed: " << e.what()
               << std::endl;
-    free(ptr_rx_c);
+    delete ptr_rx_c;
     return nullptr;
   } catch (const std::invalid_argument &e) {
     // Invalid parameters passed to constructor
     std::cerr << "Create_Receiver: Invalid argument: " << e.what() << std::endl;
-    free(ptr_rx_c);
+    delete ptr_rx_c;
     return nullptr;
   } catch (const std::exception &e) {
     // Any other standard exception
     std::cerr << "Create_Receiver: Unexpected error: " << e.what() << std::endl;
-    free(ptr_rx_c);
+    delete ptr_rx_c;
     return nullptr;
   } catch (...) {
     // Any non-standard exception
     std::cerr << "Create_Receiver: Unknown error occurred" << std::endl;
-    free(ptr_rx_c);
+    delete ptr_rx_c;
     return nullptr;
   }
-
-  return ptr_rx_c;
 }
 
 /**
@@ -375,6 +383,11 @@ int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
                   float *phi, float *phi_ptn, int phi_length, float *theta,
                   float *theta_ptn, int theta_length, float antenna_gain,
                   t_Receiver *ptr_rx_c) {
+  // Input validation - check for null receiver pointer
+  if (ptr_rx_c == nullptr) {
+    return 1;
+  }
+
   if (IsFreeTier() && ptr_rx_c->_ptr_receiver->channel_size_ > 0) {
     return 1;
   }
@@ -419,17 +432,16 @@ int Get_Num_Rxchannel(t_Receiver *ptr_rx_c) {
  * @brief Free receiver memory safely
  *
  * @details Safely releases receiver resources using modern C++
- * memory management. The shared_ptr automatically handles cleanup.
+ * memory management with RAII principles.
  *
  * @param ptr_rx_c Pointer to the Receiver
  */
 void Free_Receiver(t_Receiver *ptr_rx_c) {
-  if (ptr_rx_c == NULL) {
+  if (ptr_rx_c == nullptr) {
     return;
   }
-  // shared_ptr automatically handles cleanup, just reset it
-  ptr_rx_c->_ptr_receiver.reset();
-  free(ptr_rx_c);
+  // shared_ptr automatically handles cleanup in destructor
+  delete ptr_rx_c;
 }
 
 /*********************************************
