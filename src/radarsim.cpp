@@ -1,6 +1,14 @@
 /*
+ * @file radarsim.cpp
+ * @brief C wrapper implementation for RadarSimCpp library
  *
- *    C wrapper of RadarSimCpp
+ * @details
+ * This file provides a C-compatible interface for the RadarSimCpp library,
+ * enabling radar simulation functionality for C applications. Features include:
+ * - Transmitter and receiver configuration
+ * - Radar system modeling
+ * - Point and mesh target management
+ * - Simulation execution
  *
  *    ----------
  *
@@ -19,25 +27,25 @@
 
 #include "radarsim.h"
 
+#include <cstdlib>
+#include <exception>
 #include <iostream>
-#include <stdexcept>
-#include <thread>
+#include <memory>
 #include <vector>
 
 #include "libs/free_tier.hpp"
 #include "point.hpp"
+#include "points_manager.hpp"
 #include "radar.hpp"
 #include "receiver.hpp"
-#include "rsvector/rsvector.hpp"
 #include "simulator_interference.hpp"
 #include "simulator_lidar.hpp"
 #include "simulator_mesh.hpp"
 #include "simulator_point.hpp"
 #include "simulator_rcs.hpp"
 #include "snapshot.hpp"
-#include "target.hpp"
+#include "targets_manager.hpp"
 #include "transmitter.hpp"
-#include "type_def.hpp"
 
 /*********************************************
  *
@@ -47,41 +55,12 @@
 /**
  * @brief Get the version of RadarSimLib
  *
- * @param version Version numbers {major, minor}
+ * @param version Version numbers {major, minor, patch}
  */
-void Get_Version(int version[2]) {
-  if (!version) {
-    return;
-  }
+void Get_Version(int version[3]) {
   version[0] = VERSION_MAJOR;
   version[1] = VERSION_MINOR;
-}
-
-/**
- * @brief Get error message string for error code
- *
- * @param error_code Error code from RadarSim functions
- * @return const char* Human-readable error message
- */
-const char *Get_Error_Message(int error_code) {
-  switch (error_code) {
-    case RADARSIM_SUCCESS:
-      return "Success";
-    case RADARSIM_ERROR_NULL_POINTER:
-      return "Null pointer provided";
-    case RADARSIM_ERROR_INVALID_PARAMETER:
-      return "Invalid parameter value";
-    case RADARSIM_ERROR_MEMORY_ALLOCATION:
-      return "Memory allocation failed";
-    case RADARSIM_ERROR_FREE_TIER_LIMIT:
-      return "Free tier limit exceeded";
-    case RADARSIM_ERROR_EXCEPTION:
-      return "Internal exception occurred";
-    case RADARSIM_ERROR_TOO_MANY_RAYS_PER_GRID:
-      return "Too many rays per grid cell";
-    default:
-      return "Unknown error";
-  }
+  version[2] = VERSION_PATCH;
 }
 
 /*********************************************
@@ -89,66 +68,96 @@ const char *Get_Error_Message(int error_code) {
  *  Transmitter
  *
  *********************************************/
+/**
+ * @brief Internal structure for Transmitter C wrapper
+ * @details Contains shared_ptr to Transmitter object for memory management
+ */
 struct s_Transmitter {
-  Transmitter<double, float> *_ptr_transmitter;
+  std::shared_ptr<Transmitter<double, float>> _ptr_transmitter;
 };
 
 /**
- * @brief Create a Transmitter, return the pointer of the Transmitter
+ * @brief Create a Transmitter object
  *
- * @param freq Frequency vector (Hz)
- * @param freq_time Timestamp vector for the frequency vector (s)
- * @param waveform_size Length of the frequency and timestamp vector
- * @param freq_offset Frequency offset per pulse (Hz), length should equal to
- * the number of pulses
- * @param pulse_start_time Pulse start time vector (s), length should equal to
- * the number of pulses
- * @param num_pulses Number of pulses
- * @param frame_start_time Frame start time vector (s), length should equal to
- * the number of frames
- * @param num_frames Number of frames
+ * @details Creates a new transmitter with specified waveform and timing
+ * parameters. Performs comprehensive input validation and uses modern C++
+ * memory management.
+ *
+ * @param freq Frequency vector (Hz) - must not be NULL
+ * @param freq_time Timestamp vector for the frequency vector (s) - must not be
+ * NULL
+ * @param waveform_size Length of the frequency and timestamp vector - must be >
+ * 0
+ * @param freq_offset Frequency offset per pulse (Hz) - must not be NULL
+ * @param pulse_start_time Pulse start time vector (s) - must not be NULL
+ * @param num_pulses Number of pulses - must be > 0
  * @param tx_power Transmitter power (dBm)
- * @return t_Transmitter* Pointer to the Transmitter
+ * @return t_Transmitter* Pointer to the Transmitter object, NULL on failure
  */
 t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   int waveform_size, double *freq_offset,
                                   double *pulse_start_time, int num_pulses,
                                   float tx_power) {
   // Input validation
-  if (!freq || !freq_time || !freq_offset || !pulse_start_time ||
-      waveform_size <= 0 || num_pulses <= 0) {
+  if (freq == nullptr || freq_time == nullptr || waveform_size <= 0) {
+    return nullptr;
+  }
+  if (freq_offset == nullptr || pulse_start_time == nullptr ||
+      num_pulses <= 0) {
     return nullptr;
   }
 
-  t_Transmitter *ptr_tx_c;
-
-  ptr_tx_c = (t_Transmitter *)malloc(sizeof(t_Transmitter));
-  if (!ptr_tx_c) {
+  // Allocate memory for the wrapper struct
+  t_Transmitter *ptr_tx_c = (t_Transmitter *)malloc(sizeof(t_Transmitter));
+  if (ptr_tx_c == nullptr) {
     return nullptr;
-  }
-
-  std::vector<double> freq_vt;
-  std::vector<double> freq_time_vt;
-  freq_vt.reserve(waveform_size);
-  freq_time_vt.reserve(waveform_size);
-  for (int idx = 0; idx < waveform_size; idx++) {
-    freq_vt.push_back(freq[idx]);
-    freq_time_vt.push_back(freq_time[idx]);
-  }
-
-  std::vector<double> freq_offset_vt;
-  std::vector<double> pulse_start_time_vt;
-  freq_offset_vt.reserve(num_pulses);
-  pulse_start_time_vt.reserve(num_pulses);
-  for (int idx = 0; idx < num_pulses; idx++) {
-    freq_offset_vt.push_back(freq_offset[idx]);
-    pulse_start_time_vt.push_back(pulse_start_time[idx]);
   }
 
   try {
-    ptr_tx_c->_ptr_transmitter = new Transmitter<double, float>(
+    // Convert C arrays to C++ vectors
+    std::vector<double> freq_vt;
+    std::vector<double> freq_time_vt;
+    freq_vt.reserve(waveform_size);
+    freq_time_vt.reserve(waveform_size);
+    for (int idx = 0; idx < waveform_size; idx++) {
+      freq_vt.push_back(freq[idx]);
+      freq_time_vt.push_back(freq_time[idx]);
+    }
+
+    std::vector<double> freq_offset_vt;
+    std::vector<double> pulse_start_time_vt;
+    freq_offset_vt.reserve(num_pulses);
+    pulse_start_time_vt.reserve(num_pulses);
+    for (int idx = 0; idx < num_pulses; idx++) {
+      freq_offset_vt.push_back(freq_offset[idx]);
+      pulse_start_time_vt.push_back(pulse_start_time[idx]);
+    }
+
+    // Create the Transmitter object with correct parameter order
+    ptr_tx_c->_ptr_transmitter = std::make_shared<Transmitter<double, float>>(
         tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt);
-  } catch (const std::exception &) {
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Create_Transmitter: Memory allocation failed: " << e.what()
+              << std::endl;
+    free(ptr_tx_c);
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to constructor
+    std::cerr << "Create_Transmitter: Invalid argument: " << e.what()
+              << std::endl;
+    free(ptr_tx_c);
+    return nullptr;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Create_Transmitter: Unexpected error: " << e.what()
+              << std::endl;
+    free(ptr_tx_c);
+    return nullptr;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Create_Transmitter: Unknown error occurred" << std::endl;
     free(ptr_tx_c);
     return nullptr;
   }
@@ -157,33 +166,36 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
 }
 
 /**
- * @brief Add a transmitter channel to Transmitter
+ * @brief Add a transmitter channel with full configuration
  *
- * @param location Location of the channel [x, y, z] (m)
- * @param polar_real Real part of the polarization vector [x, y, z]
- * @param polar_imag Imaginary part of the polarization vector [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad), angles must
- * be equal-spaced incremental array
- * @param phi_ptn Normalized radiation pattern along phi (dB)
- * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad), angles
- * must be equal-spaced incremental array
- * @param theta_ptn Normalized radiation pattern along theta (dB)
- * @param theta_length Length of theta and theta_ptn
+ * @details Configures a transmitter channel with antenna pattern, polarization,
+ * and modulation parameters. Supports both amplitude and phase modulation.
+ *
+ * @param location Channel location {x, y, z} (m) - must not be NULL
+ * @param polar_real Real part of polarization vector {x, y, z} - must not be
+ * NULL
+ * @param polar_imag Imaginary part of polarization vector {x, y, z} - must not
+ * be NULL
+ * @param phi Phi angles for radiation pattern (rad) - must be equal-spaced -
+ * must not be NULL
+ * @param phi_ptn Normalized phi pattern values (dB) - must not be NULL
+ * @param phi_length Length of phi and phi_ptn arrays - must be > 0
+ * @param theta Theta angles for radiation pattern (rad) - must be equal-spaced
+ * - must not be NULL
+ * @param theta_ptn Normalized theta pattern values (dB) - must not be NULL
+ * @param theta_length Length of theta and theta_ptn arrays - must be > 0
  * @param antenna_gain Antenna gain (dB)
- * @param mod_t Timestamp of the modulation data (s), mod_t must be equal-spaced
- * incremental array
- * @param mod_var_real Real part of modulation value vector
- * @param mod_var_imag Imaginary part of modulation value vector
- * @param mod_length Length of mod_t, mod_var_real and mod_var_imag
- * @param pulse_mod_real Real part of pulse modulation vector, the length should
- * be the same as the number of pulses defined in Transmitter
- * @param pulse_mod_imag Imaginary part of pulse modulation vector, the length
- * should be the same as the number of pulses defined in Transmitter
+ * @param mod_t Modulation timestamps (s) - must be equal-spaced - must not be
+ * NULL
+ * @param mod_var_real Real part of modulation values - must not be NULL
+ * @param mod_var_imag Imaginary part of modulation values - must not be NULL
+ * @param mod_length Length of modulation arrays - must be > 0
+ * @param pulse_mod_real Real part of pulse modulation - must not be NULL
+ * @param pulse_mod_imag Imaginary part of pulse modulation - must not be NULL
  * @param delay Transmitting delay (s)
- * @param grid Ray occupancy checking grid (rad)
- * @param ptr_tx_c Pointer to the Transmitter
- * @return int Status code (0 for success, 1 for failure)
+ * @param grid Ray occupancy checking grid resolution (rad)
+ * @param ptr_tx_c Pointer to the Transmitter - must not be NULL
+ * @return int Status code (0 for success, 1 for failure/free tier limit)
  */
 int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
                   float *phi, float *phi_ptn, int phi_length, float *theta,
@@ -191,15 +203,8 @@ int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
                   float *mod_t, float *mod_var_real, float *mod_var_imag,
                   int mod_length, float *pulse_mod_real, float *pulse_mod_imag,
                   float delay, float grid, t_Transmitter *ptr_tx_c) {
-  // Input validation
-  if (!ptr_tx_c || !ptr_tx_c->_ptr_transmitter || !location || !polar_real ||
-      !polar_imag || !phi || !phi_ptn || !theta || !theta_ptn ||
-      phi_length <= 0 || theta_length <= 0) {
-    return RADARSIM_ERROR_INVALID_PARAMETER;
-  }
-
   if (IsFreeTier() && ptr_tx_c->_ptr_transmitter->channel_size_ > 0) {
-    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+    return 1;
   }
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
@@ -239,15 +244,11 @@ int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
       std::complex<float>(polar_real[1], polar_imag[1]),
       std::complex<float>(polar_real[2], polar_imag[2]));
 
-  try {
-    ptr_tx_c->_ptr_transmitter->AddChannel(TxChannel<float>(
-        rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
-        phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain, mod_t_vt,
-        mod_var_vt, pulse_mod_vt, delay, grid));
-  } catch (const std::exception &) {
-    return RADARSIM_ERROR_EXCEPTION;
-  }
-  return RADARSIM_SUCCESS;
+  ptr_tx_c->_ptr_transmitter->AddChannel(
+      rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
+      phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain, mod_t_vt,
+      mod_var_vt, pulse_mod_vt, delay, grid);
+  return 0;
 }
 
 /**
@@ -261,7 +262,10 @@ int Get_Num_Txchannel(t_Transmitter *ptr_tx_c) {
 }
 
 /**
- * @brief Free the memory of Transmitter
+ * @brief Free transmitter memory safely
+ *
+ * @details Safely releases transmitter resources using modern C++
+ * memory management. The shared_ptr automatically handles cleanup.
  *
  * @param ptr_tx_c Pointer to the Transmitter
  */
@@ -269,7 +273,8 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == NULL) {
     return;
   }
-  delete static_cast<Transmitter<double, float> *>(ptr_tx_c->_ptr_transmitter);
+  // shared_ptr automatically handles cleanup, just reset it
+  ptr_tx_c->_ptr_transmitter.reset();
   free(ptr_tx_c);
 }
 
@@ -278,19 +283,26 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
  *  Receiver
  *
  *********************************************/
+/**
+ * @brief Internal structure for Receiver C wrapper
+ * @details Contains shared_ptr to Receiver object for memory management
+ */
 struct s_Receiver {
-  Receiver<float> *_ptr_receiver;
+  std::shared_ptr<Receiver<float>> _ptr_receiver;
 };
 
 /**
- * @brief Create a Receiver, return the pointer of the Receiver
+ * @brief Create a Receiver object
  *
- * @param fs Sampling rate (Hz)
+ * @details Creates a new receiver with specified RF and baseband parameters.
+ * Includes input validation and modern C++ memory management.
+ *
+ * @param fs Sampling rate (Hz) - must be > 0
  * @param rf_gain RF gain (dB)
- * @param resistor Load resistor (Ohm)
+ * @param resistor Load resistor (Ohm) - must be > 0
  * @param baseband_gain Baseband gain (dB)
  * @param baseband_bw Baseband bandwidth (Hz)
- * @return t_Receiver* Pointer to the Receiver
+ * @return t_Receiver* Pointer to the Receiver object, NULL on failure
  */
 t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                             float baseband_gain, float baseband_bw) {
@@ -299,16 +311,36 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
     return nullptr;
   }
 
-  t_Receiver *ptr_rx_c;
-  ptr_rx_c = (t_Receiver *)malloc(sizeof(t_Receiver));
-  if (!ptr_rx_c) {
+  // Allocate memory for the wrapper struct
+  t_Receiver *ptr_rx_c = (t_Receiver *)malloc(sizeof(t_Receiver));
+  if (ptr_rx_c == nullptr) {
     return nullptr;
   }
 
   try {
-    ptr_rx_c->_ptr_receiver =
-        new Receiver<float>(fs, rf_gain, resistor, baseband_gain, baseband_bw);
-  } catch (const std::exception &) {
+    // Create the Receiver object using shared_ptr
+    ptr_rx_c->_ptr_receiver = std::make_shared<Receiver<float>>(
+        fs, rf_gain, resistor, baseband_gain, baseband_bw);
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Create_Receiver: Memory allocation failed: " << e.what()
+              << std::endl;
+    free(ptr_rx_c);
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to constructor
+    std::cerr << "Create_Receiver: Invalid argument: " << e.what() << std::endl;
+    free(ptr_rx_c);
+    return nullptr;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Create_Receiver: Unexpected error: " << e.what() << std::endl;
+    free(ptr_rx_c);
+    return nullptr;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Create_Receiver: Unknown error occurred" << std::endl;
     free(ptr_rx_c);
     return nullptr;
   }
@@ -317,36 +349,34 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
 }
 
 /**
- * @brief Add a receiver channel to Receiver
+ * @brief Add a receiver channel with antenna configuration
  *
- * @param location Location of the channel [x, y, z] (m)
- * @param polar_real Real part of the polarization vector [x, y, z]
- * @param polar_imag Imaginary part of the polarization vector [x, y, z]
- * @param phi Phi angles of the channel's radiation pattern (rad), angles must
- * be equal-spaced incremental array
- * @param phi_ptn Normalized radiation pattern along phi (dB)
- * @param phi_length Length of phi and phi_ptn
- * @param theta Theta angles of the channel's radiation pattern (rad), angles
- * must be equal-spaced incremental array
- * @param theta_ptn Normalized radiation pattern along theta (dB)
- * @param theta_length Length of theta and theta_ptn
+ * @details Configures a receiver channel with antenna pattern and polarization.
+ * The receiver channel defines how signals are received and processed.
+ *
+ * @param location Channel location {x, y, z} (m) - must not be NULL
+ * @param polar_real Real part of polarization vector {x, y, z} - must not be
+ * NULL
+ * @param polar_imag Imaginary part of polarization vector {x, y, z} - must not
+ * be NULL
+ * @param phi Phi angles for radiation pattern (rad) - must be equal-spaced -
+ * must not be NULL
+ * @param phi_ptn Normalized phi pattern values (dB) - must not be NULL
+ * @param phi_length Length of phi and phi_ptn arrays - must be > 0
+ * @param theta Theta angles for radiation pattern (rad) - must be equal-spaced
+ * - must not be NULL
+ * @param theta_ptn Normalized theta pattern values (dB) - must not be NULL
+ * @param theta_length Length of theta and theta_ptn arrays - must be > 0
  * @param antenna_gain Antenna gain (dB)
- * @param ptr_rx_c Pointer to the Receiver
- * @return int Status code (0 for success, 1 for failure)
+ * @param ptr_rx_c Pointer to the Receiver - must not be NULL
+ * @return int Status code (0 for success, 1 for failure/free tier limit)
  */
 int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
                   float *phi, float *phi_ptn, int phi_length, float *theta,
                   float *theta_ptn, int theta_length, float antenna_gain,
                   t_Receiver *ptr_rx_c) {
-  // Input validation
-  if (!ptr_rx_c || !ptr_rx_c->_ptr_receiver || !location || !polar_real ||
-      !polar_imag || !phi || !phi_ptn || !theta || !theta_ptn ||
-      phi_length <= 0 || theta_length <= 0) {
-    return RADARSIM_ERROR_INVALID_PARAMETER;
-  }
-
   if (IsFreeTier() && ptr_rx_c->_ptr_receiver->channel_size_ > 0) {
-    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+    return 1;
   }
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
@@ -369,14 +399,10 @@ int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
       std::complex<float>(polar_real[1], polar_imag[1]),
       std::complex<float>(polar_real[2], polar_imag[2]));
 
-  try {
-    ptr_rx_c->_ptr_receiver->AddChannel(RxChannel<float>(
-        rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
-        phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain));
-  } catch (const std::exception &) {
-    return RADARSIM_ERROR_EXCEPTION;
-  }
-  return RADARSIM_SUCCESS;
+  ptr_rx_c->_ptr_receiver->AddChannel(
+      rsv::Vec3<float>(location[0], location[1], location[2]), polar_complex,
+      phi_vt, phi_ptn_vt, theta_vt, theta_ptn_vt, antenna_gain);
+  return 0;
 }
 
 /**
@@ -390,7 +416,10 @@ int Get_Num_Rxchannel(t_Receiver *ptr_rx_c) {
 }
 
 /**
- * @brief Free the memory of Receiver
+ * @brief Free receiver memory safely
+ *
+ * @details Safely releases receiver resources using modern C++
+ * memory management. The shared_ptr automatically handles cleanup.
  *
  * @param ptr_rx_c Pointer to the Receiver
  */
@@ -398,7 +427,8 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
   if (ptr_rx_c == NULL) {
     return;
   }
-  delete static_cast<Receiver<float> *>(ptr_rx_c->_ptr_receiver);
+  // shared_ptr automatically handles cleanup, just reset it
+  ptr_rx_c->_ptr_receiver.reset();
   free(ptr_rx_c);
 }
 
@@ -407,60 +437,92 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
  *  Radar
  *
  *********************************************/
+/**
+ * @brief Internal structure for Radar C wrapper
+ * @details Contains pointers to transmitter, receiver, and radar objects for
+ * complete system
+ */
 struct s_Radar {
   t_Transmitter *_ptr_tx;
   t_Receiver *_ptr_rx;
-  Radar<double, float> *_ptr_radar;
+  std::shared_ptr<Radar<double, float>> _ptr_radar;
 };
 
 /**
- * @brief Create a Radar, return the pointer of the Radar
+ * @brief Create a Radar system object
  *
- * @param ptr_tx_c Pointer to the Transmitter
- * @param ptr_rx_c Pointer to the Receiver
- * @param location Radar's location {x, y, z} (m)
- * @param speed Radar's speed {x, y, z} (m/s)
- * @param rotation Radar's rotation {x, y, z} (rad)
- * @param rotation_rate Radar's rotation rate {x, y, z} (rad/s)
- * @return t_Radar* Pointer to the Radar
+ * @details Creates a complete radar system by combining transmitter and
+ * receiver with platform motion parameters. Performs comprehensive input
+ * validation.
+ *
+ * @param ptr_tx_c Pointer to the Transmitter - must not be NULL
+ * @param ptr_rx_c Pointer to the Receiver - must not be NULL
+ * @param frame_start_time Frame start time vector (s) - must not be NULL
+ * @param num_frames Number of frames - must be > 0
+ * @param location Radar's location {x, y, z} (m) - must not be NULL
+ * @param speed Radar's speed {x, y, z} (m/s) - must not be NULL
+ * @param rotation Radar's rotation {x, y, z} (rad) - must not be NULL
+ * @param rotation_rate Radar's rotation rate {x, y, z} (rad/s) - must not be
+ * NULL
+ * @return t_Radar* Pointer to the Radar object, NULL on failure
  */
 t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                       double *frame_start_time, int num_frames, float *location,
                       float *speed, float *rotation, float *rotation_rate) {
   // Input validation
-  if (!ptr_tx_c || !ptr_tx_c->_ptr_transmitter || !ptr_rx_c ||
-      !ptr_rx_c->_ptr_receiver || !frame_start_time || !location || !speed ||
-      !rotation || !rotation_rate || num_frames <= 0) {
+  if (ptr_tx_c == nullptr || ptr_rx_c == nullptr ||
+      frame_start_time == nullptr || num_frames <= 0 || location == nullptr ||
+      speed == nullptr || rotation == nullptr || rotation_rate == nullptr) {
     return nullptr;
   }
 
-  t_Radar *ptr_radar_c;
-  std::vector<rsv::Vec3<float>> loc_vt, rot_vt;
-
-  ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar));
-  if (!ptr_radar_c) {
+  // Allocate memory for the wrapper struct
+  t_Radar *ptr_radar_c = (t_Radar *)malloc(sizeof(t_Radar));
+  if (ptr_radar_c == nullptr) {
     return nullptr;
   }
 
   ptr_radar_c->_ptr_tx = ptr_tx_c;
   ptr_radar_c->_ptr_rx = ptr_rx_c;
 
-  std::vector<double> frame_start_time_vt;
-  frame_start_time_vt.reserve(num_frames);
-  for (int idx = 0; idx < num_frames; idx++) {
-    frame_start_time_vt.push_back(frame_start_time[idx]);
-  }
-
-  loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
-  rot_vt.push_back(rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
-
   try {
-    ptr_radar_c->_ptr_radar = new Radar<double, float>(
-        *ptr_tx_c->_ptr_transmitter, *ptr_rx_c->_ptr_receiver,
+    // Convert C arrays to C++ vectors
+    std::vector<double> frame_start_time_vt;
+    frame_start_time_vt.reserve(num_frames);
+    for (int idx = 0; idx < num_frames; idx++) {
+      frame_start_time_vt.push_back(frame_start_time[idx]);
+    }
+
+    std::vector<rsv::Vec3<float>> loc_vt, rot_vt;
+    loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
+    rot_vt.push_back(rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
+
+    // Create the Radar object using shared_ptr and pass shared_ptr objects
+    ptr_radar_c->_ptr_radar = std::make_shared<Radar<double, float>>(
+        ptr_tx_c->_ptr_transmitter, ptr_rx_c->_ptr_receiver,
         frame_start_time_vt, loc_vt,
         rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
         rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
-  } catch (const std::exception &) {
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Create_Radar: Memory allocation failed: " << e.what()
+              << std::endl;
+    free(ptr_radar_c);
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to constructor
+    std::cerr << "Create_Radar: Invalid argument: " << e.what() << std::endl;
+    free(ptr_radar_c);
+    return nullptr;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Create_Radar: Unexpected error: " << e.what() << std::endl;
+    free(ptr_radar_c);
+    return nullptr;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Create_Radar: Unknown error occurred" << std::endl;
     free(ptr_radar_c);
     return nullptr;
   }
@@ -469,16 +531,19 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
 }
 
 /**
- * @brief Free the memory of Radar
+ * @brief Free radar system memory safely
  *
- * @param ptr_radar_c Pointer to the Radar
+ * @details Safely releases radar system resources using modern C++
+ * memory management. The shared_ptr automatically handles cleanup.
+ *
+ * @param ptr_radar_c Pointer to the Radar system
  */
 void Free_Radar(t_Radar *ptr_radar_c) {
   if (ptr_radar_c == NULL) {
     return;
   }
-  ptr_radar_c->_ptr_radar->FreeDeviceMemory();
-  delete static_cast<Radar<double, float> *>(ptr_radar_c->_ptr_radar);
+  // shared_ptr automatically handles cleanup, just reset it
+  ptr_radar_c->_ptr_radar.reset();
   free(ptr_radar_c);
 }
 
@@ -487,142 +552,184 @@ void Free_Radar(t_Radar *ptr_radar_c) {
  *  Targets
  *
  *********************************************/
+/**
+ * @brief Internal structure for Targets C wrapper
+ * @details Contains shared_ptr to PointsManager and TargetsManager for
+ * comprehensive target management including both point targets and mesh targets
+ */
 struct s_Targets {
-  PointList<float> *_ptr_points;
-  TargetList<float> *_ptr_targets;
+  std::shared_ptr<PointsManager<float>> _ptr_points;
+  std::shared_ptr<TargetsManager<float>> _ptr_targets;
 };
 
 /**
- * @brief Initialize the target list
+ * @brief Initialize the target management system
  *
- * @return t_Targets* Pointer to the target list
+ * @details Creates and initializes both point and mesh target managers.
+ * Must be called before adding any targets to the simulation.
+ *
+ * @return t_Targets* Pointer to the target management system, NULL on failure
  */
 t_Targets *Init_Targets() {
-  t_Targets *ptr_targets_c;
-  ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets));
-  if (!ptr_targets_c) {
+  // Allocate memory for the wrapper struct
+  t_Targets *ptr_targets_c = (t_Targets *)malloc(sizeof(t_Targets));
+  if (ptr_targets_c == nullptr) {
     return nullptr;
   }
 
   try {
-    ptr_targets_c->_ptr_points = new PointList<float>();
-    ptr_targets_c->_ptr_targets = new TargetList<float>();
-  } catch (const std::exception &) {
+    // Create the manager objects using shared_ptr
+    ptr_targets_c->_ptr_points = std::make_shared<PointsManager<float>>();
+    ptr_targets_c->_ptr_targets = std::make_shared<TargetsManager<float>>();
+
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Init_Targets: Memory allocation failed: " << e.what()
+              << std::endl;
+    free(ptr_targets_c);
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to constructor
+    std::cerr << "Init_Targets: Invalid argument: " << e.what() << std::endl;
+    free(ptr_targets_c);
+    return nullptr;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Init_Targets: Unexpected error: " << e.what() << std::endl;
+    free(ptr_targets_c);
+    return nullptr;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Init_Targets: Unknown error occurred" << std::endl;
     free(ptr_targets_c);
     return nullptr;
   }
+
   return ptr_targets_c;
 }
 
 /**
- * @brief Add an ideal point target to the target list
+ * @brief Add an ideal point target to the simulation
  *
- * @param location Target's location {x, y, z} (m)
- * @param speed Target's speed {x, y, z} (m/s)
+ * @details Adds a point target with specified radar cross section and motion.
+ * Point targets are ideal scatterers used for basic simulations.
+ *
+ * @param location Target's location {x, y, z} (m) - must not be NULL
+ * @param speed Target's speed {x, y, z} (m/s) - must not be NULL
  * @param rcs Target's RCS (dBsm)
  * @param phs Target's phase (rad)
- * @param ptr_targets_c Pointer to the target list
- * @return int Status code (0 for success, 1 for failure)
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @return int Status code (0 for success, 1 for failure/free tier limit)
  */
 int Add_Point_Target(float *location, float *speed, float rcs, float phs,
                      t_Targets *ptr_targets_c) {
-  // Input validation
-  if (!ptr_targets_c || !ptr_targets_c->_ptr_points || !location || !speed) {
-    return RADARSIM_ERROR_INVALID_PARAMETER;
+  if (IsFreeTier() && ptr_targets_c->_ptr_points->vect_points_.size() > 1) {
+    return 1;
   }
-
-  if (IsFreeTier() && ptr_targets_c->_ptr_points->ptr_points_.size() > 1) {
-    return RADARSIM_ERROR_FREE_TIER_LIMIT;
-  }
-
-  try {
-    ptr_targets_c->_ptr_points->Add_Point(
-        Point<float>(rsv::Vec3<float>(location[0], location[1], location[2]),
-                     rsv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs));
-  } catch (const std::exception &) {
-    return RADARSIM_ERROR_EXCEPTION;
-  }
-  return RADARSIM_SUCCESS;
+  ptr_targets_c->_ptr_points->AddPointSimple(
+      rsv::Vec3<float>(location[0], location[1], location[2]),
+      rsv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs);
+  return 0;
 }
 
 /**
- * @brief Add a 3D mesh target to the target list
+ * @brief Add a 3D mesh target to the simulation
  *
- * @param points Mesh coordinates
- * @param cells Mesh connections
- * @param cell_size Number of meshes
- * @param origin Target origin (m)
- * @param location Target location (m)
- * @param speed Target speed (m/s)
- * @param rotation Target rotation (rad)
- * @param rotation_rate Target rotation rate (rad/s)
- * @param ep_real Real part of Permittivity
- * @param ep_imag Imaginary part of Permittivity
- * @param mu_real Real part of Permeability
- * @param mu_imag Imaginary part of Permeability
- * @param is_ground Flag to identify if the target is ground
- * @param ptr_targets_c Pointer to the target list
- * @return int Status code (0 for success, 1 for failure)
+ * @details Adds a complex 3D mesh target with electromagnetic properties.
+ * Mesh targets provide realistic scattering behavior for detailed simulations.
+ *
+ * @param points Mesh vertex coordinates - must not be NULL
+ * @param cells Mesh triangle connectivity - must not be NULL
+ * @param cell_size Number of mesh triangles - must be > 0
+ * @param origin Target origin point (m) - must not be NULL
+ * @param location Target location {x, y, z} (m) - must not be NULL
+ * @param speed Target speed {x, y, z} (m/s) - must not be NULL
+ * @param rotation Target rotation {x, y, z} (rad) - must not be NULL
+ * @param rotation_rate Target rotation rate {x, y, z} (rad/s) - must not be
+ * NULL
+ * @param ep_real Real part of relative permittivity
+ * @param ep_imag Imaginary part of relative permittivity
+ * @param mu_real Real part of relative permeability
+ * @param mu_imag Imaginary part of relative permeability
+ * @param is_ground Flag to identify if the target represents ground surface
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @return int Status code (0 for success, 1 for failure/free tier limit)
  */
 int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
                     float *location, float *speed, float *rotation,
                     float *rotation_rate, float ep_real, float ep_imag,
                     float mu_real, float mu_imag, bool is_ground,
                     t_Targets *ptr_targets_c) {
-  // Input validation
-  if (!ptr_targets_c || !ptr_targets_c->_ptr_targets || !points || !cells ||
-      !origin || !location || !speed || !rotation || !rotation_rate ||
-      cell_size <= 0) {
-    return RADARSIM_ERROR_INVALID_PARAMETER;
-  }
-
-  if (IsFreeTier() && ptr_targets_c->_ptr_targets->ptr_targets_.size() > 1) {
-    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+  if (IsFreeTier() && ptr_targets_c->_ptr_targets->vect_targets_.size() > 1) {
+    return 1;
   }
 
   if (IsFreeTier() && cell_size > 8) {
-    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+    return 1;
   }
-  std::vector<rsv::Vec3<float>> loc_vt;
-  loc_vt.push_back(rsv::Vec3<float>(location[0], location[1], location[2]));
 
-  std::vector<rsv::Vec3<float>> spd_vt;
-  spd_vt.push_back(rsv::Vec3<float>(speed[0], speed[1], speed[2]));
+  // Create single-element arrays for the time-varying parameters
+  std::vector<rsv::Vec3<float>> location_array;
+  location_array.push_back(
+      rsv::Vec3<float>(location[0], location[1], location[2]));
 
-  std::vector<rsv::Vec3<float>> rot_vt;
-  rot_vt.push_back(rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
+  std::vector<rsv::Vec3<float>> speed_array;
+  speed_array.push_back(rsv::Vec3<float>(speed[0], speed[1], speed[2]));
 
-  std::vector<rsv::Vec3<float>> rrt_vt;
-  rrt_vt.push_back(
+  std::vector<rsv::Vec3<float>> rotation_array;
+  rotation_array.push_back(
+      rsv::Vec3<float>(rotation[0], rotation[1], rotation[2]));
+
+  std::vector<rsv::Vec3<float>> rotrate_array;
+  rotrate_array.push_back(
       rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
 
   std::complex<float> ep = std::complex(ep_real, ep_imag);
-
   std::complex<float> mu = std::complex(mu_real, mu_imag);
 
-  try {
-    ptr_targets_c->_ptr_targets->Add_Target(
-        Target<float>(points, cells, cell_size,
-                      rsv::Vec3<float>(origin[0], origin[1], origin[2]), loc_vt,
-                      spd_vt, rot_vt, rrt_vt, ep, mu, is_ground));
-  } catch (const std::exception &) {
-    return RADARSIM_ERROR_EXCEPTION;
-  }
-  return RADARSIM_SUCCESS;
+  ptr_targets_c->_ptr_targets->AddTarget(
+      points, cells, cell_size,
+      rsv::Vec3<float>(origin[0], origin[1], origin[2]), location_array,
+      speed_array, rotation_array, rotrate_array, ep, mu, is_ground);
+  return 0;
 }
 
 /**
- * @brief Free the memory of target list
+ * @brief Free target management system memory
  *
- * @param ptr_targets_c Pointer to the target list
+ * @details Safely releases all target-related resources using modern C++
+ * memory management. Automatically handles cleanup of shared_ptr objects.
+ *
+ * @param ptr_targets_c Pointer to the target management system
  */
 void Free_Targets(t_Targets *ptr_targets_c) {
   if (ptr_targets_c == NULL) {
     return;
   }
-  delete static_cast<TargetList<float> *>(ptr_targets_c->_ptr_targets);
-  delete static_cast<PointList<float> *>(ptr_targets_c->_ptr_points);
+  // shared_ptr automatically handles cleanup, just reset them
+  ptr_targets_c->_ptr_targets.reset();
+  ptr_targets_c->_ptr_points.reset();
   free(ptr_targets_c);
+}
+
+/**
+ * @brief Complete the initialization of all targets
+ *
+ * @details Finalizes the setup of both point and mesh targets. This function
+ * must be called after adding all targets and before running simulation.
+ * It prepares the targets for efficient GPU processing if available.
+ *
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ */
+void Complete_Targets_Initialization(t_Targets *ptr_targets_c) {
+  if (ptr_targets_c == NULL) {
+    return;
+  }
+  ptr_targets_c->_ptr_points->CompletePointInitialization();
+  ptr_targets_c->_ptr_targets->CompleteTargetInitialization();
 }
 
 /*********************************************
@@ -631,400 +738,295 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  *
  *********************************************/
 /**
- * @brief Run simulator for the ideal targets
+ * @brief Execute radar simulation for all configured targets
  *
- * @param ptr_radar_c Pointer to the radar
- * @param ptr_targets_c Pointer to the target list
- * @param level Fidelity level of ray tracing
- * @param density Ray density
- * @param ray_filter Ray filter parameters
- * @param ptr_bb_real Real part of baseband samples
- * @param ptr_bb_imag Imaginary part of baseband samples
- * @return int Error code (RADARSIM_SUCCESS on success, error code on failure)
- */
-int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c, int level,
-                  float density, int *ray_filter, double *ptr_bb_real,
-                  double *ptr_bb_imag) {
-  // Input validation
-  if (!ptr_radar_c || !ptr_radar_c->_ptr_radar || !ptr_targets_c ||
-      !ray_filter || !ptr_bb_real || !ptr_bb_imag || density <= 0) {
-    return RADARSIM_ERROR_INVALID_PARAMETER;
-  }
-
-  try {
-    ptr_radar_c->_ptr_radar->InitBaseband(ptr_bb_real, ptr_bb_imag);
-
-    if (ptr_targets_c->_ptr_points->ptr_points_.size() > 0) {
-      PointSimulator<double, float> simc = PointSimulator<double, float>();
-
-      simc.Run(*ptr_radar_c->_ptr_radar,
-               ptr_targets_c->_ptr_points->ptr_points_);
-    }
-
-    if (ptr_targets_c->_ptr_targets->ptr_targets_.size() > 0) {
-      MeshSimulator<double, float> scene_c = MeshSimulator<double, float>();
-
-      rsv::Vec2<int> ray_filter_vec2 =
-          rsv::Vec2<int>(ray_filter[0], ray_filter[1]);
-
-      RadarSimErrorCode mesh_result = scene_c.Run(
-          *ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_targets->ptr_targets_,
-          level, density, ray_filter_vec2, false, "", false);
-
-      // Handle MeshSimulator error
-      if (mesh_result != RadarSimErrorCode::SUCCESS) {
-        switch (mesh_result) {
-          case RadarSimErrorCode::ERROR_TOO_MANY_RAYS_PER_GRID:
-            return RADARSIM_ERROR_TOO_MANY_RAYS_PER_GRID;
-          default:
-            return RADARSIM_ERROR_EXCEPTION;
-        }
-      }
-    }
-
-    ptr_radar_c->_ptr_radar->SyncBaseband();
-    return RADARSIM_SUCCESS;
-  } catch (const std::exception &) {
-    return RADARSIM_ERROR_EXCEPTION;
-  }
-}
-
-/**
- * @brief Run interference simulation
+ * @details Runs comprehensive radar simulation including both point and mesh
+ * targets. Initializes baseband buffers, processes targets based on type, and
+ * synchronizes results. Supports GPU acceleration when available.
  *
- * @param ptr_radar_c Pointer to the victim radar
- * @param ptr_interf_radar_c Pointer to the interference radar
- * @param ptr_interf_real Real part of the interference baseband
- * @param ptr_interf_imag Imaginary part of the interference baseband
+ * @param ptr_radar_c Pointer to the radar system - must not be NULL
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @param level Ray tracing fidelity level (higher = more accurate, slower)
+ * @param density Ray density for mesh target simulation
+ * @param ray_filter Ray filter parameters {min, max} - must not be NULL
+ * @param ptr_bb_real Real part of baseband signal buffer - must not be NULL
+ * @param ptr_bb_imag Imaginary part of baseband signal buffer - must not be
+ * NULL
  */
-void Run_InterferenceSimulator(t_Radar *ptr_radar_c, t_Radar *ptr_interf_radar_c,
-                      double *ptr_interf_real, double *ptr_interf_imag) {
-  // Input validation
-  if (!ptr_radar_c || !ptr_radar_c->_ptr_radar || !ptr_interf_radar_c ||
-      !ptr_interf_radar_c->_ptr_radar || !ptr_interf_real || !ptr_interf_imag) {
-    return;
+void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
+                        int level, float density, int *ray_filter,
+                        double *ptr_bb_real, double *ptr_bb_imag) {
+  ptr_radar_c->_ptr_radar->InitBaseband(ptr_bb_real, ptr_bb_imag);
+  if (ptr_targets_c->_ptr_points->vect_points_.size() > 0) {
+    PointSimulator<double, float> simc = PointSimulator<double, float>();
+
+    simc.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points);
   }
 
-  InterferenceSimulator<double, float> simc =
-      InterferenceSimulator<double, float>();
-  ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
-  simc.Run(*ptr_radar_c->_ptr_radar, *ptr_interf_radar_c->_ptr_radar);
+  if (ptr_targets_c->_ptr_targets->vect_targets_.size() > 0) {
+    MeshSimulator<double, float> scene_c = MeshSimulator<double, float>();
+
+    rsv::Vec2<int> ray_filter_vec2 =
+        rsv::Vec2<int>(ray_filter[0], ray_filter[1]);
+
+    scene_c.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_targets, level,
+                density, ray_filter_vec2, false, "", false);
+  }
   ptr_radar_c->_ptr_radar->SyncBaseband();
 }
 
-/*********************************************
- *
- *  RCS Simulator
- *
- *********************************************/
-struct s_RcsSimulator {
-  RcsSimulator<double> *_ptr_rcs_simulator;
-};
-
 /**
- * @brief Create an RCS Simulator, return the pointer to the RCS Simulator
+ * @brief Execute interference simulation between radar systems
  *
- * @return t_RcsSimulator* Pointer to the RCS Simulator
+ * @details Simulates electromagnetic interference between two radar systems.
+ * The victim radar receives interference from the interfering radar, allowing
+ * analysis of interference effects on radar performance.
+ *
+ * @param ptr_radar_c Pointer to the victim radar system - must not be NULL
+ * @param ptr_interf_radar_c Pointer to the interfering radar system - must not
+ * be NULL
+ * @param ptr_interf_real Real part of the interference baseband buffer - must
+ * not be NULL
+ * @param ptr_interf_imag Imaginary part of the interference baseband buffer -
+ * must not be NULL
  */
-t_RcsSimulator *Create_RcsSimulator() {
-  t_RcsSimulator *ptr_rcs_c;
-  ptr_rcs_c = (t_RcsSimulator *)malloc(sizeof(t_RcsSimulator));
-  if (!ptr_rcs_c) {
-    return nullptr;
-  }
-
-  try {
-    ptr_rcs_c->_ptr_rcs_simulator = new RcsSimulator<double>();
-  } catch (const std::exception &) {
-    free(ptr_rcs_c);
-    return nullptr;
-  }
-  return ptr_rcs_c;
+void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
+                               t_Radar *ptr_interf_radar_c,
+                               double *ptr_interf_real,
+                               double *ptr_interf_imag) {
+  InterferenceSimulator<double, float> simc =
+      InterferenceSimulator<double, float>();
+  ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
+  simc.Run(ptr_radar_c->_ptr_radar, ptr_interf_radar_c->_ptr_radar);
+  ptr_radar_c->_ptr_radar->SyncBaseband();
 }
 
 /**
- * @brief Calculate target RCS
+ * @brief Execute Radar Cross Section (RCS) simulation
  *
- * @param ptr_rcs_c Pointer to the RCS Simulator
- * @param ptr_targets_c Pointer to the target list
- * @param inc_dir_x Array of incident direction x components
- * @param inc_dir_y Array of incident direction y components  
- * @param inc_dir_z Array of incident direction z components
- * @param obs_dir_x Array of observation direction x components
- * @param obs_dir_y Array of observation direction y components
- * @param obs_dir_z Array of observation direction z components
- * @param num_directions Number of direction pairs
- * @param inc_polar_real Real part of incident polarization vector [x, y, z]
- * @param inc_polar_imag Imaginary part of incident polarization vector [x, y, z]
- * @param obs_polar_real Real part of observation polarization vector [x, y, z]
- * @param obs_polar_imag Imaginary part of observation polarization vector [x, y, z]
- * @param frequency Frequency (Hz)
- * @param density Ray density, number of rays per wavelength
- * @param ptr_rcs_results Array to store RCS results (m^2), size should be num_directions
- * @return int Status code (0 for success, error code for failure)
+ * @details Calculates the Radar Cross Section of targets using Physical Optics
+ * ray tracing method. Supports multiple incident and observation directions
+ * for comprehensive RCS analysis. Uses BVH acceleration for efficient
+ * computation.
+ *
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @param inc_dir_array Array of incident direction vectors {x, y, z} - must not
+ * be NULL
+ * @param obs_dir_array Array of observation direction vectors {x, y, z} - must
+ * not be NULL
+ * @param num_directions Number of direction pairs - must be > 0
+ * @param inc_polar_real Real part of incident polarization vector {x, y, z} -
+ * must not be NULL
+ * @param inc_polar_imag Imaginary part of incident polarization vector {x, y,
+ * z} - must not be NULL
+ * @param obs_polar_real Real part of observation polarization vector {x, y, z}
+ * - must not be NULL
+ * @param obs_polar_imag Imaginary part of observation polarization vector {x,
+ * y, z} - must not be NULL
+ * @param frequency Electromagnetic frequency (Hz) - must be > 0
+ * @param density Ray density for Physical Optics (rays per wavelength) - must
+ * be > 0
+ * @param rcs_result Output array for RCS values (m²) - must not be NULL, size
+ * >= num_directions
+ * @return int Status code (0 for success, 1 for failure)
  */
-int Run_RcsSimulator(t_RcsSimulator *ptr_rcs_c, t_Targets *ptr_targets_c,
-                     double *inc_dir_x, double *inc_dir_y, double *inc_dir_z,
-                     double *obs_dir_x, double *obs_dir_y, double *obs_dir_z,
-                     int num_directions,
+int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
+                     double *obs_dir_array, int num_directions,
                      double *inc_polar_real, double *inc_polar_imag,
                      double *obs_polar_real, double *obs_polar_imag,
-                     double frequency, double density, double *ptr_rcs_results) {
+                     double frequency, double density, double *rcs_result) {
   // Input validation
-  if (!ptr_rcs_c || !ptr_rcs_c->_ptr_rcs_simulator || !ptr_targets_c || 
-      !ptr_targets_c->_ptr_targets || !inc_dir_x || !inc_dir_y || !inc_dir_z ||
-      !obs_dir_x || !obs_dir_y || !obs_dir_z || !inc_polar_real || 
-      !inc_polar_imag || !obs_polar_real || !obs_polar_imag || 
-      !ptr_rcs_results || num_directions <= 0 || frequency <= 0 || density <= 0) {
-    return RADARSIM_ERROR_INVALID_PARAMETER;
-  }
-
-  if (IsFreeTier() && num_directions > 10) {
-    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+  if (ptr_targets_c == nullptr || inc_dir_array == nullptr ||
+      obs_dir_array == nullptr || num_directions <= 0 ||
+      inc_polar_real == nullptr || inc_polar_imag == nullptr ||
+      obs_polar_real == nullptr || obs_polar_imag == nullptr ||
+      frequency <= 0 || density <= 0 || rcs_result == nullptr) {
+    return 1;
   }
 
   try {
-    // Convert direction arrays to vector format
-    std::vector<rsv::Vec3<double>> inc_dir_array;
-    std::vector<rsv::Vec3<double>> obs_dir_array;
-    
-    inc_dir_array.reserve(num_directions);
-    obs_dir_array.reserve(num_directions);
-    
+    // Create RCS simulator
+    RcsSimulator<double> rcs_sim;
+
+    // Convert C arrays to C++ vectors for incident directions
+    std::vector<rsv::Vec3<double>> inc_dir_vect;
+    inc_dir_vect.reserve(num_directions);
     for (int i = 0; i < num_directions; i++) {
-      inc_dir_array.push_back(rsv::Vec3<double>(inc_dir_x[i], inc_dir_y[i], inc_dir_z[i]));
-      obs_dir_array.push_back(rsv::Vec3<double>(obs_dir_x[i], obs_dir_y[i], obs_dir_z[i]));
+      inc_dir_vect.push_back(rsv::Vec3<double>(inc_dir_array[i * 3],
+                                               inc_dir_array[i * 3 + 1],
+                                               inc_dir_array[i * 3 + 2]));
     }
 
-    // Convert polarization vectors
+    // Convert C arrays to C++ vectors for observation directions
+    std::vector<rsv::Vec3<double>> obs_dir_vect;
+    obs_dir_vect.reserve(num_directions);
+    for (int i = 0; i < num_directions; i++) {
+      obs_dir_vect.push_back(rsv::Vec3<double>(obs_dir_array[i * 3],
+                                               obs_dir_array[i * 3 + 1],
+                                               obs_dir_array[i * 3 + 2]));
+    }
+
+    // Create complex polarization vectors
     rsv::Vec3<std::complex<double>> inc_polar(
-      std::complex<double>(inc_polar_real[0], inc_polar_imag[0]),
-      std::complex<double>(inc_polar_real[1], inc_polar_imag[1]),
-      std::complex<double>(inc_polar_real[2], inc_polar_imag[2])
-    );
-    
+        std::complex<double>(inc_polar_real[0], inc_polar_imag[0]),
+        std::complex<double>(inc_polar_real[1], inc_polar_imag[1]),
+        std::complex<double>(inc_polar_real[2], inc_polar_imag[2]));
+
     rsv::Vec3<std::complex<double>> obs_polar(
-      std::complex<double>(obs_polar_real[0], obs_polar_imag[0]),
-      std::complex<double>(obs_polar_real[1], obs_polar_imag[1]),
-      std::complex<double>(obs_polar_real[2], obs_polar_imag[2])
-    );
+        std::complex<double>(obs_polar_real[0], obs_polar_imag[0]),
+        std::complex<double>(obs_polar_real[1], obs_polar_imag[1]),
+        std::complex<double>(obs_polar_real[2], obs_polar_imag[2]));
 
     // Run RCS simulation
-    std::vector<double> rcs_results = ptr_rcs_c->_ptr_rcs_simulator->Run(
-      ptr_targets_c->_ptr_targets->ptr_targets_,
-      inc_dir_array,
-      obs_dir_array,
-      inc_polar,
-      obs_polar,
-      frequency,
-      density
-    );
+    std::vector<double> rcs_values =
+        rcs_sim.Run(ptr_targets_c->_ptr_targets, inc_dir_vect, obs_dir_vect,
+                    inc_polar, obs_polar, frequency, density);
 
-    // Copy results to output array
-    for (int i = 0; i < num_directions; i++) {
-      ptr_rcs_results[i] = rcs_results[i];
+    // Copy results back to C array
+    for (size_t i = 0;
+         i < rcs_values.size() && i < static_cast<size_t>(num_directions);
+         i++) {
+      rcs_result[i] = rcs_values[i];
     }
 
-    return RADARSIM_SUCCESS;
-  } catch (const std::exception &) {
-    return RADARSIM_ERROR_EXCEPTION;
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Run_RcsSimulator: Memory allocation failed: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to simulator
+    std::cerr << "Run_RcsSimulator: Invalid argument: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Run_RcsSimulator: Unexpected error: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Run_RcsSimulator: Unknown error occurred" << std::endl;
+    return 1;
   }
+
+  return 0;
 }
 
 /**
- * @brief Free the memory of RCS Simulator
+ * @brief Execute LiDAR point cloud simulation
  *
- * @param ptr_rcs_c Pointer to the RCS Simulator
+ * @details Performs LiDAR point cloud generation using ray tracing simulation.
+ * Shoots rays from the sensor position in specified directions and records
+ * hit points on target surfaces. Uses BVH acceleration for efficient
+ * computation.
+ *
+ * @param ptr_targets_c Pointer to the target management system - must not be
+ * NULL
+ * @param phi_array Array of azimuth angles (rad) - must not be NULL
+ * @param theta_array Array of elevation angles (rad) - must not be NULL
+ * @param num_rays Number of rays to shoot - must be > 0
+ * @param sensor_location LiDAR sensor position {x, y, z} (m) - must not be NULL
+ * @param cloud_points Output array for point cloud coordinates {x, y, z} - must
+ * not be NULL
+ * @param cloud_distances Output array for point distances (m) - must not be
+ * NULL
+ * @param cloud_intensities Output array for point intensities - must not be
+ * NULL
+ * @param max_points Maximum number of points to return - must be > 0
+ * @param actual_points Output: actual number of points found - must not be NULL
+ * @return int Status code (0 for success, 1 for failure)
  */
-void Free_RcsSimulator(t_RcsSimulator *ptr_rcs_c) {
-  if (ptr_rcs_c == nullptr) {
-    return;
-  }
-  delete static_cast<RcsSimulator<double> *>(ptr_rcs_c->_ptr_rcs_simulator);
-  free(ptr_rcs_c);
-}
-
-/*********************************************
- *
- *  LiDAR Simulator
- *
- *********************************************/
-struct s_LidarSimulator {
-  LidarSimulator<float> *_ptr_lidar_simulator;
-};
-
-/**
- * @brief Create a LiDAR Simulator, return the pointer to the LiDAR Simulator
- *
- * @return t_LidarSimulator* Pointer to the LiDAR Simulator
- */
-t_LidarSimulator *Create_LidarSimulator() {
-  t_LidarSimulator *ptr_lidar_c;
-  ptr_lidar_c = (t_LidarSimulator *)malloc(sizeof(t_LidarSimulator));
-  if (!ptr_lidar_c) {
-    return nullptr;
-  }
-
-  try {
-    ptr_lidar_c->_ptr_lidar_simulator = new LidarSimulator<float>();
-  } catch (const std::exception &) {
-    free(ptr_lidar_c);
-    return nullptr;
-  }
-  return ptr_lidar_c;
-}
-
-/**
- * @brief Add a target to the LiDAR Simulator
- *
- * @param ptr_lidar_c Pointer to the LiDAR Simulator
- * @param ptr_targets_c Pointer to the target list
- * @return int Status code (0 for success, error code for failure)
- */
-int Add_Target_To_LidarSimulator(t_LidarSimulator *ptr_lidar_c, t_Targets *ptr_targets_c) {
+int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
+                       double *theta_array, int num_rays,
+                       double *sensor_location, double *cloud_points,
+                       double *cloud_distances, double *cloud_intensities,
+                       int max_points, int *actual_points) {
   // Input validation
-  if (!ptr_lidar_c || !ptr_lidar_c->_ptr_lidar_simulator || !ptr_targets_c ||
-      !ptr_targets_c->_ptr_targets) {
-    return RADARSIM_ERROR_INVALID_PARAMETER;
-  }
-
-  if (IsFreeTier() && ptr_targets_c->_ptr_targets->ptr_targets_.size() > 2) {
-    return RADARSIM_ERROR_FREE_TIER_LIMIT;
-  }
-
-  try {
-    // Add all mesh targets from the target list
-    for (const auto& target : ptr_targets_c->_ptr_targets->ptr_targets_) {
-      ptr_lidar_c->_ptr_lidar_simulator->AddTarget(target);
-    }
-    return RADARSIM_SUCCESS;
-  } catch (const std::exception &) {
-    return RADARSIM_ERROR_EXCEPTION;
-  }
-}
-
-/**
- * @brief Run LiDAR point cloud simulation
- *
- * @param ptr_lidar_c Pointer to the LiDAR Simulator
- * @param phi Array of azimuth angles (rad)
- * @param theta Array of elevation angles (rad)
- * @param num_rays Number of rays (length of phi and theta arrays)
- * @param location LiDAR location [x, y, z] (m)
- * @param ptr_points_x Array to store point cloud x coordinates (m), size should be >= num_rays
- * @param ptr_points_y Array to store point cloud y coordinates (m), size should be >= num_rays
- * @param ptr_points_z Array to store point cloud z coordinates (m), size should be >= num_rays
- * @param ptr_ranges Array to store point ranges (m), size should be >= num_rays
- * @param ptr_num_points Pointer to store the actual number of points generated
- * @return int Status code (0 for success, error code for failure)
- */
-int Run_LidarSimulator(t_LidarSimulator *ptr_lidar_c,
-                       double *phi, double *theta, int num_rays,
-                       double *location,
-                       double *ptr_points_x, double *ptr_points_y, double *ptr_points_z,
-                       double *ptr_ranges, int *ptr_num_points) {
-  // Input validation
-  if (!ptr_lidar_c || !ptr_lidar_c->_ptr_lidar_simulator || !phi || !theta ||
-      !location || !ptr_points_x || !ptr_points_y || !ptr_points_z ||
-      !ptr_ranges || !ptr_num_points || num_rays <= 0) {
-    return RADARSIM_ERROR_INVALID_PARAMETER;
-  }
-
-  if (IsFreeTier() && num_rays > 1000) {
-    return RADARSIM_ERROR_FREE_TIER_LIMIT;
+  if (ptr_targets_c == nullptr || phi_array == nullptr ||
+      theta_array == nullptr || num_rays <= 0 || sensor_location == nullptr ||
+      cloud_points == nullptr || cloud_distances == nullptr ||
+      cloud_intensities == nullptr || max_points <= 0 ||
+      actual_points == nullptr) {
+    return 1;
   }
 
   try {
-    // Convert arrays to vectors with float precision
-    std::vector<float> phi_vec(num_rays);
-    std::vector<float> theta_vec(num_rays);
-    
+    // Create LiDAR simulator
+    LidarSimulator<float> lidar_sim;
+
+    // Convert C arrays to C++ vectors
+    std::vector<float> phi_vect;
+    std::vector<float> theta_vect;
+    phi_vect.reserve(num_rays);
+    theta_vect.reserve(num_rays);
+
     for (int i = 0; i < num_rays; i++) {
-      phi_vec[i] = static_cast<float>(phi[i]);
-      theta_vec[i] = static_cast<float>(theta[i]);
+      phi_vect.push_back(static_cast<float>(phi_array[i]));
+      theta_vect.push_back(static_cast<float>(theta_array[i]));
     }
-    
-    // Convert location to Vec3 with float precision
-    rsv::Vec3<float> lidar_location(static_cast<float>(location[0]), 
-                                    static_cast<float>(location[1]), 
-                                    static_cast<float>(location[2]));
-    
-    // Run the simulation
-    ptr_lidar_c->_ptr_lidar_simulator->Run(phi_vec, theta_vec, lidar_location);
-    
-    // Extract point cloud results
-    const auto& cloud = ptr_lidar_c->_ptr_lidar_simulator->cloud_;
-    int actual_points = static_cast<int>(cloud.size());
-    *ptr_num_points = actual_points;
-    
-    // Copy point cloud data to output arrays
-    for (int i = 0; i < actual_points; i++) {
-      const auto& ray = cloud[i];
-      if (ray.reflections_ > 0) {
-        // Use the last reflection point
-        ptr_points_x[i] = static_cast<double>(ray.location_[ray.reflections_][0]);
-        ptr_points_y[i] = static_cast<double>(ray.location_[ray.reflections_][1]);
-        ptr_points_z[i] = static_cast<double>(ray.location_[ray.reflections_][2]);
-        ptr_ranges[i] = static_cast<double>(ray.range_[ray.reflections_]);
-      }
+
+    // Create sensor position vector
+    rsv::Vec3<float> location(static_cast<float>(sensor_location[0]),
+                              static_cast<float>(sensor_location[1]),
+                              static_cast<float>(sensor_location[2]));
+
+    // Run LiDAR simulation
+    lidar_sim.Run(ptr_targets_c->_ptr_targets, phi_vect, theta_vect, location);
+
+    // Extract results from point cloud
+    int point_count = 0;
+    for (size_t i = 0; i < lidar_sim.cloud_.size() && point_count < max_points;
+         i++) {
+      const auto &ray = lidar_sim.cloud_[i];
+
+      // Calculate hit point coordinates using the final location from the ray
+      // arrays The final hit point is at location_[reflections_] and uses array
+      // indexing [0], [1], [2]
+      cloud_points[point_count * 3] =
+          static_cast<double>(ray.location_[ray.reflections_][0]);
+      cloud_points[point_count * 3 + 1] =
+          static_cast<double>(ray.location_[ray.reflections_][1]);
+      cloud_points[point_count * 3 + 2] =
+          static_cast<double>(ray.location_[ray.reflections_][2]);
+
+      // Store distance using the final range
+      cloud_distances[point_count] =
+          static_cast<double>(ray.range_[ray.reflections_]);
+
+      // Store intensity (use 1.0 as default since Ray doesn't have amplitude)
+      cloud_intensities[point_count] = 1.0;
+
+      point_count++;
     }
-    
-    return RADARSIM_SUCCESS;
-  } catch (const std::exception &) {
-    return RADARSIM_ERROR_EXCEPTION;
-  }
-}
 
-/**
- * @brief Clear the point cloud in the LiDAR Simulator
- *
- * @param ptr_lidar_c Pointer to the LiDAR Simulator
- */
-void Clear_LidarSimulator_Cloud(t_LidarSimulator *ptr_lidar_c) {
-  if (!ptr_lidar_c || !ptr_lidar_c->_ptr_lidar_simulator) {
-    return;
-  }
-  
-  try {
-    ptr_lidar_c->_ptr_lidar_simulator->cloud_.clear();
-  } catch (const std::exception &) {
-    // Silently ignore exceptions in clear operation
-  }
-}
+    // Return actual number of points found
+    *actual_points = point_count;
 
-/**
- * @brief Free the memory of LiDAR Simulator
- *
- * @param ptr_lidar_c Pointer to the LiDAR Simulator
- */
-void Free_LidarSimulator(t_LidarSimulator *ptr_lidar_c) {
-  if (ptr_lidar_c == nullptr) {
-    return;
+  } catch (const std::bad_alloc &e) {
+    // Memory allocation failed
+    std::cerr << "Run_LidarSimulator: Memory allocation failed: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (const std::invalid_argument &e) {
+    // Invalid parameters passed to simulator
+    std::cerr << "Run_LidarSimulator: Invalid argument: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (const std::exception &e) {
+    // Any other standard exception
+    std::cerr << "Run_LidarSimulator: Unexpected error: " << e.what()
+              << std::endl;
+    return 1;
+  } catch (...) {
+    // Any non-standard exception
+    std::cerr << "Run_LidarSimulator: Unknown error occurred" << std::endl;
+    return 1;
   }
-  delete static_cast<LidarSimulator<float> *>(ptr_lidar_c->_ptr_lidar_simulator);
-  free(ptr_lidar_c);
-}
 
-/*********************************************
- *
- *  Utility Functions
- *
- *********************************************/
-/**
- * @brief Check if a pointer is valid (non-NULL)
- *
- * @param ptr Pointer to check
- * @return int 1 if valid, 0 if NULL
- */
-int Is_Valid_Pointer(void *ptr) { return (ptr != nullptr) ? 1 : 0; }
-
-/**
- * @brief Get the number of available CPU cores for simulation
- *
- * @return int Number of CPU cores
- */
-int Get_CPU_Core_Count() {
-  return static_cast<int>(std::thread::hardware_concurrency());
+  return 0;
 }
 
 /*********************************************
