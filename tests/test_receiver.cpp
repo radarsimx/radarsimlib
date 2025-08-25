@@ -277,7 +277,7 @@ TEST_F(ReceiverTest, FreeReceiver) {
  */
 TEST_F(ReceiverTest, AutomaticCleanupControl) {
   // Test enabling automatic cleanup (should be enabled by default)
-  Enable_Automatic_Cleanup(true);
+//   Enable_Automatic_Cleanup(true);
 
   // Create a receiver that will be automatically cleaned up
   t_Receiver* rx =

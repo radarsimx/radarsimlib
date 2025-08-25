@@ -331,7 +331,7 @@ TEST_F(TransmitterTest, FreeTransmitter) {
  */
 TEST_F(TransmitterTest, AutomaticCleanupControl) {
   // Test enabling automatic cleanup (should be enabled by default)
-  Enable_Automatic_Cleanup(true);
+//   Enable_Automatic_Cleanup(true);
 
   // Create a transmitter that will be automatically cleaned up
   t_Transmitter* tx = Create_Transmitter(

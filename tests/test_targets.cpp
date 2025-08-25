@@ -333,7 +333,7 @@ TEST_F(TargetsTest, FreeTargets) {
  */
 TEST_F(TargetsTest, AutomaticCleanupControl) {
   // Test enabling automatic cleanup (should be enabled by default)
-  Enable_Automatic_Cleanup(true);
+//   Enable_Automatic_Cleanup(true);
 
   // Create a target list that will be automatically cleaned up
   t_Targets* targets = Init_Targets();

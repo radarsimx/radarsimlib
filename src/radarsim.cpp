@@ -106,18 +106,6 @@ void Get_Version(int version[3]) {
   version[2] = VERSION_PATCH;
 }
 
-/**
- * @brief Enable or disable automatic cleanup of all RadarSim objects
- *
- * @param enable True to enable automatic cleanup, false to disable
- */
-void Enable_Automatic_Cleanup(bool enable) {
-  std::lock_guard<std::mutex> lock(g_cleanup_mutex);
-  if (enable && !g_cleanup_registered) {
-    ensure_cleanup_registered_unsafe();
-  }
-  // Note: Cannot unregister atexit handlers once registered
-}
 
 /*********************************************
  *

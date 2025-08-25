@@ -46,17 +46,6 @@ extern "C" {
  */
 EXPORTED void Get_Version(int version[3]);
 
-/**
- * @brief Enable automatic cleanup of all RadarSim objects at program exit
- * 
- * @details When enabled, all created objects (Transmitter, Receiver, Radar, Targets)
- * will be automatically cleaned up when the program exits, eliminating the need
- * for manual Free_* calls. This is enabled by default.
- * 
- * @param enable True to enable automatic cleanup, false to disable
- */
-EXPORTED void Enable_Automatic_Cleanup(bool enable);
-
 /*********************************************
  *
  *  Transmitter
