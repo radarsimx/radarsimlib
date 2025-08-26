@@ -656,38 +656,6 @@ struct s_Targets {
   }
 };
 
-/*********************************************
- *
- *  Cleanup Implementation
- *
- *********************************************/
-namespace {
-// Implementation of cleanup function - now that all structs are defined
-void __CleanupAllObjects__() {
-  std::lock_guard<std::mutex> lock(g_cleanup_mutex);
-
-  // Clean up all objects - now we have complete type information
-  for (auto *tx : g_transmitters) {
-    delete tx;  // Calls ~s_Transmitter() destructor
-  }
-  for (auto *rx : g_receivers) {
-    delete rx;  // Calls ~s_Receiver() destructor
-  }
-  for (auto *radar : g_radars) {
-    delete radar;  // Calls ~s_Radar() destructor
-  }
-  for (auto *targets : g_targets) {
-    delete targets;  // Calls ~s_Targets() destructor
-  }
-
-  // Clear containers
-  g_transmitters.clear();
-  g_receivers.clear();
-  g_radars.clear();
-  g_targets.clear();
-}
-}  // namespace
-
 /**
  * @brief Initialize the target management system
  *
@@ -1168,6 +1136,38 @@ int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
 
   return 0;
 }
+
+/*********************************************
+ *
+ *  Cleanup Implementation
+ *
+ *********************************************/
+namespace {
+// Implementation of cleanup function - now that all structs are defined
+void __CleanupAllObjects__() {
+  std::lock_guard<std::mutex> lock(g_cleanup_mutex);
+
+  // Clean up all objects - now we have complete type information
+  for (auto *tx : g_transmitters) {
+    delete tx;  // Calls ~s_Transmitter() destructor
+  }
+  for (auto *rx : g_receivers) {
+    delete rx;  // Calls ~s_Receiver() destructor
+  }
+  for (auto *radar : g_radars) {
+    delete radar;  // Calls ~s_Radar() destructor
+  }
+  for (auto *targets : g_targets) {
+    delete targets;  // Calls ~s_Targets() destructor
+  }
+
+  // Clear containers
+  g_transmitters.clear();
+  g_receivers.clear();
+  g_radars.clear();
+  g_targets.clear();
+}
+}  // namespace
 
 /*********************************************
  *
