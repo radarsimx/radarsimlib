@@ -174,7 +174,7 @@ bool g_cleanup_registered = false;  ///< Tracks if atexit handler is registered
  * remaining objects. Ensures no memory leaks even if user forgets to call
  * Free_* functions.
  */
-void __CleanupAllObjects__() {
+void __Cleanup_All_Objects__() {
   std::lock_guard<std::mutex> lock(g_cleanup_mutex);
 
   // Clean up all objects - now we have complete type information
@@ -207,10 +207,10 @@ void __CleanupAllObjects__() {
  * @param container Reference to the appropriate global container
  */
 template <typename T>
-void __RegisterForCleanup__(T *obj, std::unordered_set<T *> &container) {
+void __Register_For_Cleanup__(T *obj, std::unordered_set<T *> &container) {
   std::lock_guard<std::mutex> lock(g_cleanup_mutex);
   if (!g_cleanup_registered) {
-    std::atexit(__CleanupAllObjects__);
+    std::atexit(__Cleanup_All_Objects__);
     g_cleanup_registered = true;
   }
   container.insert(obj);
@@ -225,7 +225,7 @@ void __RegisterForCleanup__(T *obj, std::unordered_set<T *> &container) {
  * @param container Reference to the appropriate global container
  */
 template <typename T>
-void __UnregisterForCleanup__(T *obj, std::unordered_set<T *> &container) {
+void __Unregister_For_Cleanup__(T *obj, std::unordered_set<T *> &container) {
   std::lock_guard<std::mutex> lock(g_cleanup_mutex);
   container.erase(obj);
 }
@@ -357,7 +357,7 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
   }
 
   // Register for automatic cleanup
-  __RegisterForCleanup__(ptr_tx_c, g_transmitters);
+  __Register_For_Cleanup__(ptr_tx_c, g_transmitters);
 
   return ptr_tx_c;
 }
@@ -506,7 +506,7 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
     return;
   }
   // Unregister from automatic cleanup
-  __UnregisterForCleanup__(ptr_tx_c, g_transmitters);
+  __Unregister_For_Cleanup__(ptr_tx_c, g_transmitters);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_tx_c;
 }
@@ -556,7 +556,7 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
         fs, rf_gain, resistor, baseband_gain, baseband_bw);
 
     // Register for automatic cleanup
-    __RegisterForCleanup__(ptr_rx_c, g_receivers);
+    __Register_For_Cleanup__(ptr_rx_c, g_receivers);
 
     return ptr_rx_c;
 
@@ -692,7 +692,7 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
     return;
   }
   // Unregister from automatic cleanup
-  __UnregisterForCleanup__(ptr_rx_c, g_receivers);
+  __Unregister_For_Cleanup__(ptr_rx_c, g_receivers);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_rx_c;
 }
@@ -798,7 +798,7 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
   }
 
   // Register for automatic cleanup
-  __RegisterForCleanup__(ptr_radar_c, g_radars);
+  __Register_For_Cleanup__(ptr_radar_c, g_radars);
 
   return ptr_radar_c;
 }
@@ -824,7 +824,7 @@ void Free_Radar(t_Radar *ptr_radar_c) {
     return;
   }
   // Unregister from automatic cleanup
-  __UnregisterForCleanup__(ptr_radar_c, g_radars);
+  __Unregister_For_Cleanup__(ptr_radar_c, g_radars);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_radar_c;
 }
@@ -864,7 +864,7 @@ t_Targets *Init_Targets() {
     ptr_targets_c->_ptr_targets = std::make_shared<TargetsManager<float>>();
 
     // Register for automatic cleanup
-    __RegisterForCleanup__(ptr_targets_c, g_targets);
+    __Register_For_Cleanup__(ptr_targets_c, g_targets);
 
     return ptr_targets_c;
 
@@ -1044,7 +1044,7 @@ void Free_Targets(t_Targets *ptr_targets_c) {
     return;
   }
   // Unregister from automatic cleanup
-  __UnregisterForCleanup__(ptr_targets_c, g_targets);
+  __Unregister_For_Cleanup__(ptr_targets_c, g_targets);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_targets_c;
 }
