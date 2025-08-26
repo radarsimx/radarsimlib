@@ -531,8 +531,9 @@ REM   Continues with warnings if test tools are not available
     )
     
     echo INFO: All tests passed successfully
+    goto BUILD_SUCCESS
 
-    echo.
+:BUILD_SUCCESS
     echo ====================================================================
     echo BUILD COMPLETED SUCCESSFULLY
     echo ====================================================================
