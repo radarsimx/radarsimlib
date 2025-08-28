@@ -164,8 +164,9 @@ std::unordered_set<t_Transmitter *> g_transmitters;
 std::unordered_set<t_Receiver *> g_receivers;
 std::unordered_set<t_Radar *> g_radars;
 std::unordered_set<t_Targets *> g_targets;
-std::mutex
+std::recursive_mutex
     g_cleanup_mutex;  ///< Protects concurrent access to cleanup containers
+                      ///< (recursive for safety)
 bool g_cleanup_registered = false;  ///< Tracks if atexit handler is registered
 
 /**
@@ -175,7 +176,7 @@ bool g_cleanup_registered = false;  ///< Tracks if atexit handler is registered
  * Free_* functions.
  */
 void __Cleanup_All_Objects__() {
-  std::lock_guard<std::mutex> lock(g_cleanup_mutex);
+  std::lock_guard<std::recursive_mutex> lock(g_cleanup_mutex);
 
   // Clean up all objects - now we have complete type information
   for (auto *tx : g_transmitters) {
@@ -208,7 +209,7 @@ void __Cleanup_All_Objects__() {
  */
 template <typename T>
 void __Register_For_Cleanup__(T *obj, std::unordered_set<T *> &container) {
-  std::lock_guard<std::mutex> lock(g_cleanup_mutex);
+  std::lock_guard<std::recursive_mutex> lock(g_cleanup_mutex);
   if (!g_cleanup_registered) {
     std::atexit(__Cleanup_All_Objects__);
     g_cleanup_registered = true;
@@ -226,7 +227,7 @@ void __Register_For_Cleanup__(T *obj, std::unordered_set<T *> &container) {
  */
 template <typename T>
 void __Unregister_For_Cleanup__(T *obj, std::unordered_set<T *> &container) {
-  std::lock_guard<std::mutex> lock(g_cleanup_mutex);
+  std::lock_guard<std::recursive_mutex> lock(g_cleanup_mutex);
   container.erase(obj);
 }
 }  // namespace
