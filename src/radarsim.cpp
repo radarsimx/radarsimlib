@@ -16,16 +16,15 @@
  * - Radar Cross Section (RCS) calculation
  * - LiDAR point cloud generation
  * - Radar-to-radar interference analysis
- * - Automatic memory management with RAII principles
+ * - Manual memory management with RAII principles
  * - Exception-safe resource handling
  * - GPU acceleration support (when available)
  *
  * @note All functions use defensive programming with comprehensive input
  * validation.
- * @note Memory management follows RAII principles with automatic cleanup
- * registration.
  * @warning Free tier has limitations on number of channels, targets, and mesh
  * complexity.
+ * @warning Users MUST call appropriate Free_* functions to prevent memory leaks
  *
  *    ----------
  *
@@ -48,7 +47,6 @@
 #include <exception>
 #include <iostream>
 #include <memory>
-#include <unordered_set>
 #include <vector>
 
 #include "libs/free_tier.hpp"
@@ -150,84 +148,6 @@ struct s_Targets {
 
 /*********************************************
  *
- *  Automatic Memory Management System
- *
- *********************************************/
-namespace {
-/**
- * @brief Global containers for automatic resource cleanup
- * @details Simple containers that track all allocated objects for
- * automatic cleanup at program termination. Uses std::atexit() registration.
- * @note Not thread-safe - assumes single-threaded C library usage pattern.
- */
-std::unordered_set<t_Transmitter *> g_transmitters;
-std::unordered_set<t_Receiver *> g_receivers;
-std::unordered_set<t_Radar *> g_radars;
-std::unordered_set<t_Targets *> g_targets;
-bool g_cleanup_registered = false;  ///< Tracks if atexit handler is registered
-
-/**
- * @brief Cleanup function registered with std::atexit()
- * @details Automatically called at program termination to clean up all
- * remaining objects. Ensures no memory leaks even if user forgets to call
- * Free_* functions.
- */
-void __Cleanup_All_Objects__() {
-  // Clean up all objects - now we have complete type information
-  for (auto *tx : g_transmitters) {
-    delete tx;  // Calls ~s_Transmitter() destructor
-  }
-  for (auto *rx : g_receivers) {
-    delete rx;  // Calls ~s_Receiver() destructor
-  }
-  for (auto *radar : g_radars) {
-    delete radar;  // Calls ~s_Radar() destructor
-  }
-  for (auto *targets : g_targets) {
-    delete targets;  // Calls ~s_Targets() destructor
-  }
-
-  // Clear containers
-  g_transmitters.clear();
-  g_receivers.clear();
-  g_radars.clear();
-  g_targets.clear();
-}
-
-/**
- * @brief Register object for automatic cleanup at program exit
- * @details Simple registration function that adds objects to cleanup
- * containers and ensures the atexit handler is registered exactly once.
- * @tparam T Object type (t_Transmitter, t_Receiver, etc.)
- * @param obj Pointer to object to register
- * @param container Reference to the appropriate global container
- * @note Not thread-safe - for single-threaded usage only
- */
-template <typename T>
-void __Register_For_Cleanup__(T *obj, std::unordered_set<T *> &container) {
-  if (!g_cleanup_registered) {
-    std::atexit(__Cleanup_All_Objects__);
-    g_cleanup_registered = true;
-  }
-  container.insert(obj);
-}
-
-/**
- * @brief Unregister object from automatic cleanup (for manual cleanup)
- * @details Simple unregistration function for objects that are manually freed
- * @tparam T Object type (t_Transmitter, t_Receiver, etc.)
- * @param obj Pointer to object to unregister
- * @param container Reference to the appropriate global container
- * @note Not thread-safe - for single-threaded usage only
- */
-template <typename T>
-void __Unregister_For_Cleanup__(T *obj, std::unordered_set<T *> &container) {
-  container.erase(obj);
-}
-}  // namespace
-
-/*********************************************
- *
  *  Version
  *
  *********************************************/
@@ -258,7 +178,7 @@ void Get_Version(int version[3]) {
  *
  * @details Creates a new transmitter with specified frequency modulation and
  * timing parameters. Performs comprehensive input validation and uses modern
- * C++ memory management with automatic registration for cleanup.
+ * C++ memory management for exception safety.
  *
  * @param[in] freq Frequency vector (Hz) - must not be NULL and contain valid
  * frequencies
@@ -274,11 +194,12 @@ void Get_Version(int version[3]) {
  * @return t_Transmitter* Pointer to the Transmitter object on success, NULL on
  * failure
  *
- * @note The returned pointer is automatically registered for cleanup at program
- * exit. For manual cleanup, use Free_Transmitter().
+ * @note The returned pointer must be freed using Free_Transmitter() to prevent
+ * memory leaks.
  *
  * @warning All input arrays must remain valid during the transmitter's lifetime
  *          or until the data is internally copied.
+ * @warning Users MUST call Free_Transmitter() to prevent memory leaks.
  */
 t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                   int waveform_size, double *freq_offset,
@@ -350,9 +271,6 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     delete ptr_tx_c;
     return nullptr;
   }
-
-  // Register for automatic cleanup
-  __Register_For_Cleanup__(ptr_tx_c, g_transmitters);
 
   return ptr_tx_c;
 }
@@ -487,8 +405,7 @@ int Get_Num_Txchannel(t_Transmitter *ptr_tx_c) {
  * @brief Safely release transmitter resources
  *
  * @details Safely releases transmitter resources using modern C++ RAII
- * principles. Unregisters from automatic cleanup system and properly
- * deallocates memory. Safe to call with NULL pointer.
+ * principles. Properly deallocates memory. Safe to call with NULL pointer.
  *
  * @param[in] ptr_tx_c Pointer to the Transmitter object to free - may be NULL
  *
@@ -500,8 +417,6 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == nullptr) {
     return;
   }
-  // Unregister from automatic cleanup
-  __Unregister_For_Cleanup__(ptr_tx_c, g_transmitters);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_tx_c;
 }
@@ -516,7 +431,7 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
  *
  * @details Creates a new receiver with specified sampling rate, RF gain, and
  * baseband processing parameters. Uses RAII principles with shared_ptr for
- * automatic cleanup and exception safety.
+ * exception safety.
  *
  * @param[in] fs Sampling rate (Hz) - must be > 0, typically 1 MHz to 100 MHz
  * @param[in] rf_gain RF amplifier gain (dB) - typical range: 0 to 60 dB
@@ -529,9 +444,10 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
  * @return t_Receiver* Pointer to the Receiver object on success, NULL on
  * failure
  *
- * @note The returned pointer is automatically registered for cleanup at program
- * exit. For manual cleanup, use Free_Receiver().
+ * @note The returned pointer must be freed using Free_Receiver() to prevent
+ * memory leaks.
  * @warning baseband_bw should satisfy Nyquist criterion: baseband_bw <= fs/2
+ * @warning Users MUST call Free_Receiver() to prevent memory leaks.
  */
 t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                             float baseband_gain, float baseband_bw) {
@@ -549,10 +465,6 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
     // Create the Receiver object using shared_ptr
     ptr_rx_c->_ptr_receiver = std::make_shared<Receiver<float>>(
         fs, rf_gain, resistor, baseband_gain, baseband_bw);
-
-    // Register for automatic cleanup
-    __Register_For_Cleanup__(ptr_rx_c, g_receivers);
-
     return ptr_rx_c;
 
   } catch (const std::bad_alloc &e) {
@@ -673,8 +585,7 @@ int Get_Num_Rxchannel(t_Receiver *ptr_rx_c) {
  * @brief Safely release receiver resources
  *
  * @details Safely releases receiver resources using modern C++ RAII principles.
- * Unregisters from automatic cleanup system and properly deallocates memory.
- * Safe to call with NULL pointer.
+ * Properly deallocates memory. Safe to call with NULL pointer.
  *
  * @param[in] ptr_rx_c Pointer to the Receiver object to free - may be NULL
  *
@@ -686,8 +597,6 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
   if (ptr_rx_c == nullptr) {
     return;
   }
-  // Unregister from automatic cleanup
-  __Unregister_For_Cleanup__(ptr_rx_c, g_receivers);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_rx_c;
 }
@@ -723,10 +632,11 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
  *
  * @note The radar system maintains references to the provided transmitter and
  * receiver. Do not free tx/rx objects while the radar system is in use.
- * @note The returned pointer is automatically registered for cleanup at program
- * exit. For manual cleanup, use Free_Radar().
+ * @note The returned pointer must be freed using Free_Radar() to prevent memory
+ * leaks.
  * @warning Transmitter and receiver objects must remain valid for the radar
  * system's lifetime.
+ * @warning Users MUST call Free_Radar() to prevent memory leaks.
  */
 t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                       double *frame_start_time, int num_frames, float *location,
@@ -792,9 +702,6 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
     return nullptr;
   }
 
-  // Register for automatic cleanup
-  __Register_For_Cleanup__(ptr_radar_c, g_radars);
-
   return ptr_radar_c;
 }
 
@@ -803,7 +710,7 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
  *
  * @details Safely releases radar system resources using modern C++ RAII
  * principles. The underlying transmitter and receiver objects are NOT
- * automatically freed. Safe to call with NULL pointer.
+ * freed. Safe to call with NULL pointer.
  *
  * @param[in] ptr_radar_c Pointer to the Radar system object to free - may be
  * NULL
@@ -818,8 +725,6 @@ void Free_Radar(t_Radar *ptr_radar_c) {
   if (ptr_radar_c == nullptr) {
     return;
   }
-  // Unregister from automatic cleanup
-  __Unregister_For_Cleanup__(ptr_radar_c, g_radars);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_radar_c;
 }
@@ -834,15 +739,16 @@ void Free_Radar(t_Radar *ptr_radar_c) {
  *
  * @details Creates and initializes both point and mesh target managers.
  * This function must be called before adding any targets to the simulation.
- * Uses RAII principles for automatic memory management.
+ * Uses RAII principles for memory management.
  *
  * @return t_Targets* Pointer to the target management system on success, NULL
  * on failure
  *
- * @note The returned pointer is automatically registered for cleanup at program
- * exit. For manual cleanup, use Free_Targets().
+ * @note The returned pointer must be freed using Free_Targets() to prevent
+ * memory leaks.
  * @note This function creates empty target managers - use Add_Point_Target()
  * and Add_Mesh_Target() to populate with actual targets.
+ * @warning Users MUST call Free_Targets() to prevent memory leaks.
  */
 t_Targets *Init_Targets() {
   t_Targets *ptr_targets_c = nullptr;
@@ -857,9 +763,6 @@ t_Targets *Init_Targets() {
     // Create the manager objects using shared_ptr
     ptr_targets_c->_ptr_points = std::make_shared<PointsManager<float>>();
     ptr_targets_c->_ptr_targets = std::make_shared<TargetsManager<float>>();
-
-    // Register for automatic cleanup
-    __Register_For_Cleanup__(ptr_targets_c, g_targets);
 
     return ptr_targets_c;
 
@@ -1030,7 +933,7 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
  *
  * @note After calling this function, ptr_targets_c becomes invalid and should
  * not be used.
- * @note All point and mesh targets managed by this system are automatically
+ * @note All point and mesh targets managed by this system are properly
  * released.
  * @note This function is exception-safe and will not throw.
  */
@@ -1038,8 +941,6 @@ void Free_Targets(t_Targets *ptr_targets_c) {
   if (ptr_targets_c == nullptr) {
     return;
   }
-  // Unregister from automatic cleanup
-  __Unregister_For_Cleanup__(ptr_targets_c, g_targets);
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_targets_c;
 }
