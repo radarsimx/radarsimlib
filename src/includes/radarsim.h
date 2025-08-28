@@ -3,29 +3,18 @@
  * @brief C API header for RadarSimCpp library
  *
  * @details
- * This header provides a comprehensive C-compatible interface for the
- * RadarSimCpp library, enabling high-fidelity radar simulation functionality
- * for C applications. The API implements the opaque pointer pattern to hide C++
- * implementation details while providing a clean, stable C interface.
+ * C-compatible interface for RadarSimCpp library with opaque pointer pattern.
+ * Provides radar simulation, target management, and automatic memory cleanup.
  *
- * Key features include:
- * - Transmitter and receiver configuration with full antenna pattern support
- * - Complete radar system modeling with platform motion
- * - Point target simulation for basic scenarios
- * - Mesh target simulation using Physical Optics ray tracing
- * - Radar Cross Section (RCS) calculation
- * - LiDAR point cloud generation
- * - Radar-to-radar interference analysis
- * - Automatic memory management with RAII principles
+ * Features:
+ * - Transmitter/receiver configuration with antenna patterns
+ * - Point and mesh target simulation
+ * - RCS and LiDAR simulation
+ * - Automatic memory management with cleanup registration
  * - Exception-safe resource handling
- * - GPU acceleration support (when available)
  *
- * @note All functions use defensive programming with comprehensive input
- * validation.
- * @note Memory management follows RAII principles with automatic cleanup
- * registration.
- * @warning Free tier has limitations on number of channels, targets, and mesh
- * complexity.
+ * @note Automatic cleanup provides safety net; manual Free_* calls recommended.
+ * @warning Free tier has channel, target, and mesh complexity limits.
  *
  *    ----------
  *
@@ -69,13 +58,8 @@ extern "C" {
 /**
  * @brief Get the RadarSimLib version information
  *
- * @details Retrieves the current version numbers for the RadarSimLib library.
- * Version follows semantic versioning (major.minor.patch).
- *
- * @param[out] version Pre-allocated array to store version numbers {major,
- * minor, patch} Array must have at least 3 elements
- *
- * @note This function is thread-safe and has no failure conditions
+ * @param[out] version Pre-allocated array {major, minor, patch} - must have 3
+ * elements
  */
 EXPORTED void Get_Version(int version[3]);
 
@@ -87,27 +71,16 @@ EXPORTED void Get_Version(int version[3]);
 /**
  * @brief Force cleanup of all automatically registered objects
  *
- * @details Manually triggers cleanup of all objects registered for automatic
- * cleanup. This function is called automatically when the DLL is unloaded, but
- * can be called manually if needed. This is useful for testing or when you want
- * to ensure cleanup happens at a specific time.
- *
- * @note This function is thread-safe but should not be called during normal
- * operation unless specifically needed.
- * @warning After calling this function, all automatically managed objects
- * become invalid and should not be used.
+ * @note Called automatically on DLL unload. Use for testing or explicit cleanup
+ * timing.
+ * @warning All automatically managed objects become invalid after calling.
  */
 EXPORTED void Force_Cleanup_All();
 
 /**
  * @brief Check if automatic cleanup is currently in progress
  *
- * @details Returns whether the automatic cleanup system is currently running.
- * This can be useful for debugging or avoiding operations during cleanup.
- *
  * @return int 1 if cleanup is in progress, 0 otherwise
- *
- * @note This function is thread-safe
  */
 EXPORTED int Is_Cleanup_In_Progress();
 
@@ -127,30 +100,18 @@ typedef struct s_Transmitter t_Transmitter;
 /**
  * @brief Create a Transmitter object with waveform parameters
  *
- * @details Creates a new transmitter with specified frequency modulation and
- * timing parameters. Performs comprehensive input validation and uses modern
- * C++ memory management with automatic registration for cleanup.
+ * @param[in] freq Frequency vector (Hz)
+ * @param[in] freq_time Timestamp vector for frequency samples (s)
+ * @param[in] waveform_size Length of freq and freq_time arrays
+ * @param[in] freq_offset Frequency offset per pulse (Hz)
+ * @param[in] pulse_start_time Pulse start time vector (s)
+ * @param[in] num_pulses Number of pulses
+ * @param[in] tx_power Transmitter power (dBm)
  *
- * @param[in] freq Frequency vector (Hz) - must not be NULL and contain valid
- * frequencies
- * @param[in] freq_time Timestamp vector for the frequency samples (s) - must
- * not be NULL and be monotonically increasing
- * @param[in] waveform_size Length of freq and freq_time arrays - must be > 0
- * @param[in] freq_offset Frequency offset per pulse (Hz) - must not be NULL,
- *                        length should equal num_pulses
- * @param[in] pulse_start_time Pulse start time vector (s) - must not be NULL,
- *                             length should equal num_pulses, monotonically
- * increasing
- * @param[in] num_pulses Number of pulses - must be > 0
- * @param[in] tx_power Transmitter power (dBm) - typical range: -30 to +60 dBm
+ * @return t_Transmitter* Pointer to Transmitter object, NULL on failure
  *
- * @return t_Transmitter* Pointer to the Transmitter object on success, NULL on
- * failure
- *
- * @note The returned pointer is automatically registered for cleanup at program
- * exit. For manual cleanup, use Free_Transmitter().
- * @warning All input arrays must remain valid during the transmitter's lifetime
- *          or until the data is internally copied.
+ * @note Automatically registered for cleanup. Use Free_Transmitter() for manual
+ * cleanup.
  */
 EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                            int waveform_size,
@@ -161,53 +122,29 @@ EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
 /**
  * @brief Add a transmitter channel with antenna pattern and modulation
  *
- * @details Configures a transmitter channel with 3D antenna radiation pattern,
- * polarization characteristics, and temporal/pulse modulation parameters.
- * Supports both amplitude and phase modulation with comprehensive pattern
- * definition.
+ * @param[in] location Channel location {x, y, z} (m)
+ * @param[in] polar_real Real part of polarization vector {x, y, z}
+ * @param[in] polar_imag Imaginary part of polarization vector {x, y, z}
+ * @param[in] phi Azimuth angles for radiation pattern (rad)
+ * @param[in] phi_ptn Normalized phi pattern values (dB)
+ * @param[in] phi_length Length of phi and phi_ptn arrays
+ * @param[in] theta Elevation angles for radiation pattern (rad)
+ * @param[in] theta_ptn Normalized theta pattern values (dB)
+ * @param[in] theta_length Length of theta and theta_ptn arrays
+ * @param[in] antenna_gain Maximum antenna gain (dB)
+ * @param[in] mod_t Modulation timestamps (s)
+ * @param[in] mod_var_real Real part of modulation amplitude
+ * @param[in] mod_var_imag Imaginary part of modulation amplitude
+ * @param[in] mod_length Length of modulation arrays (0 for no modulation)
+ * @param[in] pulse_mod_real Real part of pulse modulation
+ * @param[in] pulse_mod_imag Imaginary part of pulse modulation
+ * @param[in] delay Transmitting delay (s)
+ * @param[in] grid Ray occupancy grid resolution (rad)
+ * @param[in] ptr_tx_c Pointer to the Transmitter object
  *
- * @param[in] location Channel location {x, y, z} (m) - must not be NULL
- * @param[in] polar_real Real part of polarization vector {x, y, z} - must not
- * be NULL
- * @param[in] polar_imag Imaginary part of polarization vector {x, y, z} - must
- * not be NULL
- * @param[in] phi Azimuth angles for radiation pattern (rad) - must be uniformly
- * spaced, not NULL
- * @param[in] phi_ptn Normalized phi pattern values (dB) - must not be NULL,
- * same size as phi
- * @param[in] phi_length Length of phi and phi_ptn arrays - must be > 0
- * @param[in] theta Elevation angles for radiation pattern (rad) - must be
- * uniformly spaced, not NULL
- * @param[in] theta_ptn Normalized theta pattern values (dB) - must not be NULL,
- * same size as theta
- * @param[in] theta_length Length of theta and theta_ptn arrays - must be > 0
- * @param[in] antenna_gain Maximum antenna gain (dB) - added to pattern values
- * @param[in] mod_t Modulation timestamps (s) - must be uniformly spaced if
- * mod_length > 0
- * @param[in] mod_var_real Real part of modulation amplitude - must not be NULL
- * if mod_length > 0
- * @param[in] mod_var_imag Imaginary part of modulation amplitude - must not be
- * NULL if mod_length > 0
- * @param[in] mod_length Length of modulation arrays - use 0 for no temporal
- * modulation
- * @param[in] pulse_mod_real Real part of pulse modulation - must not be NULL,
- *                           length should be the same as the number of pulses
- * defined in Transmitter
- * @param[in] pulse_mod_imag Imaginary part of pulse modulation - must not be
- * NULL, length should be the same as the number of pulses defined in
- * Transmitter
- * @param[in] delay Transmitting delay (s) - time offset for this channel
- * @param[in] grid Ray occupancy grid resolution (rad) - angular resolution for
- * ray tracing
- * @param[in] ptr_tx_c Pointer to the Transmitter object - must not be NULL
+ * @return int 0 for success, 1 for failure
  *
- * @return int Status code: 0 for success, 1 for failure or free tier channel
- * limit exceeded
- *
- * @note Free tier is limited to 1 transmitter channel. Premium version supports
- * unlimited channels.
- * @warning Antenna patterns should be normalized and provided in dB relative to
- * maximum gain.
+ * @note Free tier limited to 1 transmitter channel.
  */
 EXPORTED int Add_Txchannel(float *location, float *polar_real,
                            float *polar_imag, float *phi, float *phi_ptn,
@@ -221,31 +158,18 @@ EXPORTED int Add_Txchannel(float *location, float *polar_real,
 /**
  * @brief Get the number of configured transmitter channels
  *
- * @details Returns the current number of channels added to the transmitter.
- * Each channel represents a separate antenna element with its own pattern and
- * characteristics.
+ * @param[in] ptr_tx_c Pointer to the Transmitter object
  *
- * @param[in] ptr_tx_c Pointer to the Transmitter object - must not be NULL
- *
- * @return int Number of configured transmitter channels (>= 0)
- *
- * @warning Undefined behavior if ptr_tx_c is NULL. Always validate pointer
- * before use.
+ * @return int Number of configured transmitter channels
  */
 EXPORTED int Get_Num_Txchannel(t_Transmitter *ptr_tx_c);
 
 /**
  * @brief Safely release transmitter resources
  *
- * @details Safely releases transmitter resources using modern C++ RAII
- * principles. Unregisters from automatic cleanup system and properly
- * deallocates memory. Safe to call with NULL pointer.
+ * @param[in] ptr_tx_c Pointer to the Transmitter object to free (may be NULL)
  *
- * @param[in] ptr_tx_c Pointer to the Transmitter object to free - may be NULL
- *
- * @note After calling this function, ptr_tx_c becomes invalid and should not be
- * used.
- * @note This function is exception-safe and will not throw.
+ * @note Automatically unregisters from cleanup system. Safe with NULL pointer.
  */
 EXPORTED void Free_Transmitter(t_Transmitter *ptr_tx_c);
 
@@ -265,24 +189,16 @@ typedef struct s_Receiver t_Receiver;
 /**
  * @brief Create a Receiver object with RF and baseband parameters
  *
- * @details Creates a new receiver with specified sampling rate, RF gain, and
- * baseband processing parameters. Uses RAII principles with shared_ptr for
- * automatic cleanup and exception safety.
+ * @param[in] fs Sampling rate (Hz)
+ * @param[in] rf_gain RF amplifier gain (dB)
+ * @param[in] resistor Load resistor (Ohm)
+ * @param[in] baseband_gain Baseband amplifier gain (dB)
+ * @param[in] baseband_bw Baseband bandwidth (Hz)
  *
- * @param[in] fs Sampling rate (Hz) - must be > 0, typically 1 MHz to 100 MHz
- * @param[in] rf_gain RF amplifier gain (dB) - typical range: 0 to 60 dB
- * @param[in] resistor Load resistor (Ohm) - must be > 0, typically 50 or 75 Ohm
- * @param[in] baseband_gain Baseband amplifier gain (dB) - typical range: 0 to
- * 60 dB
- * @param[in] baseband_bw Baseband bandwidth (Hz) - must be >= 0, should be <=
- * fs/2
+ * @return t_Receiver* Pointer to Receiver object, NULL on failure
  *
- * @return t_Receiver* Pointer to the Receiver object on success, NULL on
- * failure
- *
- * @note The returned pointer is automatically registered for cleanup at program
- * exit. For manual cleanup, use Free_Receiver().
- * @warning baseband_bw should satisfy Nyquist criterion: baseband_bw <= fs/2
+ * @note Automatically registered for cleanup. Use Free_Receiver() for manual
+ * cleanup.
  */
 EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
                                      float baseband_gain, float baseband_bw);
@@ -290,35 +206,21 @@ EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
 /**
  * @brief Add a receiver channel with antenna pattern configuration
  *
- * @details Configures a receiver channel with 3D antenna radiation pattern and
- * polarization characteristics. The receiver channel defines how
- * electromagnetic signals are captured and processed by the radar system.
+ * @param[in] location Channel location {x, y, z} (m)
+ * @param[in] polar_real Real part of polarization vector {x, y, z}
+ * @param[in] polar_imag Imaginary part of polarization vector {x, y, z}
+ * @param[in] phi Azimuth angles for radiation pattern (rad)
+ * @param[in] phi_ptn Normalized phi pattern values (dB)
+ * @param[in] phi_length Length of phi and phi_ptn arrays
+ * @param[in] theta Elevation angles for radiation pattern (rad)
+ * @param[in] theta_ptn Normalized theta pattern values (dB)
+ * @param[in] theta_length Length of theta and theta_ptn arrays
+ * @param[in] antenna_gain Maximum antenna gain (dB)
+ * @param[in] ptr_rx_c Pointer to the Receiver object
  *
- * @param[in] location Channel location {x, y, z} (m) - must not be NULL
- * @param[in] polar_real Real part of polarization vector {x, y, z} - must not
- * be NULL
- * @param[in] polar_imag Imaginary part of polarization vector {x, y, z} - must
- * not be NULL
- * @param[in] phi Azimuth angles for radiation pattern (rad) - must be uniformly
- * spaced, not NULL
- * @param[in] phi_ptn Normalized phi pattern values (dB) - must not be NULL,
- * same size as phi
- * @param[in] phi_length Length of phi and phi_ptn arrays - must be > 0
- * @param[in] theta Elevation angles for radiation pattern (rad) - must be
- * uniformly spaced, not NULL
- * @param[in] theta_ptn Normalized theta pattern values (dB) - must not be NULL,
- * same size as theta
- * @param[in] theta_length Length of theta and theta_ptn arrays - must be > 0
- * @param[in] antenna_gain Maximum antenna gain (dB) - added to pattern values
- * @param[in] ptr_rx_c Pointer to the Receiver object - must not be NULL
+ * @return int 0 for success, 1 for failure
  *
- * @return int Status code: 0 for success, 1 for failure or free tier channel
- * limit exceeded
- *
- * @note Free tier is limited to 1 receiver channel. Premium version supports
- * unlimited channels.
- * @warning Antenna patterns should be normalized and provided in dB relative to
- * maximum gain.
+ * @note Free tier limited to 1 receiver channel.
  */
 EXPORTED int Add_Rxchannel(float *location, float *polar_real,
                            float *polar_imag, float *phi, float *phi_ptn,
@@ -329,31 +231,18 @@ EXPORTED int Add_Rxchannel(float *location, float *polar_real,
 /**
  * @brief Get the number of configured receiver channels
  *
- * @details Returns the current number of channels added to the receiver.
- * Each channel represents a separate antenna element with its own pattern and
- * characteristics.
+ * @param[in] ptr_rx_c Pointer to the Receiver object
  *
- * @param[in] ptr_rx_c Pointer to the Receiver object - must not be NULL
- *
- * @return int Number of configured receiver channels (>= 0)
- *
- * @warning Undefined behavior if ptr_rx_c is NULL. Always validate pointer
- * before use.
+ * @return int Number of configured receiver channels
  */
 EXPORTED int Get_Num_Rxchannel(t_Receiver *ptr_rx_c);
 
 /**
  * @brief Safely release receiver resources
  *
- * @details Safely releases receiver resources using modern C++ RAII principles.
- * Unregisters from automatic cleanup system and properly deallocates memory.
- * Safe to call with NULL pointer.
+ * @param[in] ptr_rx_c Pointer to the Receiver object to free (may be NULL)
  *
- * @param[in] ptr_rx_c Pointer to the Receiver object to free - may be NULL
- *
- * @note After calling this function, ptr_rx_c becomes invalid and should not be
- * used.
- * @note This function is exception-safe and will not throw.
+ * @note Automatically unregisters from cleanup system. Safe with NULL pointer.
  */
 EXPORTED void Free_Receiver(t_Receiver *ptr_rx_c);
 
@@ -373,33 +262,20 @@ typedef struct s_Radar t_Radar;
 /**
  * @brief Create a complete Radar system from transmitter and receiver
  *
- * @details Creates a complete radar system by combining configured transmitter
- * and receiver components with platform motion parameters. Performs
- * comprehensive input validation and uses modern C++ memory management.
+ * @param[in] ptr_tx_c Pointer to configured Transmitter object
+ * @param[in] ptr_rx_c Pointer to configured Receiver object
+ * @param[in] frame_start_time Frame start time vector (s)
+ * @param[in] num_frames Number of radar frames
+ * @param[in] location Initial radar platform location {x, y, z} (m)
+ * @param[in] speed Radar platform velocity {x, y, z} (m/s)
+ * @param[in] rotation Initial radar platform orientation {x, y, z} (rad)
+ * @param[in] rotation_rate Radar platform angular velocity {x, y, z} (rad/s)
  *
- * @param[in] ptr_tx_c Pointer to configured Transmitter object - must not be
- * NULL
- * @param[in] ptr_rx_c Pointer to configured Receiver object - must not be NULL
- * @param[in] frame_start_time Frame start time vector (s) - must not be NULL,
- * monotonically increasing
- * @param[in] num_frames Number of radar frames - must be > 0
- * @param[in] location Initial radar platform location {x, y, z} (m) - must not
- * be NULL
- * @param[in] speed Radar platform velocity {x, y, z} (m/s) - must not be NULL
- * @param[in] rotation Initial radar platform orientation {x, y, z} (rad) - must
- * not be NULL
- * @param[in] rotation_rate Radar platform angular velocity {x, y, z} (rad/s) -
- * must not be NULL
+ * @return t_Radar* Pointer to Radar system object, NULL on failure
  *
- * @return t_Radar* Pointer to the Radar system object on success, NULL on
- * failure
- *
- * @note The radar system maintains references to the provided transmitter and
- * receiver. Do not free tx/rx objects while the radar system is in use.
- * @note The returned pointer is automatically registered for cleanup at program
- * exit. For manual cleanup, use Free_Radar().
- * @warning Transmitter and receiver objects must remain valid for the radar
- * system's lifetime.
+ * @note Automatically registered for cleanup. Use Free_Radar() for manual
+ * cleanup.
+ * @warning TX/RX objects must remain valid for radar system's lifetime.
  */
 EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                                double *frame_start_time, int num_frames,
@@ -409,18 +285,11 @@ EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
 /**
  * @brief Safely release radar system resources
  *
- * @details Safely releases radar system resources using modern C++ RAII
- * principles. The underlying transmitter and receiver objects are NOT
- * automatically freed. Safe to call with NULL pointer.
+ * @param[in] ptr_radar_c Pointer to the Radar system object to free (may be
+ * NULL)
  *
- * @param[in] ptr_radar_c Pointer to the Radar system object to free - may be
- * NULL
- *
- * @note After calling this function, ptr_radar_c becomes invalid and should not
- * be used.
- * @note Transmitter and receiver objects remain valid and must be freed
- * separately.
- * @note This function is exception-safe and will not throw.
+ * @note TX/RX objects are NOT freed - manage separately. Auto-unregisters from
+ * cleanup.
  */
 EXPORTED void Free_Radar(t_Radar *ptr_radar_c);
 
@@ -440,44 +309,26 @@ typedef struct s_Targets t_Targets;
 /**
  * @brief Initialize the target management system
  *
- * @details Creates and initializes both point and mesh target managers.
- * This function must be called before adding any targets to the simulation.
- * Uses RAII principles for automatic memory management.
+ * @return t_Targets* Pointer to target management system, NULL on failure
  *
- * @return t_Targets* Pointer to the target management system on success, NULL
- * on failure
- *
- * @note The returned pointer is automatically registered for cleanup at program
- * exit. For manual cleanup, use Free_Targets().
- * @note This function creates empty target managers - use Add_Point_Target()
- * and Add_Mesh_Target() to populate with actual targets.
+ * @note Automatically registered for cleanup. Use Free_Targets() for manual
+ * cleanup.
+ * @note Use Add_Point_Target() and Add_Mesh_Target() to populate targets.
  */
 EXPORTED t_Targets *Init_Targets();
 
 /**
  * @brief Add an ideal point scatterer to the simulation
  *
- * @details Adds a point target with specified radar cross section and kinematic
- * properties. Point targets are ideal scatterers used for basic radar
- * simulations and provide fast computation for simple scenarios.
+ * @param[in] location Target's initial location {x, y, z} (m)
+ * @param[in] speed Target's velocity vector {x, y, z} (m/s)
+ * @param[in] rcs Target's radar cross section (dBsm)
+ * @param[in] phs Target's initial phase (rad)
+ * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @param[in] location Target's initial location {x, y, z} (m) - must not be
- * NULL
- * @param[in] speed Target's velocity vector {x, y, z} (m/s) - must not be NULL
- * @param[in] rcs Target's radar cross section (dBsm) - typical range: -40 to
- * +40 dBsm
- * @param[in] phs Target's initial phase (rad) - range: 0 to 2π, affects
- * interference patterns
- * @param[in] ptr_targets_c Pointer to the target management system - must not
- * be NULL
+ * @return int 0 for success, 1 for failure
  *
- * @return int Status code: 0 for success, 1 for failure or free tier target
- * limit exceeded
- *
- * @note Free tier is limited to 2 point targets. Premium version supports
- * unlimited targets.
- * @note Point targets are assumed to be isotropic scatterers (RCS independent
- * of aspect angle).
+ * @note Free tier limited to 2 point targets.
  */
 EXPORTED int Add_Point_Target(float *location, float *speed, float rcs,
                               float phs, t_Targets *ptr_targets_c);
@@ -485,41 +336,24 @@ EXPORTED int Add_Point_Target(float *location, float *speed, float rcs,
 /**
  * @brief Add a complex 3D mesh target to the simulation
  *
- * @details Adds a realistic 3D mesh target with electromagnetic material
- * properties and full 6-DOF motion characteristics. Mesh targets provide
- * accurate scattering behavior using Physical Optics and ray tracing methods.
+ * @param[in] points Mesh vertex coordinates [x₁,y₁,z₁, x₂,y₂,z₂, ...]
+ * @param[in] cells Triangle connectivity array [v₁,v₂,v₃, ...] (0-indexed)
+ * @param[in] cell_size Number of triangular mesh faces
+ * @param[in] origin Target's local coordinate origin (m)
+ * @param[in] location Target's initial location (m)
+ * @param[in] speed Target's velocity vector (m/s)
+ * @param[in] rotation Target's initial orientation (rad)
+ * @param[in] rotation_rate Target's angular velocity (rad/s)
+ * @param[in] ep_real Real part of relative permittivity εᵣ
+ * @param[in] ep_imag Imaginary part of relative permittivity εᵣ
+ * @param[in] mu_real Real part of relative permeability μᵣ
+ * @param[in] mu_imag Imaginary part of relative permeability μᵣ
+ * @param[in] is_ground Flag for ground surface (affects ray tracing)
+ * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @param[in] points Mesh vertex coordinates array [x₁,y₁,z₁, x₂,y₂,z₂, ...] -
- * must not be NULL
- * @param[in] cells Triangle connectivity array [v₁,v₂,v₃, ...] (0-indexed) -
- * must not be NULL
- * @param[in] cell_size Number of triangular mesh faces - must be > 0
- * @param[in] origin Target's local coordinate origin (m) - must not be NULL
- * @param[in] location Target's initial location (m) - must not be NULL
- * @param[in] speed Target's velocity vector (m/s) - must not be NULL
- * @param[in] rotation Target's initial orientation (rad) - must not be NULL
- * @param[in] rotation_rate Target's angular velocity (rad/s) - must not be NULL
- * @param[in] ep_real Real part of relative permittivity εᵣ - typical range:
- * 1-100
- * @param[in] ep_imag Imaginary part of relative permittivity εᵣ - ≥ 0,
- * represents dielectric loss
- * @param[in] mu_real Real part of relative permeability μᵣ - typically ≈ 1 for
- * non-magnetic materials
- * @param[in] mu_imag Imaginary part of relative permeability μᵣ - ≥ 0,
- * represents magnetic loss
- * @param[in] is_ground Flag indicating if target represents ground surface
- * (affects ray tracing)
- * @param[in] ptr_targets_c Pointer to the target management system - must not
- * be NULL
- *
- * @return int Status code: 0 for success, 1 for failure or free tier limits
- * exceeded
+ * @return int 0 for success, 1 for failure
  *
  * @note Free tier limits: 2 mesh targets max, 8 triangles per mesh max.
- * @note Mesh vertices should be in counter-clockwise order for proper normal
- * calculation.
- * @warning Large meshes (>1000 triangles) may require significant computation
- * time and memory.
  */
 EXPORTED int Add_Mesh_Target(float *points, int *cells, int cell_size,
                              float *origin, float *location, float *speed,
@@ -531,18 +365,10 @@ EXPORTED int Add_Mesh_Target(float *points, int *cells, int cell_size,
 /**
  * @brief Safely release target management system resources
  *
- * @details Safely releases all target-related resources including point and
- * mesh targets using modern C++ RAII principles. Safe to call with NULL
- * pointer.
+ * @param[in] ptr_targets_c Pointer to the target management system to free (may
+ * be NULL)
  *
- * @param[in] ptr_targets_c Pointer to the target management system to free -
- * may be NULL
- *
- * @note After calling this function, ptr_targets_c becomes invalid and should
- * not be used.
- * @note All point and mesh targets managed by this system are automatically
- * released.
- * @note This function is exception-safe and will not throw.
+ * @note Auto-unregisters from cleanup system. Safe with NULL pointer.
  */
 EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
 
@@ -554,30 +380,17 @@ EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
 /**
  * @brief Execute comprehensive radar simulation for all configured targets
  *
- * @details Runs complete radar simulation including both point and mesh
- * targets. Initializes baseband signal buffers, processes targets based on
- * their type, and synchronizes results. Supports GPU acceleration when
- * available for improved performance on complex scenarios.
+ * @param[in] ptr_radar_c Pointer to the radar system
+ * @param[in] ptr_targets_c Pointer to the target management system
+ * @param[in] level Ray tracing quality level for mesh targets (1-5)
+ * @param[in] density Ray density for mesh simulation (rays per wavelength²)
+ * @param[in] ray_filter Ray filter range {min_range, max_range} (m)
+ * @param[out] ptr_bb_real Real part of baseband signal buffer (pre-allocated)
+ * @param[out] ptr_bb_imag Imaginary part of baseband signal buffer
+ * (pre-allocated)
  *
- * @param[in] ptr_radar_c Pointer to the radar system - must not be NULL and
- * fully configured
- * @param[in] ptr_targets_c Pointer to the target management system - must not
- * be NULL and finalized
- * @param[in] level Ray tracing quality level for mesh targets (1-5: higher =
- * more accurate but slower)
- * @param[in] density Ray density for mesh simulation (rays per square
- * wavelength) - typical: 1-10
- * @param[in] ray_filter Ray filter range {min_range, max_range} (m) - must not
- * be NULL
- * @param[out] ptr_bb_real Real part of baseband signal buffer - must be
- * pre-allocated, not NULL
- * @param[out] ptr_bb_imag Imaginary part of baseband signal buffer - must be
- * pre-allocated, not NULL
- *
- * @note Buffer size must match: [num_pulses × num_rx_channels ×
- * samples_per_pulse]
- * @warning Output buffers must be properly allocated before calling this
- * function. Buffer size mismatch will cause undefined behavior.
+ * @note Buffer size: [num_pulses × num_rx_channels × samples_per_pulse]
+ * @warning Buffers must be pre-allocated to correct size.
  */
 EXPORTED void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
                                  int level, float density, int *ray_filter,
@@ -586,25 +399,15 @@ EXPORTED void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
 /**
  * @brief Execute radar-to-radar interference simulation
  *
- * @details Simulates electromagnetic interference between two radar systems.
- * The victim radar receives interference from the interfering radar, allowing
- * analysis of interference effects on radar performance and spectrum sharing
- * scenarios.
+ * @param[in] ptr_radar_c Pointer to the victim radar system
+ * @param[in] ptr_interf_radar_c Pointer to the interfering radar system
+ * @param[out] ptr_interf_real Real part of interference signal buffer
+ * (pre-allocated)
+ * @param[out] ptr_interf_imag Imaginary part of interference signal buffer
+ * (pre-allocated)
  *
- * @param[in] ptr_radar_c Pointer to the victim radar system - must not be NULL
- * and fully configured
- * @param[in] ptr_interf_radar_c Pointer to the interfering radar system - must
- * not be NULL and fully configured
- * @param[out] ptr_interf_real Real part of the interference baseband buffer -
- * must be pre-allocated, not NULL
- * @param[out] ptr_interf_imag Imaginary part of the interference baseband
- * buffer - must be pre-allocated, not NULL
- *
- * @note Both radar systems must be fully configured with transmitters,
- * receivers, and motion parameters.
- * @note Buffer size must match the victim radar's baseband buffer dimensions.
- * @warning Output buffers must be properly allocated before calling this
- * function.
+ * @note Buffer size: [num_pulses × num_rx_channels × samples_per_pulse]
+ * @warning Buffers must match victim radar's baseband dimensions.
  */
 EXPORTED void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
                                         t_Radar *ptr_interf_radar_c,
@@ -614,43 +417,26 @@ EXPORTED void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
 /**
  * @brief Execute Radar Cross Section (RCS) simulation using Physical Optics
  *
- * @details Calculates the monostatic and bistatic Radar Cross Section of mesh
- * targets using high-fidelity Physical Optics ray tracing methods. Supports
- * multiple incident and observation direction pairs for comprehensive RCS
- * pattern analysis. Uses BVH acceleration structures for efficient ray-triangle
- * intersection computation.
- *
  * @param[in] ptr_targets_c Pointer to target management system with mesh
- * targets - must not be NULL
- * @param[in] inc_dir_array Incident direction vectors array [x₁,y₁,z₁,
- * x₂,y₂,z₂, ...] - must not be NULL, unit vectors
- * @param[in] obs_dir_array Observation direction vectors array [x₁,y₁,z₁,
- * x₂,y₂,z₂, ...] - must not be NULL, unit vectors
- * @param[in] num_directions Number of direction pairs for RCS calculation -
- * must be > 0
+ * targets
+ * @param[in] inc_dir_array Incident direction vectors [x₁,y₁,z₁, x₂,y₂,z₂, ...]
+ * @param[in] obs_dir_array Observation direction vectors [x₁,y₁,z₁, x₂,y₂,z₂,
+ * ...]
+ * @param[in] num_directions Number of direction pairs for RCS calculation
  * @param[in] inc_polar_real Real part of incident polarization vector {x, y, z}
- * - must not be NULL, unit vector
  * @param[in] inc_polar_imag Imaginary part of incident polarization vector {x,
- * y, z} - must not be NULL
+ * y, z}
  * @param[in] obs_polar_real Real part of observation polarization vector {x, y,
- * z} - must not be NULL, unit vector
+ * z}
  * @param[in] obs_polar_imag Imaginary part of observation polarization vector
- * {x, y, z} - must not be NULL
- * @param[in] frequency Electromagnetic frequency (Hz) - must be > 0, typically
- * 1 GHz to 100 GHz
- * @param[in] density Ray density for Physical Optics (rays per square
- * wavelength) - must be > 0, typical: 5-20
- * @param[out] rcs_result Output array for RCS values (m²) - must be
- * pre-allocated, size ≥ num_directions
+ * {x, y, z}
+ * @param[in] frequency Electromagnetic frequency (Hz)
+ * @param[in] density Ray density for Physical Optics (rays per wavelength²)
+ * @param[out] rcs_result Output array for RCS values (m²) - pre-allocated
  *
- * @return int Status code: 0 for success, 1 for failure or invalid parameters
+ * @return int 0 for success, 1 for failure
  *
- * @note Higher density values provide more accurate results but increase
- * computation time exponentially.
- * @note For monostatic RCS: incident and observation directions should be
- * identical but opposite.
- * @warning Direction vectors should be normalized unit vectors pointing away
- * from the target.
+ * @note Higher density = more accurate but slower computation.
  */
 EXPORTED int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
                               double *obs_dir_array, int num_directions,
@@ -662,41 +448,24 @@ EXPORTED int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
 /**
  * @brief Execute LiDAR point cloud simulation using ray tracing
  *
- * @details Performs high-fidelity LiDAR point cloud generation using ray
- * tracing simulation. Shoots rays from the sensor position in specified angular
- * directions and records intersection points on target mesh surfaces. Uses BVH
- * acceleration structures for efficient ray-triangle intersection computation.
- *
  * @param[in] ptr_targets_c Pointer to target management system with mesh
- * targets - must not be NULL
- * @param[in] phi_array Azimuth angle array (rad) - must not be NULL, range: [0,
- * 2π]
- * @param[in] theta_array Elevation angle array (rad) - must not be NULL, range:
- * [0, π]
- * @param[in] num_rays Number of rays to shoot - must be > 0, equal to array
- * sizes
- * @param[in] sensor_location LiDAR sensor position {x, y, z} (m) - must not be
- * NULL
+ * targets
+ * @param[in] phi_array Azimuth angle array (rad) - range: [0, 2π]
+ * @param[in] theta_array Elevation angle array (rad) - range: [0, π]
+ * @param[in] num_rays Number of rays to shoot
+ * @param[in] sensor_location LiDAR sensor position {x, y, z} (m)
  * @param[out] cloud_points Output point cloud coordinates [x₁,y₁,z₁, x₂,y₂,z₂,
- * ...] - must be pre-allocated
- * @param[out] cloud_distances Output array for point distances from sensor (m)
- * - must be pre-allocated
- * @param[out] cloud_intensities Output array for point intensities (normalized)
- * - must be pre-allocated
- * @param[in] max_points Maximum number of points to return - must be > 0,
- * limits output size
- * @param[out] actual_points Actual number of points found and returned - must
- * not be NULL
+ * ...] (pre-allocated)
+ * @param[out] cloud_distances Output distances from sensor (m) (pre-allocated)
+ * @param[out] cloud_intensities Output point intensities (pre-allocated)
+ * @param[in] max_points Maximum number of points to return
+ * @param[out] actual_points Actual number of points found and returned
  *
- * @return int Status code: 0 for success, 1 for failure or invalid parameters
+ * @return int 0 for success, 1 for failure
  *
- * @note Spherical coordinate convention: φ=0 is +X axis, θ=0 is +Z axis
- * (elevation from XY-plane)
- * @note Only first-surface intersections are recorded (no multi-bounce or
- * penetration).
- * @note Output arrays must be allocated for at least max_points elements.
- * @warning Rays that miss all targets will not contribute to the output point
- * cloud.
+ * @note φ=0 is +X axis, θ=0 is +Z axis. Only first-surface intersections
+ * recorded.
+ * @warning Output arrays must be allocated for at least max_points elements.
  */
 EXPORTED int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
                                 double *theta_array, int num_rays,
