@@ -349,7 +349,6 @@ bool AutoCleanupRegistry::cleanup_in_progress = false;
 #ifdef _WIN32
 /**
  * @brief DLL entry point for Windows
- * @details Handles DLL lifecycle events, particularly cleanup on unload
  */
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call,
                       LPVOID lpReserved) {
@@ -369,9 +368,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call,
   return TRUE;
 }
 #else
+// Non-Windows platforms: Use constructor/destructor attributes if supported
+#if defined(__GNUC__) || defined(__clang__)
 /**
  * @brief Constructor function for non-Windows platforms
- * @details Called when the shared library is loaded
  */
 __attribute__((constructor)) static void library_init() {
   // Library initialization if needed
@@ -379,11 +379,16 @@ __attribute__((constructor)) static void library_init() {
 
 /**
  * @brief Destructor function for non-Windows platforms
- * @details Called when the shared library is unloaded
  */
 __attribute__((destructor)) static void library_cleanup() {
   AutoCleanupRegistry::cleanup_all();
 }
+#else
+// For compilers without constructor/destructor support,
+// manual cleanup management is required
+#warning \
+    "Automatic cleanup not supported on this compiler. Manual cleanup required."
+#endif
 #endif
 
 /*********************************************
