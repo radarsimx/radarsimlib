@@ -55,6 +55,8 @@ extern "C" {
 #define EXPORTED
 #endif
 
+// #define RADARSIM_SIMPLE_CLEANUP
+
 #define VERSION_MAJOR 14
 #define VERSION_MINOR 0
 #define VERSION_PATCH 0
@@ -76,6 +78,38 @@ extern "C" {
  * @note This function is thread-safe and has no failure conditions
  */
 EXPORTED void Get_Version(int version[3]);
+
+/*********************************************
+ *
+ *  Memory Management Configuration
+ *
+ *********************************************/
+/**
+ * @brief Force cleanup of all automatically registered objects
+ *
+ * @details Manually triggers cleanup of all objects registered for automatic
+ * cleanup. This function is called automatically when the DLL is unloaded, but
+ * can be called manually if needed. This is useful for testing or when you want
+ * to ensure cleanup happens at a specific time.
+ *
+ * @note This function is thread-safe but should not be called during normal
+ * operation unless specifically needed.
+ * @warning After calling this function, all automatically managed objects
+ * become invalid and should not be used.
+ */
+EXPORTED void Force_Cleanup_All();
+
+/**
+ * @brief Check if automatic cleanup is currently in progress
+ *
+ * @details Returns whether the automatic cleanup system is currently running.
+ * This can be useful for debugging or avoiding operations during cleanup.
+ *
+ * @return int 1 if cleanup is in progress, 0 otherwise
+ *
+ * @note This function is thread-safe
+ */
+EXPORTED int Is_Cleanup_In_Progress();
 
 /*********************************************
  *

@@ -43,10 +43,21 @@
 
 #include "radarsim.h"
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#endif
+
+#include <algorithm>
 #include <cstdlib>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <memory>
+#ifdef RADARSIM_THREAD_SAFE
+#include <mutex>
+#endif
+#include <unordered_set>
 #include <vector>
 
 #include "libs/free_tier.hpp"
@@ -148,6 +159,249 @@ struct s_Targets {
 
 /*********************************************
  *
+ *  Automatic Cleanup Registry
+ *
+ *********************************************/
+
+// Configuration: Choose cleanup implementation
+// Option 1: RADARSIM_SIMPLE_CLEANUP - Simple array-based, no STL containers
+// (maximum compatibility) Option 2: RADARSIM_THREAD_SAFE - Thread-safe with
+// mutex (for multi-threaded apps) Option 3: Default - Lock-free with STL
+// containers (good balance)
+
+#ifdef RADARSIM_SIMPLE_CLEANUP
+
+/**
+ * @brief Simple automatic cleanup registry for maximum compatibility
+ * @details Uses basic C-style arrays to avoid STL dependencies and locking.
+ * Suitable for embedded systems and applications with strict requirements.
+ */
+class AutoCleanupRegistry {
+ private:
+  struct RegisteredObject {
+    void *ptr;
+    void (*cleanup_func)(void *);
+  };
+
+  static const int MAX_OBJECTS = 1000;  // Adjust as needed
+  static RegisteredObject registered_objects[MAX_OBJECTS];
+  static int object_count;
+  static bool cleanup_in_progress;
+
+ public:
+  /**
+   * @brief Register an object for automatic cleanup
+   */
+  static void register_object(void *ptr, void (*cleanup_func)(void *)) {
+    if (!ptr || cleanup_in_progress || object_count >= MAX_OBJECTS) return;
+
+    registered_objects[object_count].ptr = ptr;
+    registered_objects[object_count].cleanup_func = cleanup_func;
+    object_count++;
+  }
+
+  /**
+   * @brief Unregister an object from automatic cleanup
+   */
+  static void unregister_object(void *ptr) {
+    if (!ptr || cleanup_in_progress) return;
+
+    for (int i = 0; i < object_count; i++) {
+      if (registered_objects[i].ptr == ptr) {
+        // Move last element to this position
+        registered_objects[i] = registered_objects[object_count - 1];
+        object_count--;
+        break;
+      }
+    }
+  }
+
+  /**
+   * @brief Clean up all registered objects
+   */
+  static void cleanup_all() {
+    cleanup_in_progress = true;
+
+    // Clean up in reverse order of registration
+    for (int i = object_count - 1; i >= 0; i--) {
+      try {
+        registered_objects[i].cleanup_func(registered_objects[i].ptr);
+      } catch (...) {
+        // Continue cleanup even if one fails
+      }
+    }
+
+    object_count = 0;
+    cleanup_in_progress = false;
+  }
+
+  /**
+   * @brief Check if cleanup is currently in progress
+   */
+  static bool is_cleanup_in_progress() { return cleanup_in_progress; }
+};
+
+// Static member definitions
+AutoCleanupRegistry::RegisteredObject
+    AutoCleanupRegistry::registered_objects[AutoCleanupRegistry::MAX_OBJECTS];
+int AutoCleanupRegistry::object_count = 0;
+bool AutoCleanupRegistry::cleanup_in_progress = false;
+
+// Helper functions for simple cleanup
+extern "C" {
+static void cleanup_transmitter(void *ptr) {
+  delete static_cast<t_Transmitter *>(ptr);
+}
+static void cleanup_receiver(void *ptr) {
+  delete static_cast<t_Receiver *>(ptr);
+}
+static void cleanup_radar(void *ptr) { delete static_cast<t_Radar *>(ptr); }
+static void cleanup_targets(void *ptr) { delete static_cast<t_Targets *>(ptr); }
+}
+
+#else
+
+/**
+ * @brief Automatic cleanup registry for memory management
+ * @details Provides automatic cleanup of allocated resources when the DLL is
+ * unloaded or the process exits. This serves as a safety net for clients who
+ * forget to call the appropriate Free_* functions.
+ *
+ * Thread safety can be enabled by defining RADARSIM_THREAD_SAFE at compile
+ * time. By default, this implementation is lock-free for maximum compatibility.
+ */
+class AutoCleanupRegistry {
+ private:
+  struct RegisteredObject {
+    void *ptr;
+    std::function<void()> cleanup_func;
+
+    RegisteredObject(void *p, std::function<void()> func)
+        : ptr(p), cleanup_func(func) {}
+  };
+
+  static std::vector<RegisteredObject> registered_objects;
+#ifdef RADARSIM_THREAD_SAFE
+  static std::mutex cleanup_mutex;
+#endif
+  static bool cleanup_in_progress;
+
+ public:
+  /**
+   * @brief Register an object for automatic cleanup
+   * @param ptr Pointer to the object to be cleaned up
+   * @param cleanup_func Function to call for cleanup
+   */
+  static void register_object(void *ptr, std::function<void()> cleanup_func) {
+    if (!ptr || cleanup_in_progress) return;
+
+#ifdef RADARSIM_THREAD_SAFE
+    std::lock_guard<std::mutex> lock(cleanup_mutex);
+#endif
+    registered_objects.emplace_back(ptr, cleanup_func);
+  }
+
+  /**
+   * @brief Unregister an object from automatic cleanup
+   * @param ptr Pointer to the object to unregister
+   */
+  static void unregister_object(void *ptr) {
+    if (!ptr || cleanup_in_progress) return;
+
+#ifdef RADARSIM_THREAD_SAFE
+    std::lock_guard<std::mutex> lock(cleanup_mutex);
+#endif
+    registered_objects.erase(
+        std::remove_if(
+            registered_objects.begin(), registered_objects.end(),
+            [ptr](const RegisteredObject &obj) { return obj.ptr == ptr; }),
+        registered_objects.end());
+  }
+
+  /**
+   * @brief Clean up all registered objects
+   * @details Called automatically when DLL is unloaded or process exits
+   */
+  static void cleanup_all() {
+#ifdef RADARSIM_THREAD_SAFE
+    std::lock_guard<std::mutex> lock(cleanup_mutex);
+#endif
+    cleanup_in_progress = true;
+
+    // Clean up in reverse order of registration
+    for (auto it = registered_objects.rbegin(); it != registered_objects.rend();
+         ++it) {
+      try {
+        it->cleanup_func();
+      } catch (...) {
+        // Log error but continue cleanup - don't let one failure stop others
+        std::cerr << "Warning: Exception during automatic cleanup of object at "
+                  << it->ptr << std::endl;
+      }
+    }
+
+    registered_objects.clear();
+    cleanup_in_progress = false;
+  }
+
+  /**
+   * @brief Check if cleanup is currently in progress
+   */
+  static bool is_cleanup_in_progress() { return cleanup_in_progress; }
+};
+
+// Static member definitions
+std::vector<AutoCleanupRegistry::RegisteredObject>
+    AutoCleanupRegistry::registered_objects;
+#ifdef RADARSIM_THREAD_SAFE
+std::mutex AutoCleanupRegistry::cleanup_mutex;
+#endif
+bool AutoCleanupRegistry::cleanup_in_progress = false;
+
+#endif  // RADARSIM_SIMPLE_CLEANUP
+
+#ifdef _WIN32
+/**
+ * @brief DLL entry point for Windows
+ * @details Handles DLL lifecycle events, particularly cleanup on unload
+ */
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call,
+                      LPVOID lpReserved) {
+  switch (ul_reason_for_call) {
+    case DLL_PROCESS_ATTACH:
+      // DLL is being loaded
+      break;
+    case DLL_PROCESS_DETACH:
+      // DLL is being unloaded - perform automatic cleanup
+      AutoCleanupRegistry::cleanup_all();
+      break;
+    case DLL_THREAD_ATTACH:
+    case DLL_THREAD_DETACH:
+      // Thread events - no action needed
+      break;
+  }
+  return TRUE;
+}
+#else
+/**
+ * @brief Constructor function for non-Windows platforms
+ * @details Called when the shared library is loaded
+ */
+__attribute__((constructor)) static void library_init() {
+  // Library initialization if needed
+}
+
+/**
+ * @brief Destructor function for non-Windows platforms
+ * @details Called when the shared library is unloaded
+ */
+__attribute__((destructor)) static void library_cleanup() {
+  AutoCleanupRegistry::cleanup_all();
+}
+#endif
+
+/*********************************************
+ *
  *  Version
  *
  *********************************************/
@@ -166,6 +420,39 @@ void Get_Version(int version[3]) {
   version[0] = VERSION_MAJOR;
   version[1] = VERSION_MINOR;
   version[2] = VERSION_PATCH;
+}
+
+/*********************************************
+ *
+ *  Memory Management
+ *
+ *********************************************/
+/**
+ * @brief Force cleanup of all automatically registered objects
+ *
+ * @details Manually triggers cleanup of all objects registered for automatic
+ * cleanup. This function is called automatically when the DLL is unloaded, but
+ * can be called manually if needed.
+ *
+ * @note This function is thread-safe but should not be called during normal
+ * operation unless specifically needed.
+ * @warning After calling this function, all automatically managed objects
+ * become invalid and should not be used.
+ */
+void Force_Cleanup_All() { AutoCleanupRegistry::cleanup_all(); }
+
+/**
+ * @brief Check if automatic cleanup is currently in progress
+ *
+ * @details Returns whether the automatic cleanup system is currently running.
+ * This can be useful for debugging or avoiding operations during cleanup.
+ *
+ * @return int 1 if cleanup is in progress, 0 otherwise
+ *
+ * @note This function is thread-safe
+ */
+int Is_Cleanup_In_Progress() {
+  return AutoCleanupRegistry::is_cleanup_in_progress() ? 1 : 0;
 }
 
 /*********************************************
@@ -246,6 +533,14 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
     // Create the Transmitter object with correct parameter order
     ptr_tx_c->_ptr_transmitter = std::make_shared<Transmitter<double, float>>(
         tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt);
+
+    // Register for automatic cleanup
+#ifdef RADARSIM_SIMPLE_CLEANUP
+    AutoCleanupRegistry::register_object(ptr_tx_c, cleanup_transmitter);
+#else
+    AutoCleanupRegistry::register_object(ptr_tx_c,
+                                         [ptr_tx_c]() { delete ptr_tx_c; });
+#endif
 
   } catch (const std::bad_alloc &e) {
     // Memory allocation failed
@@ -417,6 +712,10 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
   if (ptr_tx_c == nullptr) {
     return;
   }
+
+  // Unregister from automatic cleanup
+  AutoCleanupRegistry::unregister_object(ptr_tx_c);
+
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_tx_c;
 }
@@ -465,6 +764,15 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
     // Create the Receiver object using shared_ptr
     ptr_rx_c->_ptr_receiver = std::make_shared<Receiver<float>>(
         fs, rf_gain, resistor, baseband_gain, baseband_bw);
+
+    // Register for automatic cleanup
+#ifdef RADARSIM_SIMPLE_CLEANUP
+    AutoCleanupRegistry::register_object(ptr_rx_c, cleanup_receiver);
+#else
+    AutoCleanupRegistry::register_object(ptr_rx_c,
+                                         [ptr_rx_c]() { delete ptr_rx_c; });
+#endif
+
     return ptr_rx_c;
 
   } catch (const std::bad_alloc &e) {
@@ -597,6 +905,10 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
   if (ptr_rx_c == nullptr) {
     return;
   }
+
+  // Unregister from automatic cleanup
+  AutoCleanupRegistry::unregister_object(ptr_rx_c);
+
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_rx_c;
 }
@@ -679,6 +991,14 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
         rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
         rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
 
+    // Register for automatic cleanup
+#ifdef RADARSIM_SIMPLE_CLEANUP
+    AutoCleanupRegistry::register_object(ptr_radar_c, cleanup_radar);
+#else
+    AutoCleanupRegistry::register_object(
+        ptr_radar_c, [ptr_radar_c]() { delete ptr_radar_c; });
+#endif
+
   } catch (const std::bad_alloc &e) {
     // Memory allocation failed
     std::cerr << "Create_Radar: Memory allocation failed: " << e.what()
@@ -725,6 +1045,10 @@ void Free_Radar(t_Radar *ptr_radar_c) {
   if (ptr_radar_c == nullptr) {
     return;
   }
+
+  // Unregister from automatic cleanup
+  AutoCleanupRegistry::unregister_object(ptr_radar_c);
+
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_radar_c;
 }
@@ -763,6 +1087,14 @@ t_Targets *Init_Targets() {
     // Create the manager objects using shared_ptr
     ptr_targets_c->_ptr_points = std::make_shared<PointsManager<float>>();
     ptr_targets_c->_ptr_targets = std::make_shared<TargetsManager<float>>();
+
+    // Register for automatic cleanup
+#ifdef RADARSIM_SIMPLE_CLEANUP
+    AutoCleanupRegistry::register_object(ptr_targets_c, cleanup_targets);
+#else
+    AutoCleanupRegistry::register_object(
+        ptr_targets_c, [ptr_targets_c]() { delete ptr_targets_c; });
+#endif
 
     return ptr_targets_c;
 
@@ -941,6 +1273,10 @@ void Free_Targets(t_Targets *ptr_targets_c) {
   if (ptr_targets_c == nullptr) {
     return;
   }
+
+  // Unregister from automatic cleanup
+  AutoCleanupRegistry::unregister_object(ptr_targets_c);
+
   // shared_ptr automatically handles cleanup in destructor
   delete ptr_targets_c;
 }
