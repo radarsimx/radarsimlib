@@ -361,15 +361,16 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call,
       AutoCleanupRegistry::cleanup_all();
       break;
     case DLL_THREAD_ATTACH:
+      // Thread events - no action needed
+      break;
     case DLL_THREAD_DETACH:
       // Thread events - no action needed
       break;
   }
   return TRUE;
 }
-#else
 // Non-Windows platforms: Use constructor/destructor attributes if supported
-#if defined(__GNUC__) || defined(__clang__)
+#elif defined(__GNUC__) || defined(__clang__)
 /**
  * @brief Constructor function for non-Windows platforms
  */
@@ -388,7 +389,6 @@ __attribute__((destructor)) static void library_cleanup() {
 // manual cleanup management is required
 #warning \
     "Automatic cleanup not supported on this compiler. Manual cleanup required."
-#endif
 #endif
 
 /*********************************************
