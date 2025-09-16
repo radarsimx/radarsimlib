@@ -104,7 +104,9 @@ typedef struct s_Transmitter t_Transmitter;
  * @param[in] freq_time Timestamp vector for frequency samples (s)
  * @param[in] waveform_size Length of freq and freq_time arrays
  * @param[in] freq_offset Frequency offset per pulse (Hz)
+ *            The length of this array must be equal to `num_pulses`.
  * @param[in] pulse_start_time Pulse start time vector (s)
+ *            The length of this array must be equal to `num_pulses`.
  * @param[in] num_pulses Number of pulses
  * @param[in] tx_power Transmitter power (dBm)
  *
@@ -172,6 +174,18 @@ EXPORTED int Get_Num_Txchannel(t_Transmitter *ptr_tx_c);
  * @note Automatically unregisters from cleanup system. Safe with NULL pointer.
  */
 EXPORTED void Free_Transmitter(t_Transmitter *ptr_tx_c);
+
+/**
+ * @brief Get the required baseband buffer size for the given radar
+ *
+ * @details Returns the total number of samples required for baseband buffers
+ * (real and imaginary) for the configured radar. Use this to pre-allocate
+ * arrays passed to simulation functions such as `Run_RadarSimulator`.
+ *
+ * @param[in] ptr_radar_c Pointer to the radar system object
+ * @return int Total baseband buffer size in samples, or 0 on invalid input
+ */
+EXPORTED int Get_BB_Size(t_Radar *ptr_radar_c);
 
 /*********************************************
  *
@@ -282,6 +296,7 @@ EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                                float *location, float *speed, float *rotation,
                                float *rotation_rate);
 
+EXPORTED int Get_BB_Size(t_Radar *ptr_radar_c);
 /**
  * @brief Safely release radar system resources
  *
