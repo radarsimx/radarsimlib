@@ -1126,9 +1126,9 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  *
  * @param[in] ptr_radar_c Pointer to the radar system
  * @param[in] ptr_targets_c Pointer to the target management system
- * @param[in] level Ray tracing quality level for mesh targets (1-5)
+ * @param[in] level Ray tracing quality level for mesh targets (0-2)
  * @param[in] density Ray density for mesh simulation (rays per wavelength²)
- * @param[in] ray_filter Ray filter range {min_range, max_range} (m)
+ * @param[in] ray_filter Valid range for ray reflection indices [min, max]
  * @param[out] ptr_bb_real Real part of baseband signal buffer (pre-allocated)
  * @param[out] ptr_bb_imag Imaginary part of baseband signal buffer
  * (pre-allocated)
