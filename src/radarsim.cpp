@@ -404,8 +404,6 @@ __attribute__((destructor)) static void library_cleanup() {
  *
  * @param[out] version Pre-allocated array to store version numbers {major,
  * minor, patch} Array must have at least 3 elements
- *
- * @note This function is thread-safe and has no failure conditions
  */
 void Get_Version(int version[3]) {
   version[0] = VERSION_MAJOR;
@@ -450,8 +448,10 @@ int Is_Cleanup_In_Progress() {
  * @param[in] freq_time Timestamp vector for frequency samples (s) - must not be
  * NULL
  * @param[in] waveform_size Length of freq and freq_time arrays - must be > 0
- * @param[in] freq_offset Frequency offset per pulse (Hz) - must not be NULL
- * @param[in] pulse_start_time Pulse start time vector (s) - must not be NULL
+ * @param[in] freq_offset Frequency offset per pulse (Hz) - must not be NULL.
+ *            The length of this array must be equal to `num_pulses`.
+ * @param[in] pulse_start_time Pulse start time vector (s) - must not be NULL.
+ *            The length of this array must be equal to `num_pulses`.
  * @param[in] num_pulses Number of pulses - must be > 0
  * @param[in] tx_power Transmitter power (dBm)
  *
@@ -471,6 +471,20 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
   if (freq_offset == nullptr || pulse_start_time == nullptr ||
       num_pulses <= 0) {
     return nullptr;
+  }
+
+  // Validate that the provided arrays have expected content for num_pulses.
+  // We cannot check the caller's allocated length directly in C, but we can
+  // validate that the values provided for the first `num_pulses` entries are
+  // finite numbers. If any are NaN/Inf then treat as invalid input.
+  for (int idx = 0; idx < num_pulses; ++idx) {
+    if (!std::isfinite(freq_offset[idx]) ||
+        !std::isfinite(pulse_start_time[idx])) {
+      std::cerr << "Create_Transmitter: Invalid freq_offset or "
+                   "pulse_start_time value at index "
+                << idx << std::endl;
+      return nullptr;
+    }
   }
 
   // Allocate memory for the wrapper struct
@@ -915,6 +929,23 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
 }
 
 /**
+ * @brief Get the required baseband buffer size for the given radar
+ *
+ * @details Returns the total number of samples required for baseband buffers
+ * (real and imaginary) for the configured radar. Use this to pre-allocate
+ * arrays passed to simulation functions such as `Run_RadarSimulator`.
+ *
+ * @param[in] ptr_radar_c Pointer to the radar system object
+ * @return int Total baseband buffer size in samples, or 0 on invalid input
+ */
+int Get_BB_Size(t_Radar *ptr_radar_c) {
+  if (ptr_radar_c == nullptr || ptr_radar_c->_ptr_radar == nullptr) {
+    return 0;
+  }
+  return ptr_radar_c->_ptr_radar->bb_size_;
+}
+
+/**
  * @brief Safely release radar system resources
  *
  * @param[in] ptr_radar_c Pointer to the Radar system object to free (may be
@@ -1126,9 +1157,9 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  *
  * @param[in] ptr_radar_c Pointer to the radar system
  * @param[in] ptr_targets_c Pointer to the target management system
- * @param[in] level Ray tracing quality level for mesh targets (1-5)
- * @param[in] density Ray density for mesh simulation (rays per wavelength²)
- * @param[in] ray_filter Ray filter range {min_range, max_range} (m)
+ * @param[in] level Ray tracing quality level for mesh targets (0-2)
+ * @param[in] density Ray density for mesh simulation (rays per wavelength)
+ * @param[in] ray_filter Valid range for ray reflection indices [min, max]
  * @param[out] ptr_bb_real Real part of baseband signal buffer (pre-allocated)
  * @param[out] ptr_bb_imag Imaginary part of baseband signal buffer
  * (pre-allocated)

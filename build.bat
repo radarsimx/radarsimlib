@@ -471,6 +471,18 @@ REM Copy built artifacts
         goto ERROR_EXIT
     )
     
+    REM Copy LIB file
+    if exist ".\build\%BUILD_TYPE%\radarsimc.lib" (
+        copy ".\build\%BUILD_TYPE%\radarsimc.lib" "%RELEASE_PATH%\" >nul
+        if %errorlevel% neq 0 (
+            echo ERROR: Failed to copy radarsimc.lib
+            goto ERROR_EXIT
+        )
+    ) else (
+        echo ERROR: radarsimc.lib not found in build directory
+        goto ERROR_EXIT
+    )
+    
     REM Copy header file
     if exist ".\src\includes\radarsim.h" (
         copy ".\src\includes\radarsim.h" "%RELEASE_PATH%\" >nul
@@ -481,6 +493,45 @@ REM Copy built artifacts
     ) else (
         echo ERROR: radarsim.h not found
         goto ERROR_EXIT
+    )
+    
+    REM Copy files to examples/cpp/radarsimlib directory as well
+    set EXAMPLES_PATH=.\examples\cpp\radarsimlib
+    if not exist "%EXAMPLES_PATH%" (
+        mkdir "%EXAMPLES_PATH%"
+        if %errorlevel% neq 0 (
+            echo WARNING: Failed to create examples directory %EXAMPLES_PATH%
+        )
+    )
+    
+    if exist "%EXAMPLES_PATH%" (
+        echo INFO: Copying artifacts to examples directory...
+        
+        REM Copy DLL to examples
+        if exist ".\build\%BUILD_TYPE%\radarsimc.dll" (
+            copy ".\build\%BUILD_TYPE%\radarsimc.dll" "%EXAMPLES_PATH%\" >nul
+            if %errorlevel% neq 0 (
+                echo WARNING: Failed to copy radarsimc.dll to examples
+            )
+        )
+        
+        REM Copy LIB to examples
+        if exist ".\build\%BUILD_TYPE%\radarsimc.lib" (
+            copy ".\build\%BUILD_TYPE%\radarsimc.lib" "%EXAMPLES_PATH%\" >nul
+            if %errorlevel% neq 0 (
+                echo WARNING: Failed to copy radarsimc.lib to examples
+            )
+        )
+        
+        REM Copy header to examples
+        if exist ".\src\includes\radarsim.h" (
+            copy ".\src\includes\radarsim.h" "%EXAMPLES_PATH%\" >nul
+            if %errorlevel% neq 0 (
+                echo WARNING: Failed to copy radarsim.h to examples
+            ) else (
+                echo INFO: Artifacts copied successfully to %EXAMPLES_PATH%
+            )
+        )
     )
     
     echo INFO: Artifacts copied successfully to %RELEASE_PATH%
@@ -550,7 +601,9 @@ REM   Continues with warnings if test tools are not available
     echo Output Locations:
     echo   - C++ Library: .\build\%BUILD_TYPE%\
     echo   - Output Directory: %RELEASE_PATH%\
+    echo   - Examples Directory: .\examples\cpp\radarsimlib\
     echo   - DLL File: %RELEASE_PATH%\radarsimc.dll
+    echo   - LIB File: %RELEASE_PATH%\radarsimc.lib
     echo   - Header File: %RELEASE_PATH%\radarsim.h
     echo.
     if /I "%TEST%" == "on" (

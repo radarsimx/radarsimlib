@@ -59,3 +59,5 @@ matlab/radarsim.h
 /matlab/debug/
 /radarsimlib_*
 /tests/build
+/examples/cpp/build
+/examples/cpp/radarsimlib
