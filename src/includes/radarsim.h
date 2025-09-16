@@ -175,18 +175,6 @@ EXPORTED int Get_Num_Txchannel(t_Transmitter *ptr_tx_c);
  */
 EXPORTED void Free_Transmitter(t_Transmitter *ptr_tx_c);
 
-/**
- * @brief Get the required baseband buffer size for the given radar
- *
- * @details Returns the total number of samples required for baseband buffers
- * (real and imaginary) for the configured radar. Use this to pre-allocate
- * arrays passed to simulation functions such as `Run_RadarSimulator`.
- *
- * @param[in] ptr_radar_c Pointer to the radar system object
- * @return int Total baseband buffer size in samples, or 0 on invalid input
- */
-EXPORTED int Get_BB_Size(t_Radar *ptr_radar_c);
-
 /*********************************************
  *
  *  Receiver Configuration
@@ -296,7 +284,18 @@ EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                                float *location, float *speed, float *rotation,
                                float *rotation_rate);
 
+/**
+ * @brief Get the required baseband buffer size for the given radar
+ *
+ * @details Returns the total number of samples required for baseband buffers
+ * (real and imaginary) for the configured radar. Use this to pre-allocate
+ * arrays passed to simulation functions such as `Run_RadarSimulator`.
+ *
+ * @param[in] ptr_radar_c Pointer to the radar system object
+ * @return int Total baseband buffer size in samples, or 0 on invalid input
+ */
 EXPORTED int Get_BB_Size(t_Radar *ptr_radar_c);
+
 /**
  * @brief Safely release radar system resources
  *
