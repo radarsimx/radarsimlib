@@ -47,13 +47,13 @@ See [COMPILATION_OPTIONS.md](COMPILATION_OPTIONS.md) for detailed configuration 
 - Windows CPU
 
 ```batch
-build_win.bat --arch cpu
+build_win.bat --arch=cpu
 ```
 
 - Windows GPU
 
 ```batch
-build_win.bat --arch gpu
+build_win.bat --arch=gpu
 ```
 
 - Linux CPU
