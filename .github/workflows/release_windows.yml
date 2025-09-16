@@ -27,8 +27,7 @@ jobs:
         uses: N-Storm/cuda-toolkit@v0.2.27m
         with:
           cuda: '13.0.0'
-          method: 'network'
-          sub-packages: '["nvcc", "visual_studio_integration", "cudart"]'
+          method: 'local'
           use-github-cache: false
 
       - name: Verify CUDA installation
