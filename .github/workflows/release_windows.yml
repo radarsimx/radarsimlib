@@ -27,7 +27,8 @@ jobs:
         uses: Jimver/cuda-toolkit@v0.2.27
         with:
           cuda: "13.0.0"
-          method: "network"
+          method: 'local'
+          use-local-cache: false
           sub-packages: '["nvcc", "visual_studio_integration", "cudart"]'
 
       - name: Verify CUDA installation
