@@ -24,10 +24,11 @@ jobs:
 
       - name: Setup CUDA Toolkit
         if: matrix.arch == 'gpu'
-        uses: Jimver/cuda-toolkit@v0.2.24
+        uses: Jimver/cuda-toolkit@v0.2.27
         with:
-          cuda: "12.8.1"
+          cuda: "13.0.0"
           method: "network"
+          use-github-cache: false
           sub-packages: '["nvcc", "visual_studio_integration", "cudart"]'
 
       - name: Verify CUDA installation
