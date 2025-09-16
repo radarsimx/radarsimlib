@@ -40,15 +40,14 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo Build completed successfully!
-echo Executable location: build\bin\Release\example_radarsim.exe (VS) or build\bin\example_radarsim.exe (MinGW)
+echo Executable location: build\bin\Release\example_radarsim.exe
 echo.
 echo To run the example:
 echo   cd build
 echo   cmake --build . --target run_example
 echo.
 echo Or run directly:
-echo   .\build\bin\Release\example_radarsim.exe   (VS)
-echo   .\build\bin\example_radarsim.exe           (MinGW)
+echo   .\build\bin\Release\example_radarsim.exe
 echo.
 
 cd ..
