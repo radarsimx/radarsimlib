@@ -40,6 +40,7 @@ jobs:
         with:
           cuda: "13.0.0"
           method: "network"
+          use-github-cache: false
           sub-packages: '["nvcc", "visual_studio_integration", "cudart"]'
 
       - name: Verify CUDA installation
