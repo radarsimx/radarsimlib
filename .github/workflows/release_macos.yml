@@ -115,20 +115,13 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          echo "::group::System Dependencies Installation"
           # Install ccache for faster compilation
-          brew install ccache cmake
+          brew install ccache
           echo "$(brew --prefix ccache)/bin" >> $GITHUB_PATH
 
           # Set up ccache
           ccache --set-config=max_size=2G
           ccache --set-config=cache_dir=~/.ccache
-          
-          # Install GCC if needed
-          if [ "${{ matrix.c_compiler }}" == "gcc-14" ]; then
-            brew install gcc@14
-          fi
-          echo "::endgroup::"
 
       - name: Display build information
         run: |
