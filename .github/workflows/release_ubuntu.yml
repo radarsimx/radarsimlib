@@ -1,26 +1,92 @@
 name: Build Ubuntu Libraries
 
+# GitHub Actions workflow for building and packaging RadarSimLib on Ubuntu Linux.
+#
+# This workflow builds RadarSimLib across different build tiers (standard/free)
+# and architectures (CPU/GPU). It provides comprehensive Linux coverage with
+# both CPU-only and CUDA GPU-accelerated builds.
+#
+# Build Matrix:
+# - Ubuntu Latest: GCC compiler, 4 builds (2 architectures × 2 tiers)
+# - Architectures: CPU (x86_64), GPU (CUDA)
+# - Build tiers: standard (full features), free (limited features)
+# - Total builds: 4
+#
+# Features:
+# - Comprehensive caching (apt, ccache)
+# - CUDA toolkit setup for GPU builds
+# - Build optimization with ccache
+# - Artifact verification and validation
+# - Multi-architecture artifact packing
+# - Detailed build reporting and summaries
+# - Error handling with build log uploads
+#
+# Outputs:
+# - Individual artifacts for each build configuration
+# - Packed archive containing all builds organized by architecture and tier
+# - Build summaries and statistics
+#
+# Triggers:
+# - Tag pushes (release events)
+# - Manual workflow dispatch
+# - Push to master branch
+# - Pull requests to master branch
+
 on:
   push:
-    branches: [main]
+    branches: [master]
+    tags:
+      - "*"
   pull_request:
-    branches: [main]
+    branches: [master]
+  # Allow manual trigger from the Actions tab
+  workflow_dispatch:
+
+env:
+  # Global environment variables
+  DEBIAN_FRONTEND: noninteractive
+  CCACHE_DIR: ~/.ccache
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
-      matrix:
-        tier: [standard, free]
-        arch: [cpu, gpu]
       fail-fast: false
+      matrix:
+        include:
+          # Ubuntu CPU Standard build
+          - tier: standard
+            arch: cpu
+            c_compiler: gcc
+            cxx_compiler: g++
+            artifact_name: radarsimlib_linux_x86_64_cpu
+          # Ubuntu CPU Free Tier build
+          - tier: free
+            arch: cpu
+            c_compiler: gcc
+            cxx_compiler: g++
+            artifact_name: radarsimlib_linux_x86_64_cpu_free
+          # Ubuntu GPU Standard build
+          - tier: standard
+            arch: gpu
+            c_compiler: gcc
+            cxx_compiler: g++
+            artifact_name: radarsimlib_linux_x86_64_gpu
+          # Ubuntu GPU Free Tier build
+          - tier: free
+            arch: gpu
+            c_compiler: gcc
+            cxx_compiler: g++
+            artifact_name: radarsimlib_linux_x86_64_gpu_free
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           ssh-key: ${{ secrets.RADARSIMCPP }}
           submodules: recursive
+          fetch-depth: 0
 
       - name: Setup CUDA Toolkit
         if: matrix.arch == 'gpu'
@@ -29,6 +95,41 @@ jobs:
           cuda: "12.8.1"
           method: "network"
           sub-packages: '["nvcc", "cudart", "cuda-nvrtc", "libcublas", "libcufft", "libcurand", "libcusparse", "libcusolver"]'
+
+      - name: Cache build dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/apt
+            ~/.ccache
+          key: ${{ runner.os }}-${{ matrix.tier }}-${{ matrix.arch }}-${{ hashFiles('build.sh', 'CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.tier }}-${{ matrix.arch }}-
+            ${{ runner.os }}-${{ matrix.tier }}-
+            ${{ runner.os }}-
+
+      - name: Install build dependencies
+        run: |
+          echo "::group::Dependencies Installation"
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            g++ \
+            pkg-config \
+            ccache
+          
+          # Set up ccache
+          ccache --set-config=max_size=2G
+          ccache --set-config=cache_dir=~/.ccache
+          echo "/usr/lib/ccache" >> $GITHUB_PATH
+          
+          # Verify installations
+          gcc --version
+          g++ --version
+          cmake --version
+          ccache --version
+          echo "::endgroup::"
 
       - name: Verify CUDA installation
         if: matrix.arch == 'gpu'
@@ -49,28 +150,14 @@ jobs:
           fi
           echo "::endgroup::"
 
-      - name: Install build dependencies
-        run: |
-          echo "::group::Dependencies Installation"
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            g++ \
-            pkg-config
-          
-          # Verify installations
-          gcc --version
-          g++ --version
-          cmake --version
-          echo "::endgroup::"
-
       - name: Display build information
         run: |
           echo "::group::Build Information"
           echo "OS: ubuntu-latest"
           echo "Tier: ${{ matrix.tier }}"
           echo "Architecture: ${{ matrix.arch }}"
+          echo "C Compiler: ${{ matrix.c_compiler }}"
+          echo "C++ Compiler: ${{ matrix.cxx_compiler }}"
           if [ "${{ matrix.arch }}" == "gpu" ]; then
             nvcc_version=$(nvcc --version | grep "release" | sed 's/.*release \([0-9.]*\).*/\1/')
             echo "CUDA Version: $nvcc_version"
@@ -79,23 +166,35 @@ jobs:
 
           echo "::group::System Information"
           lsb_release -a
-          uname -m
+          uname -a
           nproc
+          ${{ matrix.c_compiler }} --version
+          ${{ matrix.cxx_compiler }} --version
           if [ "${{ matrix.arch }}" == "gpu" ]; then
             nvcc --version
           fi
           echo "::endgroup::"
 
-      - name: Build ${{ matrix.tier }} ${{ matrix.arch }} library
+      - name: Build RadarSimLib
         env:
+          CC: ${{ matrix.c_compiler }}
+          CXX: ${{ matrix.cxx_compiler }}
           CUDA_PATH: ${{ matrix.arch == 'gpu' && env.CUDA_PATH || '' }}
           CUDA_HOME: ${{ matrix.arch == 'gpu' && env.CUDA_PATH || '' }}
           CUDACXX: ${{ matrix.arch == 'gpu' && format('{0}/bin/nvcc', env.CUDA_PATH) || '' }}
           CUDA_TOOLKIT_ROOT_DIR: ${{ matrix.arch == 'gpu' && env.CUDA_PATH || '' }}
+          CCACHE_COMPILERCHECK: content
         run: |
           echo "::group::Build Process"
           chmod +x ./build.sh
-          ./build.sh --arch=${{ matrix.arch }} --tier=${{ matrix.tier }} --test=${{ matrix.tier == 'standard' && matrix.arch == 'cpu' && 'on' || 'off' }}
+          ./build.sh --arch=${{ matrix.arch }} --tier=${{ matrix.tier }} --test=${{ matrix.tier == 'standard' && matrix.arch == 'cpu' && 'on' || 'off' }} --verbose
+          echo "::endgroup::"
+
+      - name: Display build statistics
+        if: always()
+        run: |
+          echo "::group::Build Statistics"
+          ccache --show-stats
           echo "::endgroup::"
 
       - name: Verify build artifacts
@@ -106,6 +205,10 @@ jobs:
           if [ -f "./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so" ]; then
             echo "✓ Library SO found"
             file "./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so"
+            # Check dependencies
+            echo "::group::Library Dependencies"
+            ldd "./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so" || true
+            echo "::endgroup::"
           else
             echo "✗ Library SO missing"
             exit 1
@@ -121,19 +224,23 @@ jobs:
 
       - name: Create build summary
         run: |
-          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Summary 🛠️" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| OS | ubuntu-latest |" >> $GITHUB_STEP_SUMMARY
           echo "| Tier | ${{ matrix.tier }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Architecture | ${{ matrix.arch }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Artifact Name | radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Compiler | ${{ matrix.c_compiler }}/${{ matrix.cxx_compiler }} |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ matrix.arch }}" == "gpu" ]; then
+            echo "| CUDA Version | $(nvcc --version | grep "release" | sed 's/.*release \([0-9.]*\).*/\1/') |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "| Artifact Name | ${{ matrix.artifact_name }} |" >> $GITHUB_STEP_SUMMARY
 
-      - name: Archive built module (${{ matrix.tier }} ${{ matrix.arch }})
+      - name: Archive built module
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}
+          name: ${{ matrix.artifact_name }}
           path: ./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}
           retention-days: 1
           compression-level: 6
@@ -142,28 +249,200 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: build-logs-radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}
+          name: build-logs-${{ matrix.artifact_name }}
           path: |
             ./build_logs/
             *.log
           retention-days: 1
 
+  # Pack all artifacts into a single file
+  pack-artifacts:
+    needs: build
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Create artifacts directory
+        run: mkdir -p artifacts
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Delete downloaded artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          failOnError: false
+          name: |
+            radarsimlib_linux_x86_64_cpu*
+            radarsimlib_linux_x86_64_gpu*
+
+      - name: Display downloaded artifacts
+        run: |
+          echo "::group::Downloaded Artifacts"
+          find artifacts/ -type f -name "*.so" -o -name "*.h" | head -20
+          echo "::endgroup::"
+
+      - name: Create artifact structure
+        run: |
+          mkdir -p packed/radarsimlib_linux_all
+
+          # Create the directory structure
+          mkdir -p packed/radarsimlib_linux_all/trial/Linux_x86_64_CPU
+          mkdir -p packed/radarsimlib_linux_all/standard/Linux_x86_64_CPU
+          mkdir -p packed/radarsimlib_linux_all/trial/Linux_x86_64_GPU
+          mkdir -p packed/radarsimlib_linux_all/standard/Linux_x86_64_GPU
+
+          # Copy each artifact to appropriate directory based on architecture and tier
+          for dir in artifacts/*/; do
+            if [ -d "$dir" ]; then
+              artifact_name=$(basename "$dir")
+              echo "Processing artifact: $artifact_name"
+              
+              # Determine target directory based on artifact name
+              if [[ "$artifact_name" == *"gpu"* ]]; then
+                # GPU builds
+                if [[ "$artifact_name" == *"_free"* ]]; then
+                  target_dir="packed/radarsimlib_linux_all/trial/Linux_x86_64_GPU"
+                else
+                  target_dir="packed/radarsimlib_linux_all/standard/Linux_x86_64_GPU"
+                fi
+              else
+                # CPU builds
+                if [[ "$artifact_name" == *"_free"* ]]; then
+                  target_dir="packed/radarsimlib_linux_all/trial/Linux_x86_64_CPU"
+                else
+                  target_dir="packed/radarsimlib_linux_all/standard/Linux_x86_64_CPU"
+                fi
+              fi
+              
+              # Ensure target directory exists
+              mkdir -p "$target_dir"
+              
+              # Copy the library contents
+              echo "Copying library from $dir to $target_dir/"
+              cp -r "$dir"/* "$target_dir/" 2>/dev/null || true
+            fi
+          done
+
+      - name: Verify artifact structure
+        run: |
+          echo "::group::Artifact Structure Verification"
+          echo "Final directory structure:"
+          find packed/radarsimlib_linux_all -type d | sort
+          echo ""
+          echo "Files in each directory:"
+          for dir in packed/radarsimlib_linux_all/*/Linux_*; do
+            if [ -d "$dir" ]; then
+              echo "Contents of $dir:"
+              ls -la "$dir" || echo "Directory is empty or doesn't exist"
+              echo ""
+            fi
+          done
+          echo "::endgroup::"
+
+      - name: Create README for packed artifacts
+        run: |
+          cat > packed/radarsimlib_linux_all/README.md << 'EOF'
+          # RadarSimLib Linux Build Artifacts
+
+          This archive contains all RadarSimLib builds for Linux platforms organized by architecture and tier.
+
+          ## Directory Structure
+
+          The builds are organized in the following structure:
+
+          ```
+          standard/
+          ├── Linux_x86_64_CPU/
+          │   ├── libradarsimc.so
+          │   └── radarsim.h
+          └── Linux_x86_64_GPU/
+              ├── libradarsimc.so
+              └── radarsim.h
+
+          trial/
+          ├── Linux_x86_64_CPU/
+          │   ├── libradarsimc.so
+          │   └── radarsim.h
+          └── Linux_x86_64_GPU/
+              ├── libradarsimc.so
+              └── radarsim.h
+          ```
+
+          ## Architecture and Tier Information
+
+          ### Linux_x86_64_CPU (CPU-only builds)
+          - **standard/**: Full-featured builds with all capabilities
+          - **trial/**: Free tier builds with limited features
+          - Compatible with any x86_64 Linux system
+
+          ### Linux_x86_64_GPU (CUDA GPU-accelerated builds)
+          - **standard/**: Full-featured builds with GPU acceleration
+          - **trial/**: Free tier builds with limited GPU features
+          - Requires CUDA 12.8.1 or compatible version
+          - Compatible with NVIDIA GPUs
+
+          ## Build Information
+
+          - **Total Builds**: 4
+          - **Architectures**: x86_64 CPU, x86_64 GPU (CUDA)
+          - **Tiers**: Standard (full features), Trial (limited features)
+          - **Library Type**: Shared library (.so)
+          - **Compiler**: GCC
+          - **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          ## Usage
+
+          1. Choose the appropriate architecture directory for your system
+          2. Choose between standard or trial tier based on your needs
+          3. Link against libradarsimc.so and include radarsim.h in your project
+          4. For GPU builds, ensure CUDA runtime is installed on target system
+
+          ## Requirements
+
+          - **CPU builds**: Any x86_64 Linux system
+          - **GPU builds**: NVIDIA GPU with CUDA 12.8.1+ support
+          EOF
+
+      - name: Create compressed archive
+        run: |
+          cd packed
+          tar -czf radarsimlib_linux_all_builds.tar.gz radarsimlib_linux_all/
+
+          # Create zip version as well
+          zip -r radarsimlib_linux_all_builds.zip radarsimlib_linux_all/
+
+          echo "::group::Archive Information"
+          ls -lh *.tar.gz *.zip
+          echo "::endgroup::"
+
+      - name: Upload packed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: radarsimlib_linux_all_builds
+          path: |
+            packed/radarsimlib_linux_all_builds.tar.gz
+            packed/radarsimlib_linux_all_builds.zip
+          retention-days: 1
+          compression-level: 0
+
   # Summary job that runs after all builds complete
   build-summary:
-    needs: build
+    needs: [build, pack-artifacts]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Generate build summary
         run: |
-          echo "# Ubuntu RadarSimLib Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "# Ubuntu RadarSimLib Build Summary 📊" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Build Matrix Results" >> $GITHUB_STEP_SUMMARY
-          echo "Total builds: 4 [2 architectures x 2 tiers]" >> $GITHUB_STEP_SUMMARY
+          echo "Total builds: 4 (2 architectures × 2 tiers)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Architecture Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **CPU**: 2 builds (standard + free)" >> $GITHUB_STEP_SUMMARY
-          echo "- **GPU**: 2 builds (standard + free)" >> $GITHUB_STEP_SUMMARY
+          echo "- **CPU (x86_64)**: 2 builds on ubuntu-latest" >> $GITHUB_STEP_SUMMARY
+          echo "- **GPU (CUDA)**: 2 builds on ubuntu-latest" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Tier Distribution" >> $GITHUB_STEP_SUMMARY
           echo "- **Standard**: 2 builds (CPU + GPU)" >> $GITHUB_STEP_SUMMARY
@@ -175,9 +454,19 @@ jobs:
           echo "- \`radarsimlib_linux_x86_64_gpu\` (Standard GPU)" >> $GITHUB_STEP_SUMMARY
           echo "- \`radarsimlib_linux_x86_64_gpu_free\` (Free GPU)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Packed Artifacts" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.pack-artifacts.result }}" == "success" ]; then
+            echo "✅ **All artifacts successfully packed into single archive**" >> $GITHUB_STEP_SUMMARY
+            echo "- Archive: \`radarsimlib_linux_all_builds\`" >> $GITHUB_STEP_SUMMARY
+            echo "- Formats: tar.gz, zip" >> $GITHUB_STEP_SUMMARY
+            echo "- Contains: All 4 build variants organized by configuration" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Artifact packing failed or was skipped**" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Build Status" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.build.result }}" == "success" ]; then
-            echo "**All builds completed successfully!**" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **All builds completed successfully!**" >> $GITHUB_STEP_SUMMARY
           else
-            echo "**Some builds may have failed. Check individual job logs for details.**" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Some builds may have failed. Check individual job logs for details.**" >> $GITHUB_STEP_SUMMARY
           fi
