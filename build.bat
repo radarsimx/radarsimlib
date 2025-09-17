@@ -433,6 +433,15 @@ REM Copy built artifacts
         )
     )
     
+    REM Clean old release directory if it exists
+    if exist "%RELEASE_PATH%" (
+        echo INFO: Cleaning old release directory %RELEASE_PATH%...
+        rmdir /q /s "%RELEASE_PATH%" 2>nul
+        if %errorlevel% neq 0 (
+            echo WARNING: Could not fully clean old release directory
+        )
+    )
+    
     REM Create output directory
     if not exist "%RELEASE_PATH%" (
         mkdir "%RELEASE_PATH%"
@@ -442,44 +451,19 @@ REM Copy built artifacts
         )
     )
     
-    REM Copy DLL file
-    if exist ".\build\%BUILD_TYPE%\radarsimc.dll" (
-        copy ".\build\%BUILD_TYPE%\radarsimc.dll" "%RELEASE_PATH%\" >nul
-        if %errorlevel% neq 0 (
-            echo ERROR: Failed to copy radarsimc.dll
-            goto ERROR_EXIT
-        )
-    ) else (
-        echo ERROR: radarsimc.dll not found in build directory
-        goto ERROR_EXIT
-    )
-    
-    REM Copy LIB file
-    if exist ".\build\%BUILD_TYPE%\radarsimc.lib" (
-        copy ".\build\%BUILD_TYPE%\radarsimc.lib" "%RELEASE_PATH%\" >nul
-        if %errorlevel% neq 0 (
-            echo ERROR: Failed to copy radarsimc.lib
-            goto ERROR_EXIT
-        )
-    ) else (
-        echo ERROR: radarsimc.lib not found in build directory
-        goto ERROR_EXIT
-    )
-    
-    REM Copy header file
-    if exist ".\src\includes\radarsim.h" (
-        copy ".\src\includes\radarsim.h" "%RELEASE_PATH%\" >nul
-        if %errorlevel% neq 0 (
-            echo ERROR: Failed to copy radarsim.h
-            goto ERROR_EXIT
-        )
-    ) else (
-        echo ERROR: radarsim.h not found
-        goto ERROR_EXIT
-    )
-    
-    REM Copy files to examples/cpp/radarsimlib directory as well
+    REM Copy files to examples/cpp/radarsimlib directory
     set EXAMPLES_PATH=.\examples\cpp\radarsimlib
+    
+    REM Clean old examples directory if it exists
+    if exist "%EXAMPLES_PATH%" (
+        echo INFO: Cleaning old examples directory %EXAMPLES_PATH%...
+        rmdir /q /s "%EXAMPLES_PATH%" 2>nul
+        if %errorlevel% neq 0 (
+            echo WARNING: Could not fully clean old examples directory
+        )
+    )
+    
+    REM Create new examples directory
     if not exist "%EXAMPLES_PATH%" (
         mkdir "%EXAMPLES_PATH%"
         if %errorlevel% neq 0 (
@@ -516,6 +500,23 @@ REM Copy built artifacts
             )
         )
     )
+
+    REM Copy built artifacts to release directory
+    echo INFO: Copying built artifacts to %RELEASE_PATH%...
+    
+    REM Copy all examples/cpp files to release folder
+    if exist ".\examples\cpp" (
+        echo INFO: Copying examples/cpp files to release folder...
+        xcopy ".\examples\cpp\*" "%RELEASE_PATH%\" /E /Y /Q >nul
+        if %errorlevel% neq 0 (
+            echo WARNING: Some files from examples/cpp could not be copied
+        ) else (
+            echo INFO: Examples/cpp files copied successfully to %RELEASE_PATH%
+        )
+    ) else (
+        echo WARNING: examples/cpp directory not found
+    )
+    
     
     echo INFO: Artifacts copied successfully to %RELEASE_PATH%
 

@@ -862,6 +862,10 @@ install_libraries() {
     local arch_suffix=$(get_arch_suffix)
     local release_path
     
+    # Define file paths
+    local lib_file="./build/libradarsimc.${lib_ext}"
+    local header_file="./src/includes/radarsim.h"
+    
     if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
         if [ "$(to_lowercase "$TIER")" = "standard" ]; then
             release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu"
@@ -880,27 +884,47 @@ install_libraries() {
     rm -rf "${release_path}"
     mkdir -p "${release_path}"
     
-    # Copy library file
-    local lib_file="./build/libradarsimc.${lib_ext}"
+    # Copy files to examples/cpp/radarsimlib directory
+    local examples_path="./examples/cpp/radarsimlib"
+    
+    # Clean old examples directory if it exists
+    if [ -d "${examples_path}" ]; then
+        log_info "Cleaning old examples directory ${examples_path}..."
+        rm -rf "${examples_path}"
+    fi
+    
+    # Create examples directory
+    mkdir -p "${examples_path}"
+    
+    # Copy library file to examples
     if [ -f "${lib_file}" ]; then
-        cp "${lib_file}" "${release_path}/"
-        log_success "Copied library: libradarsimc.${lib_ext}"
+        cp "${lib_file}" "${examples_path}/"
+        log_success "Copied library to examples: libradarsimc.${lib_ext}"
     else
-        log_error "Library file not found: ${lib_file}"
-        exit 1
+        log_warning "Library file not found for examples copy: ${lib_file}"
     fi
     
-    # Copy header file
-    local header_file="./src/includes/radarsim.h"
+    # Copy header file to examples
     if [ -f "${header_file}" ]; then
-        cp "${header_file}" "${release_path}/"
-        log_success "Copied header: radarsim.h"
+        cp "${header_file}" "${examples_path}/"
+        log_success "Copied header to examples: radarsim.h"
     else
-        log_error "Header file not found: ${header_file}"
-        exit 1
+        log_warning "Header file not found for examples copy: ${header_file}"
     fi
     
+    # Copy all examples/cpp files to release path
+    if [ -d "./examples/cpp" ]; then
+        log_info "Copying examples/cpp files to release folder..."
+        cp -r ./examples/cpp/* "${release_path}/" 2>/dev/null || {
+            log_warning "Some files from examples/cpp could not be copied"
+        }
+        log_success "Examples/cpp files copied successfully to ${release_path}"
+    else
+        log_warning "examples/cpp directory not found"
+    fi
+
     log_success "Libraries installed to: ${release_path}"
+    log_success "Libraries also copied to examples: ${examples_path}"
 }
 
 #
@@ -947,14 +971,14 @@ validate_build_output() {
     fi
     
     # Verify library file
-    local lib_file="${release_path}/libradarsimc.${lib_ext}"
+    local lib_file="${release_path}/radarsimlib/libradarsimc.${lib_ext}"
     if [ ! -f "${lib_file}" ]; then
         log_error "Library file not found: ${lib_file}"
         return 1
     fi
     
     # Verify header file
-    local header_file="${release_path}/radarsim.h"
+    local header_file="${release_path}/radarsimlib/radarsim.h"
     if [ ! -f "${header_file}" ]; then
         log_error "Header file not found: ${header_file}"
         return 1
