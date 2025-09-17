@@ -372,21 +372,21 @@ jobs:
           echo "# Windows RadarSimLib Build Summary 📊" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "## Build Matrix Results" >> $env:GITHUB_STEP_SUMMARY
-          echo "Total builds: 4 (2 architectures x 2 tiers)" >> $env:GITHUB_STEP_SUMMARY
+          echo "Total builds: 4 - 2 architectures x 2 tiers" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "### Architecture Distribution" >> $env:GITHUB_STEP_SUMMARY
-          echo "- **CPU (x86_64)**: 2 builds on windows-latest" >> $env:GITHUB_STEP_SUMMARY
-          echo "- **GPU (CUDA)**: 2 builds on windows-latest" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **CPU x86_64**: 2 builds on windows-latest" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **GPU CUDA**: 2 builds on windows-latest" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "### Tier Distribution" >> $env:GITHUB_STEP_SUMMARY
-          echo "- **Standard**: 2 builds (CPU + GPU)" >> $env:GITHUB_STEP_SUMMARY
-          echo "- **Free**: 2 builds (CPU + GPU)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Standard**: 2 builds - CPU and GPU" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Free**: 2 builds - CPU and GPU" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "### Artifacts Generated" >> $env:GITHUB_STEP_SUMMARY
-          echo "- ``radarsimlib_win_x86_64_cpu`` (Standard CPU)" >> $env:GITHUB_STEP_SUMMARY
-          echo "- ``radarsimlib_win_x86_64_cpu_free`` (Free CPU)" >> $env:GITHUB_STEP_SUMMARY
-          echo "- ``radarsimlib_win_x86_64_gpu`` (Standard GPU)" >> $env:GITHUB_STEP_SUMMARY
-          echo "- ``radarsimlib_win_x86_64_gpu_free`` (Free GPU)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ``radarsimlib_win_x86_64_cpu`` - Standard CPU" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ``radarsimlib_win_x86_64_cpu_free`` - Free CPU" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ``radarsimlib_win_x86_64_gpu`` - Standard GPU" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ``radarsimlib_win_x86_64_gpu_free`` - Free GPU" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "### Packed Artifacts" >> $env:GITHUB_STEP_SUMMARY
           if ("${{ needs.pack-artifacts.result }}" -eq "success") {
