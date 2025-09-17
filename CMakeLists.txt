@@ -52,6 +52,29 @@ elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux") # Linux
         hdf5_hl
         hdf5_hl_cpp
     )
+elseif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin") # macOS
+    include_directories("./src/includes"
+        "./src/radarsimcpp/includes")
+    
+    # Set HDF5 paths based on architecture
+    if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm64")
+        include_directories("./src/radarsimcpp/hdf5-lib-build/libs/lib_macos_arm64/include")
+        link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_arm64/lib")
+    elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
+        include_directories("./src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/include")
+        link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib")
+    else()
+        # Fallback to x86_64 for unknown architectures
+        include_directories("./src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/include")
+        link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib")
+    endif()
+    
+    set(_hdf5_libs
+        hdf5
+        hdf5_cpp
+        hdf5_hl
+        hdf5_hl_cpp
+    )
 endif()
 
 if(GPU_BUILD)

@@ -162,27 +162,6 @@ jobs:
           ccache --show-stats
           echo "::endgroup::"
 
-      - name: Rename output directory for architecture
-        run: |
-          echo "::group::Directory Renaming"
-          # The build script creates radarsimlib_linux_x86_64_* but we want platform-specific names
-          if [ "${{ matrix.tier }}" == "standard" ]; then
-            src_dir="./radarsimlib_linux_x86_64_cpu"
-            dest_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu"
-          else
-            src_dir="./radarsimlib_linux_x86_64_cpu_free"
-            dest_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu_free"
-          fi
-          
-          if [ -d "$src_dir" ]; then
-            mv "$src_dir" "$dest_dir"
-            echo "✓ Renamed $src_dir to $dest_dir"
-          else
-            echo "✗ Source directory $src_dir not found"
-            exit 1
-          fi
-          echo "::endgroup::"
-
       - name: Verify build artifacts
         run: |
           echo "::group::Build Verification"
@@ -192,6 +171,7 @@ jobs:
             artifact_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu_free"
           fi
           
+          echo "Looking for artifacts in: $artifact_dir"
           ls -la "$artifact_dir"
           
           if [ -f "$artifact_dir/libradarsimc.dylib" ]; then
@@ -251,27 +231,6 @@ jobs:
           # Note: GPU builds are not supported on macOS, so we use cpu for --arch
           chmod +x ./build.sh
           ./build.sh --arch=cpu --tier=${{ matrix.tier }} --test=${{ matrix.tier == 'standard' && matrix.arch == 'x86_64' && 'on' || 'off' }}
-          echo "::endgroup::"
-
-      - name: Rename output directory for architecture
-        run: |
-          echo "::group::Directory Renaming"
-          # The build script creates radarsimlib_linux_x86_64_* but we want platform-specific names
-          if [ "${{ matrix.tier }}" == "standard" ]; then
-            src_dir="./radarsimlib_linux_x86_64_cpu"
-            dest_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu"
-          else
-            src_dir="./radarsimlib_linux_x86_64_cpu_free"
-            dest_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu_free"
-          fi
-          
-          if [ -d "$src_dir" ]; then
-            mv "$src_dir" "$dest_dir"
-            echo "✓ Renamed $src_dir to $dest_dir"
-          else
-            echo "✗ Source directory $src_dir not found"
-            exit 1
-          fi
           echo "::endgroup::"
 
       - name: Verify build artifacts
