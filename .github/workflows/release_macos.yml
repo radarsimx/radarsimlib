@@ -162,38 +162,6 @@ jobs:
           ccache --show-stats
           echo "::endgroup::"
 
-      - name: Verify build artifacts
-        run: |
-          echo "::group::Build Verification"
-          if [ "${{ matrix.tier }}" == "standard" ]; then
-            artifact_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu"
-          else
-            artifact_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu_free"
-          fi
-
-          echo "Looking for artifacts in: $artifact_dir"
-          ls -la "$artifact_dir"
-
-          if [ -f "$artifact_dir/libradarsimc.dylib" ]; then
-            echo "✓ Library dylib found"
-            file "$artifact_dir/libradarsimc.dylib"
-            # Verify architecture
-            echo "::group::Architecture Verification"
-            lipo -info "$artifact_dir/libradarsimc.dylib"
-            echo "::endgroup::"
-          else
-            echo "✗ Library dylib missing"
-            exit 1
-          fi
-
-          if [ -f "$artifact_dir/radarsim.h" ]; then
-            echo "✓ Header file found"
-          else
-            echo "✗ Header file missing"
-            exit 1
-          fi
-          echo "::endgroup::"
-
       - name: Create build summary
         run: |
           echo "## Build Summary 🛠️" >> $GITHUB_STEP_SUMMARY

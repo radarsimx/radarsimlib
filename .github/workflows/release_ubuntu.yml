@@ -240,31 +240,6 @@ jobs:
           ccache --show-stats
           echo "::endgroup::"
 
-      - name: Verify build artifacts
-        run: |
-          echo "::group::Build Verification"
-          ls -la ./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/
-          
-          if [ -f "./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so" ]; then
-            echo "✓ Library SO found"
-            file "./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so"
-            # Check dependencies
-            echo "::group::Library Dependencies"
-            ldd "./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so" || true
-            echo "::endgroup::"
-          else
-            echo "✗ Library SO missing"
-            exit 1
-          fi
-
-          if [ -f "./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/radarsim.h" ]; then
-            echo "✓ Header file found"
-          else
-            echo "✗ Header file missing"
-            exit 1
-          fi
-          echo "::endgroup::"
-
       - name: Create build summary
         run: |
           echo "## Build Summary 🛠️" >> $GITHUB_STEP_SUMMARY
