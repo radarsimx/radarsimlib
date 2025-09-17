@@ -49,36 +49,76 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Ubuntu CPU Standard build
-          - tier: standard
+          # Ubuntu 22.04 CPU Standard build
+          - os: ubuntu-22.04
+            tier: standard
             arch: cpu
-            c_compiler: gcc
-            cxx_compiler: g++
-            artifact_name: radarsimlib_linux_x86_64_cpu
-          # Ubuntu CPU Free Tier build
-          - tier: free
+            c_compiler: gcc-11
+            cxx_compiler: g++-11
+            ubuntu_version: "22"
+            artifact_name: radarsimlib_ubuntu22_x86_64_cpu
+          # Ubuntu 22.04 CPU Free Tier build
+          - os: ubuntu-22.04
+            tier: free
             arch: cpu
-            c_compiler: gcc
-            cxx_compiler: g++
-            artifact_name: radarsimlib_linux_x86_64_cpu_free
-          # Ubuntu GPU Standard build
-          - tier: standard
+            c_compiler: gcc-11
+            cxx_compiler: g++-11
+            ubuntu_version: "22"
+            artifact_name: radarsimlib_ubuntu22_x86_64_cpu_free
+          # Ubuntu 22.04 GPU Standard build
+          - os: ubuntu-22.04
+            tier: standard
             arch: gpu
-            c_compiler: gcc
-            cxx_compiler: g++
-            artifact_name: radarsimlib_linux_x86_64_gpu
-          # Ubuntu GPU Free Tier build
-          - tier: free
+            c_compiler: gcc-11
+            cxx_compiler: g++-11
+            ubuntu_version: "22"
+            artifact_name: radarsimlib_ubuntu22_x86_64_gpu
+          # Ubuntu 22.04 GPU Free Tier build
+          - os: ubuntu-22.04
+            tier: free
             arch: gpu
-            c_compiler: gcc
-            cxx_compiler: g++
-            artifact_name: radarsimlib_linux_x86_64_gpu_free
+            c_compiler: gcc-11
+            cxx_compiler: g++-11
+            ubuntu_version: "22"
+            artifact_name: radarsimlib_ubuntu22_x86_64_gpu_free
+          # Ubuntu 24.04 CPU Standard build
+          - os: ubuntu-24.04
+            tier: standard
+            arch: cpu
+            c_compiler: gcc-13
+            cxx_compiler: g++-13
+            ubuntu_version: "24"
+            artifact_name: radarsimlib_ubuntu24_x86_64_cpu
+          # Ubuntu 24.04 CPU Free Tier build
+          - os: ubuntu-24.04
+            tier: free
+            arch: cpu
+            c_compiler: gcc-13
+            cxx_compiler: g++-13
+            ubuntu_version: "24"
+            artifact_name: radarsimlib_ubuntu24_x86_64_cpu_free
+          # Ubuntu 24.04 GPU Standard build
+          - os: ubuntu-24.04
+            tier: standard
+            arch: gpu
+            c_compiler: gcc-13
+            cxx_compiler: g++-13
+            ubuntu_version: "24"
+            artifact_name: radarsimlib_ubuntu24_x86_64_gpu
+          # Ubuntu 24.04 GPU Free Tier build
+          - os: ubuntu-24.04
+            tier: free
+            arch: gpu
+            c_compiler: gcc-13
+            cxx_compiler: g++-13
+            ubuntu_version: "24"
+            artifact_name: radarsimlib_ubuntu24_x86_64_gpu_free
 
     steps:
       - name: Checkout repository
@@ -113,10 +153,11 @@ jobs:
         run: |
           echo "::group::Dependencies Installation"
           sudo apt-get update
+
+          # Install common build dependencies
           sudo apt-get install -y \
             build-essential \
             cmake \
-            g++ \
             pkg-config \
             ccache
           
@@ -126,8 +167,8 @@ jobs:
           echo "/usr/lib/ccache" >> $GITHUB_PATH
           
           # Verify installations
-          gcc --version
-          g++ --version
+          ${{ matrix.c_compiler }} --version
+          ${{ matrix.cxx_compiler }} --version
           cmake --version
           ccache --version
           echo "::endgroup::"
@@ -154,7 +195,8 @@ jobs:
       - name: Display build information
         run: |
           echo "::group::Build Information"
-          echo "OS: ubuntu-latest"
+          echo "OS: ${{ matrix.os }}"
+          echo "Ubuntu Version: ${{ matrix.ubuntu_version }}"
           echo "Tier: ${{ matrix.tier }}"
           echo "Architecture: ${{ matrix.arch }}"
           echo "C Compiler: ${{ matrix.c_compiler }}"
@@ -201,21 +243,21 @@ jobs:
       - name: Verify build artifacts
         run: |
           echo "::group::Build Verification"
-          ls -la ./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/
+          ls -la ./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/
           
-          if [ -f "./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so" ]; then
+          if [ -f "./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so" ]; then
             echo "✓ Library SO found"
-            file "./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so"
+            file "./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so"
             # Check dependencies
             echo "::group::Library Dependencies"
-            ldd "./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so" || true
+            ldd "./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/libradarsimc.so" || true
             echo "::endgroup::"
           else
             echo "✗ Library SO missing"
             exit 1
           fi
 
-          if [ -f "./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/radarsim.h" ]; then
+          if [ -f "./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}/radarsim.h" ]; then
             echo "✓ Header file found"
           else
             echo "✗ Header file missing"
@@ -228,7 +270,8 @@ jobs:
           echo "## Build Summary 🛠️" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| OS | ubuntu-latest |" >> $GITHUB_STEP_SUMMARY
+          echo "| OS | ${{ matrix.os }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Ubuntu Version | ${{ matrix.ubuntu_version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tier | ${{ matrix.tier }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Architecture | ${{ matrix.arch }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Compiler | ${{ matrix.c_compiler }}/${{ matrix.cxx_compiler }} |" >> $GITHUB_STEP_SUMMARY
@@ -242,7 +285,7 @@ jobs:
         if: success()
         with:
           name: ${{ matrix.artifact_name }}
-          path: ./radarsimlib_linux_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}
+          path: ./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}
           retention-days: 1
           compression-level: 6
 
@@ -275,8 +318,10 @@ jobs:
         with:
           failOnError: false
           name: |
-            radarsimlib_linux_x86_64_cpu*
-            radarsimlib_linux_x86_64_gpu*
+            radarsimlib_ubuntu22_x86_64_cpu*
+            radarsimlib_ubuntu22_x86_64_gpu*
+            radarsimlib_ubuntu24_x86_64_cpu*
+            radarsimlib_ubuntu24_x86_64_gpu*
 
       - name: Display downloaded artifacts
         run: |
@@ -286,13 +331,19 @@ jobs:
 
       - name: Create artifact structure
         run: |
-          mkdir -p packed/radarsimlib_linux_all
+          mkdir -p packed/radarsimlib_ubuntu_all
 
-          # Create the directory structure
-          mkdir -p packed/radarsimlib_linux_all/trial/Linux_x86_64_CPU
-          mkdir -p packed/radarsimlib_linux_all/standard/Linux_x86_64_CPU
-          mkdir -p packed/radarsimlib_linux_all/trial/Linux_x86_64_GPU
-          mkdir -p packed/radarsimlib_linux_all/standard/Linux_x86_64_GPU
+          # Create the directory structure for Ubuntu 22
+          mkdir -p packed/radarsimlib_ubuntu_all/trial/Ubuntu22_x86_64_CPU
+          mkdir -p packed/radarsimlib_ubuntu_all/standard/Ubuntu22_x86_64_CPU
+          mkdir -p packed/radarsimlib_ubuntu_all/trial/Ubuntu22_x86_64_GPU
+          mkdir -p packed/radarsimlib_ubuntu_all/standard/Ubuntu22_x86_64_GPU
+
+          # Create the directory structure for Ubuntu 24
+          mkdir -p packed/radarsimlib_ubuntu_all/trial/Ubuntu24_x86_64_CPU
+          mkdir -p packed/radarsimlib_ubuntu_all/standard/Ubuntu24_x86_64_CPU
+          mkdir -p packed/radarsimlib_ubuntu_all/trial/Ubuntu24_x86_64_GPU
+          mkdir -p packed/radarsimlib_ubuntu_all/standard/Ubuntu24_x86_64_GPU
 
           # Copy each artifact to appropriate directory based on architecture and tier
           for dir in artifacts/*/; do
@@ -300,20 +351,30 @@ jobs:
               artifact_name=$(basename "$dir")
               echo "Processing artifact: $artifact_name"
               
+              # Determine Ubuntu version
+              if [[ "$artifact_name" == *"ubuntu22"* ]]; then
+                ubuntu_ver="Ubuntu22"
+              elif [[ "$artifact_name" == *"ubuntu24"* ]]; then
+                ubuntu_ver="Ubuntu24"
+              else
+                echo "Unknown Ubuntu version for $artifact_name, skipping"
+                continue
+              fi
+              
               # Determine target directory based on artifact name
               if [[ "$artifact_name" == *"gpu"* ]]; then
                 # GPU builds
                 if [[ "$artifact_name" == *"_free"* ]]; then
-                  target_dir="packed/radarsimlib_linux_all/trial/Linux_x86_64_GPU"
+                  target_dir="packed/radarsimlib_ubuntu_all/trial/${ubuntu_ver}_x86_64_GPU"
                 else
-                  target_dir="packed/radarsimlib_linux_all/standard/Linux_x86_64_GPU"
+                  target_dir="packed/radarsimlib_ubuntu_all/standard/${ubuntu_ver}_x86_64_GPU"
                 fi
               else
                 # CPU builds
                 if [[ "$artifact_name" == *"_free"* ]]; then
-                  target_dir="packed/radarsimlib_linux_all/trial/Linux_x86_64_CPU"
+                  target_dir="packed/radarsimlib_ubuntu_all/trial/${ubuntu_ver}_x86_64_CPU"
                 else
-                  target_dir="packed/radarsimlib_linux_all/standard/Linux_x86_64_CPU"
+                  target_dir="packed/radarsimlib_ubuntu_all/standard/${ubuntu_ver}_x86_64_CPU"
                 fi
               fi
               
@@ -330,10 +391,10 @@ jobs:
         run: |
           echo "::group::Artifact Structure Verification"
           echo "Final directory structure:"
-          find packed/radarsimlib_linux_all -type d | sort
+          find packed/radarsimlib_ubuntu_all -type d | sort
           echo ""
           echo "Files in each directory:"
-          for dir in packed/radarsimlib_linux_all/*/Linux_*; do
+          for dir in packed/radarsimlib_ubuntu_all/*/Ubuntu*; do
             if [ -d "$dir" ]; then
               echo "Contents of $dir:"
               ls -la "$dir" || echo "Directory is empty or doesn't exist"
@@ -344,10 +405,10 @@ jobs:
 
       - name: Create README for packed artifacts
         run: |
-          cat > packed/radarsimlib_linux_all/README.md << 'EOF'
-          # RadarSimLib Linux Build Artifacts
+          cat > packed/radarsimlib_ubuntu_all/README.md << 'EOF'
+          # RadarSimLib Ubuntu Build Artifacts
 
-          This archive contains all RadarSimLib builds for Linux platforms organized by architecture and tier.
+          This archive contains all RadarSimLib builds for Ubuntu platforms organized by version, architecture and tier.
 
           ## Directory Structure
 
@@ -355,64 +416,82 @@ jobs:
 
           ```
           standard/
-          ├── Linux_x86_64_CPU/
+          ├── Ubuntu22_x86_64_CPU/
           │   ├── libradarsimc.so
           │   └── radarsim.h
-          └── Linux_x86_64_GPU/
+          ├── Ubuntu22_x86_64_GPU/
+          │   ├── libradarsimc.so
+          │   └── radarsim.h
+          ├── Ubuntu24_x86_64_CPU/
+          │   ├── libradarsimc.so
+          │   └── radarsim.h
+          └── Ubuntu24_x86_64_GPU/
               ├── libradarsimc.so
               └── radarsim.h
 
           trial/
-          ├── Linux_x86_64_CPU/
+          ├── Ubuntu22_x86_64_CPU/
           │   ├── libradarsimc.so
           │   └── radarsim.h
-          └── Linux_x86_64_GPU/
+          ├── Ubuntu22_x86_64_GPU/
+          │   ├── libradarsimc.so
+          │   └── radarsim.h
+          ├── Ubuntu24_x86_64_CPU/
+          │   ├── libradarsimc.so
+          │   └── radarsim.h
+          └── Ubuntu24_x86_64_GPU/
               ├── libradarsimc.so
               └── radarsim.h
           ```
 
-          ## Architecture and Tier Information
+          ## Platform and Tier Information
 
-          ### Linux_x86_64_CPU (CPU-only builds)
+          ### Ubuntu 22.04 LTS Builds
+          - **CPU**: CPU-only builds compatible with Ubuntu 22.04 x86_64 systems
+          - **GPU**: CUDA GPU-accelerated builds for Ubuntu 22.04 with NVIDIA GPUs
           - **standard/**: Full-featured builds with all capabilities
           - **trial/**: Free tier builds with limited features
-          - Compatible with any x86_64 Linux system
+          - **Compiler**: GCC 11
 
-          ### Linux_x86_64_GPU (CUDA GPU-accelerated builds)
-          - **standard/**: Full-featured builds with GPU acceleration
-          - **trial/**: Free tier builds with limited GPU features
-          - Requires CUDA 12.8.1 or compatible version
-          - Compatible with NVIDIA GPUs
+          ### Ubuntu 24.04 LTS Builds  
+          - **CPU**: CPU-only builds compatible with Ubuntu 24.04 x86_64 systems
+          - **GPU**: CUDA GPU-accelerated builds for Ubuntu 24.04 with NVIDIA GPUs
+          - **standard/**: Full-featured builds with all capabilities
+          - **trial/**: Free tier builds with limited features
+          - **Compiler**: GCC 13
 
           ## Build Information
 
-          - **Total Builds**: 4
+          - **Total Builds**: 8
+          - **Ubuntu Versions**: 22.04 LTS (GCC 11), 24.04 LTS (GCC 13)
           - **Architectures**: x86_64 CPU, x86_64 GPU (CUDA)
           - **Tiers**: Standard (full features), Trial (limited features)
           - **Library Type**: Shared library (.so)
-          - **Compiler**: GCC
           - **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
           ## Usage
 
-          1. Choose the appropriate architecture directory for your system
-          2. Choose between standard or trial tier based on your needs
-          3. Link against libradarsimc.so and include radarsim.h in your project
-          4. For GPU builds, ensure CUDA runtime is installed on target system
+          1. Choose the appropriate Ubuntu version directory for your system
+          2. Choose the appropriate architecture directory (CPU or GPU)
+          3. Choose between standard or trial tier based on your needs
+          4. Link against libradarsimc.so and include radarsim.h in your project
+          5. For GPU builds, ensure CUDA runtime is installed on target system
 
           ## Requirements
 
-          - **CPU builds**: Any x86_64 Linux system
-          - **GPU builds**: NVIDIA GPU with CUDA 12.8.1+ support
+          - **CPU builds**: Any x86_64 Ubuntu system (22.04 or 24.04)
+          - **GPU builds**: NVIDIA GPU with CUDA support
+          - **Ubuntu 22.04**: Compatible with Ubuntu 22.04 LTS and newer
+          - **Ubuntu 24.04**: Compatible with Ubuntu 24.04 LTS and newer
           EOF
 
       - name: Create compressed archive
         run: |
           cd packed
-          tar -czf radarsimlib_linux_all_builds.tar.gz radarsimlib_linux_all/
+          tar -czf radarsimlib_ubuntu_all_builds.tar.gz radarsimlib_ubuntu_all/
 
           # Create zip version as well
-          zip -r radarsimlib_linux_all_builds.zip radarsimlib_linux_all/
+          zip -r radarsimlib_ubuntu_all_builds.zip radarsimlib_ubuntu_all/
 
           echo "::group::Archive Information"
           ls -lh *.tar.gz *.zip
@@ -421,10 +500,10 @@ jobs:
       - name: Upload packed artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: radarsimlib_linux_all_builds
+          name: radarsimlib_ubuntu_all_builds
           path: |
-            packed/radarsimlib_linux_all_builds.tar.gz
-            packed/radarsimlib_linux_all_builds.zip
+            packed/radarsimlib_ubuntu_all_builds.tar.gz
+            packed/radarsimlib_ubuntu_all_builds.zip
           retention-days: 1
           compression-level: 0
 
@@ -439,28 +518,38 @@ jobs:
           echo "# Ubuntu RadarSimLib Build Summary 📊" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Build Matrix Results" >> $GITHUB_STEP_SUMMARY
-          echo "Total builds: 4 (2 architectures × 2 tiers)" >> $GITHUB_STEP_SUMMARY
+          echo "Total builds: 8 (2 Ubuntu versions × 2 architectures × 2 tiers)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Ubuntu Version Distribution" >> $GITHUB_STEP_SUMMARY
+          echo "- **Ubuntu 22.04**: 4 builds (2 architectures × 2 tiers)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Ubuntu 24.04**: 4 builds (2 architectures × 2 tiers)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Architecture Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **CPU (x86_64)**: 2 builds on ubuntu-latest" >> $GITHUB_STEP_SUMMARY
-          echo "- **GPU (CUDA)**: 2 builds on ubuntu-latest" >> $GITHUB_STEP_SUMMARY
+          echo "- **CPU (x86_64)**: 4 builds (2 Ubuntu versions × 2 tiers)" >> $GITHUB_STEP_SUMMARY
+          echo "- **GPU (CUDA)**: 4 builds (2 Ubuntu versions × 2 tiers)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Tier Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **Standard**: 2 builds (CPU + GPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Free**: 2 builds (CPU + GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Standard**: 4 builds (2 Ubuntu versions × 2 architectures)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Free**: 4 builds (2 Ubuntu versions × 2 architectures)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts Generated" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_linux_x86_64_cpu\` (Standard CPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_linux_x86_64_cpu_free\` (Free CPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_linux_x86_64_gpu\` (Standard GPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_linux_x86_64_gpu_free\` (Free GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "#### Ubuntu 22.04" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu22_x86_64_cpu\` (Standard CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu22_x86_64_cpu_free\` (Free CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu22_x86_64_gpu\` (Standard GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu22_x86_64_gpu_free\` (Free GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "#### Ubuntu 24.04" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu24_x86_64_cpu\` (Standard CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu24_x86_64_cpu_free\` (Free CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu24_x86_64_gpu\` (Standard GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu24_x86_64_gpu_free\` (Free GPU)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Packed Artifacts" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.pack-artifacts.result }}" == "success" ]; then
             echo "✅ **All artifacts successfully packed into single archive**" >> $GITHUB_STEP_SUMMARY
-            echo "- Archive: \`radarsimlib_linux_all_builds\`" >> $GITHUB_STEP_SUMMARY
+            echo "- Archive: \`radarsimlib_ubuntu_all_builds\`" >> $GITHUB_STEP_SUMMARY
             echo "- Formats: tar.gz, zip" >> $GITHUB_STEP_SUMMARY
-            echo "- Contains: All 4 build variants organized by configuration" >> $GITHUB_STEP_SUMMARY
+            echo "- Contains: All 8 build variants organized by Ubuntu version and configuration" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ **Artifact packing failed or was skipped**" >> $GITHUB_STEP_SUMMARY
           fi
