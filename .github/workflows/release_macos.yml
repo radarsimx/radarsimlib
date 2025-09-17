@@ -170,10 +170,10 @@ jobs:
           else
             artifact_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu_free"
           fi
-          
+
           echo "Looking for artifacts in: $artifact_dir"
           ls -la "$artifact_dir"
-          
+
           if [ -f "$artifact_dir/libradarsimc.dylib" ]; then
             echo "✓ Library dylib found"
             file "$artifact_dir/libradarsimc.dylib"
@@ -220,75 +220,6 @@ jobs:
         if: failure()
         with:
           name: build-logs-${{ matrix.artifact_name }}
-          path: |
-            ./build_logs/
-            *.log
-          retention-days: 1
-
-      - name: Build ${{ matrix.tier }} ${{ matrix.arch }} library
-        run: |
-          echo "::group::Build Process"
-          # Note: GPU builds are not supported on macOS, so we use cpu for --arch
-          chmod +x ./build.sh
-          ./build.sh --arch=cpu --tier=${{ matrix.tier }} --test=${{ matrix.tier == 'standard' && matrix.arch == 'x86_64' && 'on' || 'off' }}
-          echo "::endgroup::"
-
-      - name: Verify build artifacts
-        run: |
-          echo "::group::Build Verification"
-          if [ "${{ matrix.tier }}" == "standard" ]; then
-            artifact_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu"
-          else
-            artifact_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu_free"
-          fi
-          
-          ls -la "$artifact_dir"
-          
-          if [ -f "$artifact_dir/libradarsimc.dylib" ]; then
-            echo "✓ Library dylib found"
-            file "$artifact_dir/libradarsimc.dylib"
-          else
-            echo "✗ Library dylib missing"
-            exit 1
-          fi
-
-          if [ -f "$artifact_dir/radarsim.h" ]; then
-            echo "✓ Header file found"
-          else
-            echo "✗ Header file missing"
-            exit 1
-          fi
-          
-          # Verify architecture
-          echo "::group::Architecture Verification"
-          lipo -info "$artifact_dir/libradarsimc.dylib"
-          echo "::endgroup::"
-          echo "::endgroup::"
-
-      - name: Create build summary
-        run: |
-          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| OS | ${{ matrix.os }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tier | ${{ matrix.tier }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Architecture | ${{ matrix.arch }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Artifact Name | radarsimlib_macos_${{ matrix.arch }}_cpu${{ matrix.tier == 'free' && '_free' || '' }} |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Archive built module (${{ matrix.tier }} ${{ matrix.arch }})
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: radarsimlib_macos_${{ matrix.arch }}_cpu${{ matrix.tier == 'free' && '_free' || '' }}
-          path: ./radarsimlib_macos_${{ matrix.arch }}_cpu${{ matrix.tier == 'free' && '_free' || '' }}
-          retention-days: 1
-          compression-level: 6
-
-      - name: Upload build logs on failure
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: build-logs-radarsimlib_macos_${{ matrix.arch }}_cpu${{ matrix.tier == 'free' && '_free' || '' }}
           path: |
             ./build_logs/
             *.log

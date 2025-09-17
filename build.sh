@@ -809,7 +809,7 @@ build_cpp_library() {
         fi
         
         # Set minimum macOS version for compatibility
-        cmake_options="${cmake_options} -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
+        # cmake_options="${cmake_options} -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
     elif [ "${PLATFORM_NAME}" = "Linux" ]; then
         local cpp_compiler=$(get_cpp_compiler)
         cmake_options="${cmake_options} -DCMAKE_CXX_COMPILER=${cpp_compiler}"
