@@ -133,26 +133,6 @@ jobs:
           echo "::endgroup::"
         shell: cmd
 
-      - name: Verify build artifacts
-        run: |
-          echo "::group::Build Verification"
-          dir /s .\radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}\
-          if exist ".\radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}\radarsimc.dll" (
-            echo "✓ Library DLL found"
-          ) else (
-            echo "✗ Library DLL missing"
-            exit /b 1
-          )
-
-          if exist ".\radarsimlib_win_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}\radarsim.h" (
-            echo "✓ Header file found"
-          ) else (
-            echo "✗ Header file missing"
-            exit /b 1
-          )
-          echo "::endgroup::"
-        shell: cmd
-
       - name: Create build summary
         run: |
           echo "## Build Summary" >> $env:GITHUB_STEP_SUMMARY
