@@ -72,20 +72,20 @@ jobs:
             xcode_version: "15.2"
             artifact_name: radarsimlib_macos_x86_64_cpu_free
           # macOS ARM64 (Apple Silicon) Standard build
-          - os: macos-14
+          - os: macos-15
             tier: standard
             arch: arm64
             c_compiler: clang
             cxx_compiler: clang++
-            xcode_version: "16.1"
+            xcode_version: "16.4"
             artifact_name: radarsimlib_macos_arm64_cpu
           # macOS ARM64 (Apple Silicon) Free Tier build
-          - os: macos-14
+          - os: macos-15
             tier: free
             arch: arm64
             c_compiler: clang
             cxx_compiler: clang++
-            xcode_version: "16.1"
+            xcode_version: "16.4"
             artifact_name: radarsimlib_macos_arm64_cpu_free
 
     steps:
