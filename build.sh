@@ -345,24 +345,6 @@ get_library_extension() {
 }
 
 #
-# get_cpp_compiler() - Returns the appropriate C++ compiler for the platform
-# Description:
-#   Returns the platform-specific C++ compiler (clang++ for macOS, g++ for Linux)
-# Arguments:
-#   None
-# Output:
-#   Prints the compiler command to stdout
-# Return:
-#   Always returns 0 (success)
-get_cpp_compiler() {
-    case "${PLATFORM_NAME}" in
-        macOS) echo "clang++" ;;
-        Linux) echo "g++" ;;
-        *) echo "g++" ;;  # Default to g++
-    esac
-}
-
-#
 # get_platform_suffix() - Returns the platform-specific directory suffix
 # Description:
 #   Returns the appropriate platform suffix for output directories
@@ -444,36 +426,6 @@ check_requirements() {
     # Check for CTest (usually comes with CMake)
     if ! command_exists ctest; then
         log_warning "CTest is not available, unit tests will be skipped"
-    fi
-    
-    # Check for platform-specific compiler
-    local cpp_compiler=$(get_cpp_compiler)
-    if ! command_exists "${cpp_compiler}"; then
-        log_error "${cpp_compiler} compiler is not installed or not in PATH"
-        case "${PLATFORM_NAME}" in
-            Linux)
-                log_error "Please install GCC development tools: sudo apt-get install build-essential (Ubuntu/Debian) or equivalent"
-                ;;
-            macOS)
-                log_error "Please install Xcode Command Line Tools: xcode-select --install"
-                # Additional macOS-specific checks
-                if ! xcode-select -p >/dev/null 2>&1; then
-                    log_error "Xcode Command Line Tools not found. Run: xcode-select --install"
-                fi
-                ;;
-        esac
-        missing_deps=1
-    else
-        local compiler_version=$(${cpp_compiler} --version | head -n1)
-        log_info "${cpp_compiler} compiler found: ${compiler_version}"
-        
-        # macOS-specific compiler validation
-        if [ "${PLATFORM_NAME}" = "macOS" ]; then
-            local xcode_path=$(xcode-select -p 2>/dev/null || echo "")
-            if [ -n "${xcode_path}" ]; then
-                log_info "Xcode Command Line Tools path: ${xcode_path}"
-            fi
-        fi
     fi
     
     # Check for CUDA if GPU build is requested
@@ -791,31 +743,6 @@ build_cpp_library() {
     
     # Configure CMake options
     local cmake_options="-DCMAKE_BUILD_TYPE=Release"
-    
-    # Platform-specific compiler settings
-    if [ "${PLATFORM_NAME}" = "macOS" ]; then
-        local cpp_compiler=$(get_cpp_compiler)
-        cmake_options="${cmake_options} -DCMAKE_CXX_COMPILER=${cpp_compiler}"
-        cmake_options="${cmake_options} -DCMAKE_C_COMPILER=clang"
-        
-        # macOS-specific optimizations
-        local machine_arch="$(uname -m)"
-        if [ "${machine_arch}" = "arm64" ]; then
-            log_info "Configuring for Apple Silicon (ARM64)"
-            cmake_options="${cmake_options} -DCMAKE_OSX_ARCHITECTURES=arm64"
-        else
-            log_info "Configuring for Intel macOS (x86_64)"
-            cmake_options="${cmake_options} -DCMAKE_OSX_ARCHITECTURES=x86_64"
-            # Set minimum macOS version for compatibility
-            cmake_options="${cmake_options} -DCMAKE_OSX_DEPLOYMENT_TARGET=13.7"
-        fi
-        
-        
-    elif [ "${PLATFORM_NAME}" = "Linux" ]; then
-        local cpp_compiler=$(get_cpp_compiler)
-        cmake_options="${cmake_options} -DCMAKE_CXX_COMPILER=${cpp_compiler}"
-        cmake_options="${cmake_options} -DCMAKE_C_COMPILER=gcc"
-    fi
     
     if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
         cmake_options="${cmake_options} -DGPU_BUILD=ON"
