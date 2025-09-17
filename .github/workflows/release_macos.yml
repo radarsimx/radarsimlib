@@ -1,0 +1,180 @@
+name: Build macOS Libraries
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        tier: [standard, free]
+        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            os: macos-13
+          - arch: arm64
+            os: macos-14
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.RADARSIMCPP }}
+          submodules: recursive
+
+      - name: Setup Xcode Command Line Tools
+        run: |
+          echo "::group::Xcode Setup"
+          xcode-select --print-path
+          clang --version
+          echo "::endgroup::"
+
+      - name: Install CMake
+        run: |
+          echo "::group::CMake Installation"
+          brew install cmake
+          cmake --version
+          echo "::endgroup::"
+
+      - name: Display build information
+        run: |
+          echo "::group::Build Information"
+          echo "OS: ${{ matrix.os }}"
+          echo "Tier: ${{ matrix.tier }}"
+          echo "Architecture: ${{ matrix.arch }}"
+          echo "::endgroup::"
+
+          echo "::group::System Information"
+          system_profiler SPSoftwareDataType | grep "System Version"
+          uname -m
+          sysctl -n hw.ncpu
+          echo "::endgroup::"
+
+      - name: Build ${{ matrix.tier }} ${{ matrix.arch }} library
+        run: |
+          echo "::group::Build Process"
+          # Note: GPU builds are not supported on macOS, so we use cpu for --arch
+          chmod +x ./build.sh
+          ./build.sh --arch=cpu --tier=${{ matrix.tier }} --test=${{ matrix.tier == 'standard' && matrix.arch == 'x86_64' && 'on' || 'off' }}
+          echo "::endgroup::"
+
+      - name: Rename output directory for architecture
+        run: |
+          echo "::group::Directory Renaming"
+          # The build script creates radarsimlib_linux_x86_64_* but we want platform-specific names
+          if [ "${{ matrix.tier }}" == "standard" ]; then
+            src_dir="./radarsimlib_linux_x86_64_cpu"
+            dest_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu"
+          else
+            src_dir="./radarsimlib_linux_x86_64_cpu_free"
+            dest_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu_free"
+          fi
+          
+          if [ -d "$src_dir" ]; then
+            mv "$src_dir" "$dest_dir"
+            echo "✓ Renamed $src_dir to $dest_dir"
+          else
+            echo "✗ Source directory $src_dir not found"
+            exit 1
+          fi
+          echo "::endgroup::"
+
+      - name: Verify build artifacts
+        run: |
+          echo "::group::Build Verification"
+          if [ "${{ matrix.tier }}" == "standard" ]; then
+            artifact_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu"
+          else
+            artifact_dir="./radarsimlib_macos_${{ matrix.arch }}_cpu_free"
+          fi
+          
+          ls -la "$artifact_dir"
+          
+          if [ -f "$artifact_dir/libradarsimc.dylib" ]; then
+            echo "✓ Library dylib found"
+            file "$artifact_dir/libradarsimc.dylib"
+          else
+            echo "✗ Library dylib missing"
+            exit 1
+          fi
+
+          if [ -f "$artifact_dir/radarsim.h" ]; then
+            echo "✓ Header file found"
+          else
+            echo "✗ Header file missing"
+            exit 1
+          fi
+          
+          # Verify architecture
+          echo "::group::Architecture Verification"
+          lipo -info "$artifact_dir/libradarsimc.dylib"
+          echo "::endgroup::"
+          echo "::endgroup::"
+
+      - name: Create build summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| OS | ${{ matrix.os }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tier | ${{ matrix.tier }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Architecture | ${{ matrix.arch }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifact Name | radarsimlib_macos_${{ matrix.arch }}_cpu${{ matrix.tier == 'free' && '_free' || '' }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Archive built module (${{ matrix.tier }} ${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: radarsimlib_macos_${{ matrix.arch }}_cpu${{ matrix.tier == 'free' && '_free' || '' }}
+          path: ./radarsimlib_macos_${{ matrix.arch }}_cpu${{ matrix.tier == 'free' && '_free' || '' }}
+          retention-days: 1
+          compression-level: 6
+
+      - name: Upload build logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-logs-radarsimlib_macos_${{ matrix.arch }}_cpu${{ matrix.tier == 'free' && '_free' || '' }}
+          path: |
+            ./build_logs/
+            *.log
+          retention-days: 1
+
+  # Summary job that runs after all builds complete
+  build-summary:
+    needs: build
+    runs-on: macos-latest
+    if: always()
+    steps:
+      - name: Generate build summary
+        run: |
+          echo "# macOS RadarSimLib Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Matrix Results" >> $GITHUB_STEP_SUMMARY
+          echo "Total builds: 4 [2 architectures x 2 tiers]" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Architecture Distribution" >> $GITHUB_STEP_SUMMARY
+          echo "- **x86_64**: 2 builds (standard + free)" >> $GITHUB_STEP_SUMMARY
+          echo "- **arm64**: 2 builds (standard + free)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Tier Distribution" >> $GITHUB_STEP_SUMMARY
+          echo "- **Standard**: 2 builds (x86_64 + arm64)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Free**: 2 builds (x86_64 + arm64)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts Generated" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_macos_x86_64_cpu\` (Standard x86_64)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_macos_x86_64_cpu_free\` (Free x86_64)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_macos_arm64_cpu\` (Standard ARM64)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_macos_arm64_cpu_free\` (Free ARM64)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Status" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "**All builds completed successfully!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Some builds may have failed. Check individual job logs for details.**" >> $GITHUB_STEP_SUMMARY
+          fi
