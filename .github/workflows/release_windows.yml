@@ -33,11 +33,11 @@ name: Build Windows Libraries
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     tags:
       - "*"
   pull_request:
-    branches: [master]
+    branches: [main]
   # Allow manual trigger from the Actions tab
   workflow_dispatch:
 
