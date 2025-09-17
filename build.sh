@@ -21,7 +21,7 @@
 #   - Clang/Clang++ compiler
 #
 # USAGE:
-#   ./build_linux.sh [OPTIONS]
+#   ./build.sh [OPTIONS]
 #
 # OPTIONS:
 #   --help              Show help message
@@ -46,8 +46,8 @@
 #   >1 - Test failures (number indicates failed test suites)
 #
 # FILES CREATED:
-#   - ./radarsimlib_linux_x86_64_{arch}[_free]/        # Output directory with built libraries
-#   - ./build_logs/linux_build_YYYYMMDD_HHMMSS.log     # Timestamped build log
+#   - ./radarsimlib_{platform}_{arch}_{type}[_free]/   # Output directory with built libraries
+#   - ./build_logs/build_YYYYMMDD_HHMMSS.log           # Timestamped build log
 #
 #===============================================================================
 
@@ -66,7 +66,7 @@ case "${PLATFORM}" in
     *)          PLATFORM_NAME="Unknown";;
 esac
 
-readonly LOG_FILE="${SCRIPT_DIR}/build_logs/linux_build_$(date +%Y%m%d_%H%M%S).log"
+readonly LOG_FILE="${SCRIPT_DIR}/build_logs/build_$(date +%Y%m%d_%H%M%S).log"
 if [ ! -d "${SCRIPT_DIR}/build_logs" ]; then
     mkdir -p "${SCRIPT_DIR}/build_logs"
 fi
@@ -84,7 +84,7 @@ ARCH="cpu"
 TEST="on"
 JOBS="auto"
 CLEAN="true"
-VERBOSE="false"
+VERBOSE="true"
 CMAKE_ARGS=""
 
 # Error tracking
@@ -156,7 +156,7 @@ log_error() {
 Help() {
     cat << EOF
 
-Usage: build_linux.sh [OPTIONS]
+Usage: build.sh [OPTIONS]
 
 Cross-platform build script for RadarSimLib - A Radar Simulator Built with C++
 Supports both Linux and macOS platforms with automatic platform detection.
@@ -188,7 +188,9 @@ PLATFORM-SPECIFIC NOTES:
   macOS:
     - Uses Clang/Clang++ compiler, creates .dylib files
     - Requires Xcode Command Line Tools
+    - Compatible with both Intel (x86_64) and Apple Silicon (ARM64)
     - GPU builds not currently supported on macOS
+    - Compatible with bash 3.2+ (default macOS bash)
 
 EXIT CODES:
   0  - Success
@@ -197,8 +199,8 @@ EXIT CODES:
   >1 - Test failures (number indicates failed test suites)
 
 FILES CREATED:
-  - ./radarsimlib_linux_x86_64_{arch}[_free]/    # Output directory with built libraries
-  - ./build_logs/linux_build_YYYYMMDD_HHMMSS.log # Timestamped build log
+  - ./radarsimlib_{platform}_{arch}_{type}[_free]/ # Output directory with built libraries
+  - ./build_logs/build_YYYYMMDD_HHMMSS.log         # Timestamped build log
 
 EOF
 }
@@ -208,19 +210,50 @@ EOF
 # Description:
 #   Handles cleanup operations when the script exits, either normally or due to
 #   errors/interruptions. Logs appropriate error messages and ensures proper
-#   exit code propagation.
+#   exit code propagation. Provides detailed error information for debugging.
 # Arguments:
 #   None (uses $? to get the exit code)
 # Global Variables:
 #   LOG_FILE - Path to the log file for error reporting
+#   BUILD_FAILED, CMAKE_FAILED, TEST_FAILED - Error state tracking
 # Exit:
 #   Exits with the same code that triggered the cleanup
 cleanup() {
     local exit_code=$?
+    
     if [ ${exit_code} -ne 0 ]; then
+        echo ""
+        log_error "======================================================================"
+        log_error "BUILD PROCESS FAILED"
+        log_error "======================================================================"
         log_error "Build process interrupted or failed with exit code ${exit_code}"
+        log_error "Platform: ${PLATFORM_NAME}"
+        log_error "Architecture: ${ARCH}"
+        log_error "Tier: ${TIER}"
+        
+        # Provide specific error context
+        if [ ${CMAKE_FAILED} -eq 1 ]; then
+            log_error "CMake configuration or compilation failed"
+        fi
+        if [ ${TEST_FAILED} -gt 0 ]; then
+            log_error "Unit tests failed (${TEST_FAILED} failures)"
+        fi
+        
         log_error "Check ${LOG_FILE} for detailed error information"
+        log_error "======================================================================"
+        
+        # On macOS, provide platform-specific troubleshooting tips
+        if [ "${PLATFORM_NAME}" = "macOS" ]; then
+            echo ""
+            log_info "macOS Troubleshooting Tips:"
+            log_info "1. Ensure Xcode Command Line Tools are installed: xcode-select --install"
+            log_info "2. Check if you need to accept Xcode license: sudo xcodebuild -license accept"
+            log_info "3. For M1/M2 Macs, ensure you're using compatible dependencies"
+        fi
+    else
+        log_success "Build process completed successfully"
     fi
+    
     exit ${exit_code}
 }
 
@@ -253,7 +286,7 @@ detect_cores() {
     fi
     
     # Ensure we have a positive integer
-    if ! [[ "${cores}" =~ ^[1-9][0-9]*$ ]]; then
+    if ! echo "${cores}" | grep -q '^[1-9][0-9]*$'; then
         cores=4
     fi
     
@@ -274,6 +307,23 @@ detect_cores() {
 #   if command_exists cmake; then echo "CMake is available"; fi
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+#
+# to_lowercase() - Converts a string to lowercase (macOS bash 3.2 compatible)
+# Description:
+#   Converts the input string to lowercase using tr, which is available on all platforms
+#   and doesn't require bash 4+ features like ${var,,}
+# Arguments:
+#   $1 - The string to convert to lowercase
+# Output:
+#   Prints the lowercase string to stdout
+# Return:
+#   Always returns 0 (success)
+# Example:
+#   result=$(to_lowercase "GPU")  # result will be "gpu"
+to_lowercase() {
+    echo "$1" | tr '[:upper:]' '[:lower:]'
 }
 
 #
@@ -310,6 +360,50 @@ get_cpp_compiler() {
         Linux) echo "g++" ;;
         *) echo "g++" ;;  # Default to g++
     esac
+}
+
+#
+# get_platform_suffix() - Returns the platform-specific directory suffix
+# Description:
+#   Returns the appropriate platform suffix for output directories
+# Arguments:
+#   None
+# Output:
+#   Prints the platform suffix to stdout (e.g., "linux", "macos")
+# Return:
+#   Always returns 0 (success)
+get_platform_suffix() {
+    case "${PLATFORM_NAME}" in
+        Linux) echo "linux" ;;
+        macOS) echo "macos" ;;
+        *) echo "linux" ;;
+    esac
+}
+
+#
+# get_arch_suffix() - Returns the architecture-specific directory suffix
+# Description:
+#   Returns the appropriate architecture suffix for output directories.
+#   For macOS, detects actual architecture (x86_64 vs arm64)
+# Arguments:
+#   None
+# Output:
+#   Prints the architecture suffix to stdout (e.g., "x86_64", "arm64")
+# Return:
+#   Always returns 0 (success)
+get_arch_suffix() {
+    if [ "${PLATFORM_NAME}" = "macOS" ]; then
+        # Detect actual architecture on macOS
+        local machine_arch="$(uname -m)"
+        case "${machine_arch}" in
+            x86_64) echo "x86_64" ;;
+            arm64) echo "arm64" ;;
+            *) echo "x86_64" ;;  # Default fallback
+        esac
+    else
+        # For Linux, assume x86_64
+        echo "x86_64"
+    fi
 }
 
 #
@@ -362,16 +456,28 @@ check_requirements() {
                 ;;
             macOS)
                 log_error "Please install Xcode Command Line Tools: xcode-select --install"
+                # Additional macOS-specific checks
+                if ! xcode-select -p >/dev/null 2>&1; then
+                    log_error "Xcode Command Line Tools not found. Run: xcode-select --install"
+                fi
                 ;;
         esac
         missing_deps=1
     else
         local compiler_version=$(${cpp_compiler} --version | head -n1)
         log_info "${cpp_compiler} compiler found: ${compiler_version}"
+        
+        # macOS-specific compiler validation
+        if [ "${PLATFORM_NAME}" = "macOS" ]; then
+            local xcode_path=$(xcode-select -p 2>/dev/null || echo "")
+            if [ -n "${xcode_path}" ]; then
+                log_info "Xcode Command Line Tools path: ${xcode_path}"
+            fi
+        fi
     fi
     
     # Check for CUDA if GPU build is requested
-    if [ "${ARCH,,}" = "gpu" ]; then
+    if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
         if [ "${PLATFORM_NAME}" = "macOS" ]; then
             log_warning "GPU builds are not officially supported on macOS"
             log_warning "Continuing with CPU build instead"
@@ -523,31 +629,31 @@ validate_parameters() {
     local validation_errors=0
     
     # Validate TIER
-    if [ "${TIER,,}" != "standard" ] && [ "${TIER,,}" != "free" ]; then
+    if [ "$(to_lowercase "$TIER")" != "standard" ] && [ "$(to_lowercase "$TIER")" != "free" ]; then
         log_error "Invalid --tier parameter '${TIER}'. Please choose 'standard' or 'free'"
         validation_errors=1
     fi
     
     # Validate ARCH
-    if [ "${ARCH,,}" != "cpu" ] && [ "${ARCH,,}" != "gpu" ]; then
+    if [ "$(to_lowercase "$ARCH")" != "cpu" ] && [ "$(to_lowercase "$ARCH")" != "gpu" ]; then
         log_error "Invalid --arch parameter '${ARCH}'. Please choose 'cpu' or 'gpu'"
         validation_errors=1
     fi
     
     # Validate TEST
-    if [ "${TEST,,}" != "on" ] && [ "${TEST,,}" != "off" ]; then
+    if [ "$(to_lowercase "$TEST")" != "on" ] && [ "$(to_lowercase "$TEST")" != "off" ]; then
         log_error "Invalid --test parameter '${TEST}'. Please choose 'on' or 'off'"
         validation_errors=1
     fi
     
     # Validate JOBS
-    if ! [[ "${JOBS}" =~ ^[1-9][0-9]*$ ]]; then
+    if ! echo "${JOBS}" | grep -q '^[1-9][0-9]*$'; then
         log_error "Invalid --jobs parameter '${JOBS}'. Please provide a positive integer"
         validation_errors=1
     fi
     
     # Validate CLEAN
-    if [ "${CLEAN,,}" != "true" ] && [ "${CLEAN,,}" != "false" ]; then
+    if [ "$(to_lowercase "$CLEAN")" != "true" ] && [ "$(to_lowercase "$CLEAN")" != "false" ]; then
         log_error "Invalid --clean parameter '${CLEAN}'. Please choose 'true' or 'false'"
         validation_errors=1
     fi
@@ -612,55 +718,6 @@ display_banner() {
     echo ""
 }
 
-TIER="standard"
-ARCH="cpu"
-
-for i in "$@"; do
-  case $i in
-    --help*)
-      Help
-      exit;;
-    --tier=*)
-      TIER="${i#*=}"
-      shift # past argument
-      ;;
-    --arch=*)
-      ARCH="${i#*=}"
-      shift # past argument
-      ;;
-    --*)
-      echo "Unknown option $1"
-      exit 1
-      ;;
-    *)
-      ;;
-  esac
-done
-
-if [ "${TIER,,}" != "standard" ] && [ "${TIER,,}" != "free" ]; then
-    echo "ERROR: Invalid --tier parameters, please choose 'free' or 'standard'"
-    exit 1
-fi
-
-if [ "${ARCH,,}" != "cpu" ] && [ "${ARCH,,}" != "gpu" ]; then
-    echo "ERROR: Invalid --arch parameters, please choose 'cpu' or 'gpu'"
-    exit 1
-fi
-
-echo "Automatic build script of radarsimlib for Linux"
-echo ""
-echo "----------"
-echo "Copyright (C) 2023 - PRESENT  radarsimx.com"
-echo "E-mail: info@radarsimx.com"
-echo "Website: https://radarsimx.com"
-echo ""
-echo "██████╗  █████╗ ██████╗  █████╗ ██████╗ ███████╗██╗███╗   ███╗██╗  ██╗"
-echo "██╔══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗██╔════╝██║████╗ ████║╚██╗██╔╝"
-echo "██████╔╝███████║██║  ██║███████║██████╔╝███████╗██║██╔████╔██║ ╚███╔╝ "
-echo "██╔══██╗██╔══██║██║  ██║██╔══██║██╔══██╗╚════██║██║██║╚██╔╝██║ ██╔██╗ "
-echo "██║  ██║██║  ██║██████╔╝██║  ██║██║  ██║███████║██║██║ ╚═╝ ██║██╔╝ ██╗"
-echo "╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝╚═╝     ╚═╝╚═╝  ╚═╝"
-
 #
 # clean_build_artifacts() - Removes previous build artifacts and generated files
 # Description:
@@ -673,12 +730,12 @@ echo "╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝  �
 #   CLEAN - Controls whether cleanup is performed
 # Directories/Files Removed:
 #   - ./build/ - C++ build directory
-#   - ./radarsimlib_linux_x86_64_* - Output directories
+#   - ./radarsimlib_{platform}_{arch}_* - Output directories
 # Behavior:
 #   - If CLEAN='true': Performs full cleanup
 #   - If CLEAN='false': Skips cleanup and logs message
 clean_build_artifacts() {
-    if [ "${CLEAN,,}" = "true" ]; then
+    if [ "$(to_lowercase "$CLEAN")" = "true" ]; then
         log_info "Cleaning previous build artifacts..."
         
         # Remove build directory
@@ -686,14 +743,6 @@ clean_build_artifacts() {
             rm -rf "./build"
             log_info "Removed build directory"
         fi
-        
-        # Remove output directories
-        for dir in ./radarsimlib_linux_x86_64_*; do
-            if [ -d "${dir}" ]; then
-                rm -rf "${dir}"
-                log_info "Removed output directory: ${dir}"
-            fi
-        done
         
         log_success "Build artifacts cleaned successfully"
     else
@@ -743,15 +792,44 @@ build_cpp_library() {
     # Configure CMake options
     local cmake_options="-DCMAKE_BUILD_TYPE=Release"
     
-    if [ "${ARCH,,}" = "gpu" ]; then
+    # Platform-specific compiler settings
+    if [ "${PLATFORM_NAME}" = "macOS" ]; then
+        local cpp_compiler=$(get_cpp_compiler)
+        cmake_options="${cmake_options} -DCMAKE_CXX_COMPILER=${cpp_compiler}"
+        cmake_options="${cmake_options} -DCMAKE_C_COMPILER=clang"
+        
+        # macOS-specific optimizations
+        local machine_arch="$(uname -m)"
+        if [ "${machine_arch}" = "arm64" ]; then
+            log_info "Configuring for Apple Silicon (ARM64)"
+            cmake_options="${cmake_options} -DCMAKE_OSX_ARCHITECTURES=arm64"
+        else
+            log_info "Configuring for Intel macOS (x86_64)"
+            cmake_options="${cmake_options} -DCMAKE_OSX_ARCHITECTURES=x86_64"
+        fi
+        
+        # Set minimum macOS version for compatibility
+        cmake_options="${cmake_options} -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
+    elif [ "${PLATFORM_NAME}" = "Linux" ]; then
+        local cpp_compiler=$(get_cpp_compiler)
+        cmake_options="${cmake_options} -DCMAKE_CXX_COMPILER=${cpp_compiler}"
+        cmake_options="${cmake_options} -DCMAKE_C_COMPILER=gcc"
+    fi
+    
+    if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
         cmake_options="${cmake_options} -DGPU_BUILD=ON"
         log_info "Configuring for GPU build"
+        
+        # Warn about macOS GPU support
+        if [ "${PLATFORM_NAME}" = "macOS" ]; then
+            log_warning "GPU builds on macOS may have limited CUDA support"
+        fi
     else
         cmake_options="${cmake_options} -DGPU_BUILD=OFF"
         log_info "Configuring for CPU build"
     fi
     
-    if [ "${TIER,,}" = "free" ]; then
+    if [ "$(to_lowercase "$TIER")" = "free" ]; then
         cmake_options="${cmake_options} -DFREETIER=ON"
         log_info "Configuring for free tier"
     else
@@ -759,7 +837,7 @@ build_cpp_library() {
         log_info "Configuring for standard tier"
     fi
     
-    if [ "${TEST,,}" = "on" ]; then
+    if [ "$(to_lowercase "$TEST")" = "on" ]; then
         cmake_options="${cmake_options} -DGTEST=ON"
         log_info "Enabling unit tests"
     else
@@ -775,7 +853,7 @@ build_cpp_library() {
     
     # Configure build
     log_info "Configuring CMake build..."
-    if [ "${VERBOSE,,}" = "true" ]; then
+    if [ "$(to_lowercase "$VERBOSE")" = "true" ]; then
         eval "cmake ${cmake_options} .."
     else
         eval "cmake ${cmake_options} .." >> "${LOG_FILE}" 2>&1
@@ -790,7 +868,7 @@ build_cpp_library() {
     
     # Build the library
     log_info "Building C++ library with ${JOBS} parallel jobs..."
-    if [ "${VERBOSE,,}" = "true" ]; then
+    if [ "$(to_lowercase "$VERBOSE")" = "true" ]; then
         cmake --build . --parallel "${JOBS}"
     else
         cmake --build . --parallel "${JOBS}" >> "${LOG_FILE}" 2>&1
@@ -836,19 +914,21 @@ install_libraries() {
     
     # Determine output directory based on configuration
     local lib_ext=$(get_library_extension)
+    local platform_suffix=$(get_platform_suffix)
+    local arch_suffix=$(get_arch_suffix)
     local release_path
     
-    if [ "${ARCH,,}" = "gpu" ]; then
-        if [ "${TIER,,}" = "standard" ]; then
-            release_path="./radarsimlib_linux_x86_64_gpu"
+    if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
+        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
+            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu"
         else
-            release_path="./radarsimlib_linux_x86_64_gpu_free"
+            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu_free"
         fi
     else
-        if [ "${TIER,,}" = "standard" ]; then
-            release_path="./radarsimlib_linux_x86_64_cpu"
+        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
+            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu"
         else
-            release_path="./radarsimlib_linux_x86_64_cpu_free"
+            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu_free"
         fi
     fi
     
@@ -880,6 +960,139 @@ install_libraries() {
 }
 
 #
+# validate_build_output() - Validates the final build artifacts and compatibility
+# Description:
+#   Performs comprehensive validation of the built libraries including:
+#   - File existence and permissions
+#   - Library architecture verification (macOS specific)
+#   - Symbol table verification
+#   - Dependency checking
+# Arguments:
+#   None
+# Global Variables Used:
+#   ARCH, TIER, PLATFORM_NAME - Used to determine output paths
+# Exit:
+#   Exits with code 1 if validation fails
+validate_build_output() {
+    log_info "Validating build output..."
+    
+    # Determine output directory
+    local lib_ext=$(get_library_extension)
+    local platform_suffix=$(get_platform_suffix)
+    local arch_suffix=$(get_arch_suffix)
+    local release_path
+    
+    if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
+        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
+            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu"
+        else
+            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu_free"
+        fi
+    else
+        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
+            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu"
+        else
+            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu_free"
+        fi
+    fi
+    
+    # Verify output directory exists
+    if [ ! -d "${release_path}" ]; then
+        log_error "Output directory not found: ${release_path}"
+        return 1
+    fi
+    
+    # Verify library file
+    local lib_file="${release_path}/libradarsimc.${lib_ext}"
+    if [ ! -f "${lib_file}" ]; then
+        log_error "Library file not found: ${lib_file}"
+        return 1
+    fi
+    
+    # Verify header file
+    local header_file="${release_path}/radarsim.h"
+    if [ ! -f "${header_file}" ]; then
+        log_error "Header file not found: ${header_file}"
+        return 1
+    fi
+    
+    # Platform-specific validation
+    if [ "${PLATFORM_NAME}" = "macOS" ]; then
+        # Check library architecture on macOS
+        if command_exists file; then
+            local file_info=$(file "${lib_file}")
+            log_info "Library file info: ${file_info}"
+        fi
+        
+        # Check architecture compatibility with lipo (if available)
+        if command_exists lipo; then
+            local arch_info=$(lipo -info "${lib_file}" 2>/dev/null || echo "Could not determine architecture")
+            log_info "Library architecture: ${arch_info}"
+            
+            # Verify it matches the expected architecture
+            local expected_arch=$(uname -m)
+            if echo "${arch_info}" | grep -q "${expected_arch}"; then
+                log_success "Library architecture matches system: ${expected_arch}"
+            else
+                log_warning "Library architecture may not match system architecture"
+            fi
+        fi
+        
+        # Check for basic symbols in the library
+        if command_exists nm; then
+            local symbol_count=$(nm -D "${lib_file}" 2>/dev/null | wc -l || echo "0")
+            if [ "${symbol_count}" -gt 0 ]; then
+                log_success "Library contains ${symbol_count} exported symbols"
+            else
+                log_warning "Could not verify library symbols"
+            fi
+        fi
+    elif [ "${PLATFORM_NAME}" = "Linux" ]; then
+        # Linux-specific validation
+        if command_exists file; then
+            local file_info=$(file "${lib_file}")
+            log_info "Library file info: ${file_info}"
+        fi
+        
+        # Check dependencies
+        if command_exists ldd; then
+            log_info "Library dependencies:"
+            ldd "${lib_file}" | head -10  # Show first 10 dependencies
+        fi
+        
+        # Check for basic symbols
+        if command_exists nm; then
+            local symbol_count=$(nm -D "${lib_file}" 2>/dev/null | wc -l || echo "0")
+            if [ "${symbol_count}" -gt 0 ]; then
+                log_success "Library contains ${symbol_count} exported symbols"
+            else
+                log_warning "Could not verify library symbols"
+            fi
+        fi
+    fi
+    
+    # Verify file sizes are reasonable
+    local lib_size=$(stat -c%s "${lib_file}" 2>/dev/null || stat -f%z "${lib_file}" 2>/dev/null || echo "0")
+    if [ "${lib_size}" -gt 1000 ]; then  # At least 1KB
+        log_success "Library file size: ${lib_size} bytes"
+    else
+        log_error "Library file appears to be too small: ${lib_size} bytes"
+        return 1
+    fi
+    
+    local header_size=$(stat -c%s "${header_file}" 2>/dev/null || stat -f%z "${header_file}" 2>/dev/null || echo "0")
+    if [ "${header_size}" -gt 100 ]; then  # At least 100 bytes
+        log_success "Header file size: ${header_size} bytes"
+    else
+        log_error "Header file appears to be too small: ${header_size} bytes"
+        return 1
+    fi
+    
+    log_success "Build output validation completed successfully"
+    return 0
+}
+
+#
 # run_tests() - Executes unit tests if enabled
 # Description:
 #   Runs comprehensive test suites including Google Test for C++ components.
@@ -894,7 +1107,7 @@ install_libraries() {
 #   Sets TEST_FAILED=1 on any test failures
 #   Continues with warnings if test tools are not available
 run_tests() {
-    if [ "${TEST,,}" = "off" ]; then
+    if [ "$(to_lowercase "$TEST")" = "off" ]; then
         log_info "Tests are disabled, skipping test execution"
         return 0
     fi
@@ -904,7 +1117,7 @@ run_tests() {
     # Run Google Test using CTest
     if [ -f "./build/radarsimc_test" ] && command_exists ctest; then
         log_info "Running Google Test for C++ using CTest..."
-        if [ "${VERBOSE,,}" = "true" ]; then
+        if [ "$(to_lowercase "$VERBOSE")" = "true" ]; then
             ctest --test-dir "./build" --verbose
         else
             ctest --test-dir "./build" --verbose >> "${LOG_FILE}" 2>&1
@@ -961,23 +1174,26 @@ build_success() {
     echo ""
     echo "Output Locations:"
     local lib_ext=$(get_library_extension)
-    if [ "${ARCH,,}" = "gpu" ]; then
-        if [ "${TIER,,}" = "standard" ]; then
-            echo "  - Output Directory: ./radarsimlib_linux_x86_64_gpu/"
+    local platform_suffix=$(get_platform_suffix)
+    local arch_suffix=$(get_arch_suffix)
+    
+    if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
+        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
+            echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_gpu/"
         else
-            echo "  - Output Directory: ./radarsimlib_linux_x86_64_gpu_free/"
+            echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_gpu_free/"
         fi
     else
-        if [ "${TIER,,}" = "standard" ]; then
-            echo "  - Output Directory: ./radarsimlib_linux_x86_64_cpu/"
+        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
+            echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_cpu/"
         else
-            echo "  - Output Directory: ./radarsimlib_linux_x86_64_cpu_free/"
+            echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_cpu_free/"
         fi
     fi
     echo "  - Library File: libradarsimc.${lib_ext}"
     echo "  - Header File: radarsim.h"
     echo ""
-    if [ "${TEST,,}" = "on" ]; then
+    if [ "$(to_lowercase "$TEST")" = "on" ]; then
         echo "Test Results: All tests passed successfully"
     else
         echo "Test Results: Tests were skipped (disabled)"
@@ -1071,6 +1287,9 @@ main() {
     # Install libraries
     install_libraries
     
+    # Validate build output
+    validate_build_output
+    
     # Run tests if enabled
     run_tests
     
@@ -1082,43 +1301,4 @@ main() {
 
 # Call main function with all arguments
 main "$@"
-
-workpath=$(pwd)
-
-echo "## Clean old build files ##"
-rm -rf ./build
-
-mkdir ./build 
-cd ./build
-
-if [ "${ARCH,,}" == "gpu" ]; then
-    if [ "${TIER,,}" == "standard" ]; then
-        echo "## Build standard GPU verion ##"
-        release_path="./radarsimlib_linux_x86_64_gpu"
-        cmake -DCMAKE_BUILD_TYPE=Release -DGPU_BUILD=ON -DFREETIER=OFF ..
-    elif [ "${TIER,,}" == "free" ]; then
-        echo "## Build freetier GPU verion ##"
-        release_path="./radarsimlib_linux_x86_64_gpu_free"
-        cmake -DCMAKE_BUILD_TYPE=Release -DGPU_BUILD=ON -DFREETIER=ON ..
-    fi
-elif [ "${ARCH,,}" == "cpu" ]; then
-    if [ "${TIER,,}" == "standard" ]; then
-        echo "## Build standard CPU verion ##"
-        release_path="./radarsimlib_linux_x86_64_cpu"
-        cmake -DCMAKE_BUILD_TYPE=Release -DGPU_BUILD=OFF -DFREETIER=OFF ..
-    elif [ "${TIER,,}" == "free" ]; then
-        echo "## Build freetier CPU verion ##"
-        release_path="./radarsimlib_linux_x86_64_cpu_free"
-        cmake -DCMAKE_BUILD_TYPE=Release -DGPU_BUILD=OFF -DFREETIER=ON ..
-    fi
-fi
-cmake --build .
-
-cd $workpath
-
-rm -rf ${release_path}
-mkdir ${release_path}
-cp ./build/libradarsimc.so ${release_path}
-cp ./src/includes/radarsim.h ${release_path}
-
-echo "## Build completed ##"
+exit $?

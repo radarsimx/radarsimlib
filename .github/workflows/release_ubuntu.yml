@@ -90,11 +90,12 @@ jobs:
 
       - name: Setup CUDA Toolkit
         if: matrix.arch == 'gpu'
-        uses: Jimver/cuda-toolkit@v0.2.24
+        uses: Jimver/cuda-toolkit@v0.2.26
         with:
-          cuda: "12.8.1"
+          cuda: "12.9.1"
           method: "network"
-          sub-packages: '["nvcc", "cudart", "cuda-nvrtc", "libcublas", "libcufft", "libcurand", "libcusparse", "libcusolver"]'
+          sub-packages: '["nvcc"]'
+          linux-local-args: '["--toolkit", "--silent"]'
 
       - name: Cache build dependencies
         uses: actions/cache@v4

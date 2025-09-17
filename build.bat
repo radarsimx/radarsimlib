@@ -332,23 +332,6 @@ REM   Continues on cleanup failures with warnings (non-fatal)
             echo WARNING: Could not fully clean C++ build directory
         )
     )
-    
-    REM Clean output directories
-    if exist ".\radarsimlib_win_x86_64_cpu" (
-        rmdir /q /s ".\radarsimlib_win_x86_64_cpu" 2>nul
-    )
-    
-    if exist ".\radarsimlib_win_x86_64_cpu_free" (
-        rmdir /q /s ".\radarsimlib_win_x86_64_cpu_free" 2>nul
-    )
-    
-    if exist ".\radarsimlib_win_x86_64_gpu" (
-        rmdir /q /s ".\radarsimlib_win_x86_64_gpu" 2>nul
-    )
-    
-    if exist ".\radarsimlib_win_x86_64_gpu_free" (
-        rmdir /q /s ".\radarsimlib_win_x86_64_gpu_free" 2>nul
-    )
 
 REM Build C++ library
 REM

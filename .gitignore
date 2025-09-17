@@ -61,3 +61,4 @@ matlab/radarsim.h
 /tests/build
 /examples/cpp/build
 /examples/cpp/radarsimlib
+/build_logs
