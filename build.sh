@@ -806,10 +806,11 @@ build_cpp_library() {
         else
             log_info "Configuring for Intel macOS (x86_64)"
             cmake_options="${cmake_options} -DCMAKE_OSX_ARCHITECTURES=x86_64"
+            # Set minimum macOS version for compatibility
+            cmake_options="${cmake_options} -DCMAKE_OSX_DEPLOYMENT_TARGET=13.7"
         fi
         
-        # Set minimum macOS version for compatibility
-        # cmake_options="${cmake_options} -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
+        
     elif [ "${PLATFORM_NAME}" = "Linux" ]; then
         local cpp_compiler=$(get_cpp_compiler)
         cmake_options="${cmake_options} -DCMAKE_CXX_COMPILER=${cpp_compiler}"
