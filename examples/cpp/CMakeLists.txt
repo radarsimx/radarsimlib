@@ -55,10 +55,18 @@ if(WIN32)
     )
 else()
     set(RADARSIM_LIB_NAME "radarsimc")
+    set(RADARSIM_SO_NAME "libradarsimc.so")
 
     # Only search in the radarsimlib release folder
     find_library(RADARSIM_LIBRARY
         NAMES ${RADARSIM_LIB_NAME}
+        PATHS "${RADARSIM_LIB_DIR}"
+        NO_DEFAULT_PATH
+    )
+
+    # Find the shared library file for runtime
+    find_file(RADARSIM_SO
+        NAMES ${RADARSIM_SO_NAME}
         PATHS "${RADARSIM_LIB_DIR}"
         NO_DEFAULT_PATH
     )
@@ -89,6 +97,8 @@ message(STATUS "Found RadarSim header: ${RADARSIM_HEADER}")
 
 if(WIN32 AND RADARSIM_DLL)
     message(STATUS "Found RadarSim DLL: ${RADARSIM_DLL}")
+elseif(UNIX AND RADARSIM_SO)
+    message(STATUS "Found RadarSim shared library: ${RADARSIM_SO}")
 endif()
 
 # Create the executable from C++ source
@@ -107,6 +117,15 @@ if(UNIX)
     target_link_libraries(example_radarsim m)
 endif()
 
+# Set RPATH for Unix systems to find shared libraries
+if(UNIX)
+    set_target_properties(example_radarsim PROPERTIES
+        INSTALL_RPATH_USE_LINK_PATH TRUE
+        BUILD_WITH_INSTALL_RPATH FALSE
+        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib"
+    )
+endif()
+
 # Set output directory
 set_target_properties(example_radarsim PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
@@ -122,6 +141,16 @@ if(WIN32 AND RADARSIM_DLL)
     )
 endif()
 
+# Copy shared library to output directory on Unix systems
+if(UNIX AND RADARSIM_SO)
+    add_custom_command(TARGET example_radarsim POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${RADARSIM_SO}"
+        "$<TARGET_FILE_DIR:example_radarsim>"
+        COMMENT "Copying RadarSim shared library to output directory"
+    )
+endif()
+
 # Installation
 install(TARGETS example_radarsim
     RUNTIME DESTINATION bin
@@ -130,6 +159,13 @@ install(TARGETS example_radarsim
 if(WIN32 AND RADARSIM_DLL)
     install(FILES "${RADARSIM_DLL}"
         DESTINATION bin
+    )
+endif()
+
+# Install shared library on Unix systems
+if(UNIX AND RADARSIM_SO)
+    install(FILES "${RADARSIM_SO}"
+        DESTINATION lib
     )
 endif()
 
@@ -145,6 +181,8 @@ message(STATUS "  Include Directory: ${RADARSIM_INCLUDE_DIR}")
 
 if(WIN32 AND RADARSIM_DLL)
     message(STATUS "  RadarSim DLL: ${RADARSIM_DLL}")
+elseif(UNIX AND RADARSIM_SO)
+    message(STATUS "  RadarSim shared library: ${RADARSIM_SO}")
 endif()
 
 message(STATUS "")
