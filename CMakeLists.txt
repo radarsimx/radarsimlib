@@ -33,48 +33,64 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows") # Windows
     include_directories("./src/includes"
         "./src/radarsimcpp/includes"
         "./src/radarsimcpp/hdf5-lib-build/libs/lib_win_x86_64/include")
-    link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_win_x86_64/lib")
+
+    # Use full paths to static libraries to ensure static linking
     set(_hdf5_libs
-        libhdf5
-        libhdf5_cpp
-        libhdf5_hl
-        libhdf5_hl_cpp
+        "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_win_x86_64/lib/libhdf5.lib"
+        "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_win_x86_64/lib/libhdf5_cpp.lib"
+        "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_win_x86_64/lib/libhdf5_hl.lib"
+        "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_win_x86_64/lib/libhdf5_hl_cpp.lib"
         shlwapi
     )
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux") # Linux
     include_directories("./src/includes"
         "./src/radarsimcpp/includes"
         "./src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/include")
-    link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib")
+
+    # Use full paths to static libraries to ensure static linking
     set(_hdf5_libs
-        hdf5
-        hdf5_cpp
-        hdf5_hl
-        hdf5_hl_cpp
+        "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5.a"
+        "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5_cpp.a"
+        "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5_hl.a"
+        "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5_hl_cpp.a"
     )
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin") # macOS
     include_directories("./src/includes"
         "./src/radarsimcpp/includes")
-    
+
     # Set HDF5 paths based on architecture
     if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm64")
         include_directories("./src/radarsimcpp/hdf5-lib-build/libs/lib_macos_arm64/include")
-        link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_arm64/lib")
+
+        # Use full paths to static libraries
+        set(_hdf5_libs
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_arm64/lib/libhdf5.a"
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_arm64/lib/libhdf5_cpp.a"
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_arm64/lib/libhdf5_hl.a"
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_arm64/lib/libhdf5_hl_cpp.a"
+        )
     elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "x86_64")
         include_directories("./src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/include")
-        link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib")
+
+        # Use full paths to static libraries
+        set(_hdf5_libs
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib/libhdf5.a"
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib/libhdf5_cpp.a"
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib/libhdf5_hl.a"
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib/libhdf5_hl_cpp.a"
+        )
     else()
         # Fallback to x86_64 for unknown architectures
         include_directories("./src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/include")
-        link_directories("${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib")
+
+        # Use full paths to static libraries
+        set(_hdf5_libs
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib/libhdf5.a"
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib/libhdf5_cpp.a"
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib/libhdf5_hl.a"
+            "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_macos_x86_64/lib/libhdf5_hl_cpp.a"
+        )
     endif()
-    
-    set(_hdf5_libs
-        hdf5
-        hdf5_cpp
-        hdf5_hl
-        hdf5_hl_cpp
-    )
 endif()
 
 if(GPU_BUILD)
@@ -106,13 +122,41 @@ if(GPU_BUILD)
     endif()
 
     target_link_libraries(radarsimc PUBLIC ${_hdf5_libs})
+
+    # For Linux, ensure static libraries are properly embedded in shared library
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        # Use whole-archive to force inclusion of all symbols from static libraries
+        target_link_options(radarsimc PRIVATE
+            "LINKER:--whole-archive"
+            "LINKER:${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5.a"
+            "LINKER:${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5_cpp.a"
+            "LINKER:${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5_hl.a"
+            "LINKER:${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5_hl_cpp.a"
+            "LINKER:--no-whole-archive"
+        )
+    endif()
 else()
     # add source files, ".cpp"
     file(GLOB SOURCES "./src/*.cpp" "./src/radarsimcpp/src/*.cpp")
 
     # build library
     add_library(radarsimc SHARED ${SOURCES})
+
+    # Link HDF5 libraries statically
     target_link_libraries(radarsimc PUBLIC ${_hdf5_libs})
+
+    # For Linux, ensure static libraries are properly embedded in shared library
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        # Use whole-archive to force inclusion of all symbols from static libraries
+        target_link_options(radarsimc PRIVATE
+            "LINKER:--whole-archive"
+            "LINKER:${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5.a"
+            "LINKER:${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5_cpp.a"
+            "LINKER:${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5_hl.a"
+            "LINKER:${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_gcc11_x86_64/lib/libhdf5_hl_cpp.a"
+            "LINKER:--no-whole-archive"
+        )
+    endif()
 
     # add_executable(radarsimc ${SOURCES})
 endif()
