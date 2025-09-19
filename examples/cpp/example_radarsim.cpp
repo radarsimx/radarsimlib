@@ -29,18 +29,6 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// Helper function to create simple antenna pattern (isotropic with slight
-// directivity)
-void create_simple_antenna_pattern(float* angles, float* pattern,
-                                   int num_points, float max_gain_db) {
-  for (int i = 0; i < num_points; i++) {
-    angles[i] = static_cast<float>(i) / (num_points - 1) * 2.0f * M_PI - M_PI;
-    // Simple cosine-squared pattern
-    pattern[i] =
-        max_gain_db * std::cos(angles[i] / 2.0f) * std::cos(angles[i] / 2.0f);
-  }
-}
-
 // RAII wrapper for automatic cleanup
 class RadarSimManager {
  private:
@@ -135,23 +123,19 @@ int main() {
     std::cout << "set_transmitter\n";
 
     // Configure transmitter antenna
-    const int ant_points = 361;  // 1 degree resolution
-    std::vector<float> phi_angles(ant_points);
-    std::vector<float> phi_pattern(ant_points);
-    std::vector<float> theta_angles(ant_points);
-    std::vector<float> theta_pattern(ant_points);
-
-    create_simple_antenna_pattern(phi_angles.data(), phi_pattern.data(),
-                                  ant_points, 15.0f);
-    create_simple_antenna_pattern(theta_angles.data(), theta_pattern.data(),
-                                  ant_points, 15.0f);
+    const int ant_points = 2;
+    float antenna_gain = 15.0f;  // 15 dBi gain
+    std::vector<float> phi_angles = {(float)(-M_PI / 2), (float)(M_PI / 2)};
+    std::vector<float> phi_pattern = {0.0f, 0.0f};
+    std::vector<float> theta_angles = {0.0f, (float)(M_PI)};
+    std::vector<float> theta_pattern = {0.0f, 0.0f};
 
     std::cout << "create_simple_antenna_pattern\n";
 
     // Transmitter location and polarization
     std::vector<float> tx_location = {0.0f, 0.0f, 1.5f};  // 1.5m height
-    std::vector<float> tx_polar_real = {1.0f, 0.0f,
-                                        0.0f};  // Horizontal polarization
+    std::vector<float> tx_polar_real = {0.0f, 0.0f,
+                                        1.0f};  // Horizontal polarization
     std::vector<float> tx_polar_imag = {0.0f, 0.0f, 0.0f};
 
     // Add transmitter channel
@@ -159,7 +143,7 @@ int main() {
         tx_location.data(), tx_polar_real.data(), tx_polar_imag.data(),
         phi_angles.data(), phi_pattern.data(), ant_points, theta_angles.data(),
         theta_pattern.data(), ant_points,
-        15.0f,                         // antenna gain
+        antenna_gain,                  // antenna gain
         nullptr, nullptr, nullptr, 0,  // No amplitude modulation
         pulse_mod_real.data(),
         pulse_mod_imag.data(),  // Pulse modulation arrays
@@ -178,11 +162,11 @@ int main() {
      *********************************************/
     std::cout << "2. Creating Receiver...\n";
 
-    const float sampling_rate = 10e6;   // 10 MHz sampling rate
-    const float rf_gain = 20.0f;        // 20 dB RF gain
-    const float load_resistor = 50.0f;  // 50 ohm load
-    const float baseband_gain = 30.0f;  // 30 dB baseband gain
-    const float baseband_bw = 5e6;      // 5 MHz baseband bandwidth
+    const float sampling_rate = 10e6;     // 10 MHz sampling rate
+    const float rf_gain = 20.0f;          // 20 dB RF gain
+    const float load_resistor = 1000.0f;  // 1000 ohm load
+    const float baseband_gain = 30.0f;    // 30 dB baseband gain
+    const float baseband_bw = 5e6;        // 5 MHz baseband bandwidth
 
     // Create receiver
     t_Receiver* rx = Create_Receiver(sampling_rate, rf_gain, load_resistor,
@@ -200,7 +184,7 @@ int main() {
                            tx_polar_imag.data(), phi_angles.data(),
                            phi_pattern.data(), ant_points, theta_angles.data(),
                            theta_pattern.data(), ant_points,
-                           15.0f,  // antenna gain
+                           antenna_gain,  // antenna gain
                            rx);
     if (result != 0) {
       throw std::runtime_error("Failed to add receiver channel");
@@ -260,9 +244,8 @@ int main() {
 
     std::vector<float> target2_location = {
         200.0f, 50.0f, 1.5f};  // 200m range, 50m cross-range
-    std::vector<float> target2_speed = {0.0f, -10.0f,
-                                        0.0f};  // Moving laterally
-    float target2_rcs = 5.0f;                   // 5 dBsm RCS
+    std::vector<float> target2_speed = {0.0f, 0.0f, 0.0f};  // Moving laterally
+    float target2_rcs = 5.0f;                               // 5 dBsm RCS
     float target2_phase = M_PI / 4;
 
     result = Add_Point_Target(target2_location.data(), target2_speed.data(),
@@ -275,7 +258,7 @@ int main() {
     std::vector<float> mesh_points = {
         -1.0f, -1.0f, 0.0f,  // Vertex 0
         1.0f,  -1.0f, 0.0f,  // Vertex 1
-        0.0f,  1.0f,  0.0f,   // Vertex 2
+        0.0f,  1.0f,  0.0f,  // Vertex 2
         0.0f,  1.0f,  2.0f   // Vertex 3
     };
     std::vector<int> mesh_cells = {0, 1, 2, 0, 2, 3};  // Single triangle
@@ -335,97 +318,6 @@ int main() {
     std::cout << "   ✓ Radar simulation completed\n";
     std::cout << "   Max amplitude: " << std::scientific << max_amplitude
               << ", RMS amplitude: " << rms_amplitude << std::endl;
-
-    /*********************************************
-     * 6. Run RCS Simulation (optional)
-     *********************************************/
-    std::cout << "6. Running RCS Simulation...\n";
-
-    const int num_rcs_directions = 36;  // 10 degree steps
-    std::vector<double> inc_directions(num_rcs_directions * 3);
-    std::vector<double> obs_directions(num_rcs_directions * 3);
-    std::vector<double> rcs_results(num_rcs_directions);
-
-    // Create bistatic RCS measurement directions
-    for (int i = 0; i < num_rcs_directions; i++) {
-      double angle = i * 2.0 * M_PI / num_rcs_directions;
-      // Incident direction (always from front)
-      inc_directions[i * 3 + 0] = -1.0;  // -X direction
-      inc_directions[i * 3 + 1] = 0.0;
-      inc_directions[i * 3 + 2] = 0.0;
-      // Observation direction (varying azimuth)
-      obs_directions[i * 3 + 0] = std::cos(angle);
-      obs_directions[i * 3 + 1] = std::sin(angle);
-      obs_directions[i * 3 + 2] = 0.0;
-    }
-
-    std::vector<double> inc_polar_real = {0.0, 0.0,
-                                          1.0};  // Vertical polarization
-    std::vector<double> inc_polar_imag = {0.0, 0.0, 0.0};
-    std::vector<double> obs_polar_real = {0.0, 0.0, 1.0};  // Same polarization
-    std::vector<double> obs_polar_imag = {0.0, 0.0, 0.0};
-
-    result = Run_RcsSimulator(targets, inc_directions.data(),
-                              obs_directions.data(), num_rcs_directions,
-                              inc_polar_real.data(), inc_polar_imag.data(),
-                              obs_polar_real.data(), obs_polar_imag.data(),
-                              76.5e9, 2.0, rcs_results.data());
-
-    if (result == 0) {
-      std::cout << "   ✓ RCS simulation completed\n";
-      auto max_rcs_iter =
-          std::max_element(rcs_results.begin(), rcs_results.end());
-      std::cout << "   Maximum RCS: " << std::scientific << *max_rcs_iter
-                << " m²\n";
-    } else {
-      std::cout << "   RCS simulation failed or not available\n";
-    }
-
-    /*********************************************
-     * 7. Run LiDAR Simulation (optional)
-     *********************************************/
-    std::cout << "7. Running LiDAR Simulation...\n";
-
-    const int num_lidar_rays = 1000;
-    const int max_lidar_points = 500;
-
-    std::vector<double> phi_array(num_lidar_rays);
-    std::vector<double> theta_array(num_lidar_rays);
-    std::vector<double> cloud_points(max_lidar_points * 3);
-    std::vector<double> cloud_distances(max_lidar_points);
-    std::vector<double> cloud_intensities(max_lidar_points);
-
-    // Create random ray directions
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<double> phi_dist(0.0, 2.0 * M_PI);
-    std::uniform_real_distribution<double> theta_dist(0.0, M_PI);
-
-    for (int i = 0; i < num_lidar_rays; i++) {
-      phi_array[i] = phi_dist(gen);
-      theta_array[i] = theta_dist(gen);
-    }
-
-    std::vector<double> lidar_location = {0.0, 0.0, 1.5};  // Same as radar
-    int actual_points = 0;
-
-    result = Run_LidarSimulator(
-        targets, phi_array.data(), theta_array.data(), num_lidar_rays,
-        lidar_location.data(), cloud_points.data(), cloud_distances.data(),
-        cloud_intensities.data(), max_lidar_points, &actual_points);
-
-    if (result == 0) {
-      std::cout << "   ✓ LiDAR simulation completed\n";
-      std::cout << "   Point cloud contains " << actual_points << " points\n";
-      if (actual_points > 0) {
-        std::cout << "   First point: (" << std::fixed << std::setprecision(2)
-                  << cloud_points[0] << ", " << cloud_points[1] << ", "
-                  << cloud_points[2] << ") at distance " << cloud_distances[0]
-                  << " m\n";
-      }
-    } else {
-      std::cout << "   LiDAR simulation failed or not available\n";
-    }
 
     std::cout << "\n✓ All simulations completed successfully!\n";
 
