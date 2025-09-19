@@ -326,7 +326,7 @@ int main() {
     return 1;
   }
 
-  std::cout << "\n8. Cleaning up...\n";
+  std::cout << "\n6. Cleaning up...\n";
   std::cout << "   ✓ Cleanup completed (automatic with RAII)\n";
   std::cout << "\nExample completed successfully!\n";
 
