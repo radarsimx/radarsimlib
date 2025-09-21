@@ -195,11 +195,15 @@ jobs:
         run: |
           mkdir -p packed/radarsimlib_windows_all
 
-          # Create the directory structure
-          mkdir -p packed/radarsimlib_windows_all/trial/Windows_x86_64_CPU
-          mkdir -p packed/radarsimlib_windows_all/standard/Windows_x86_64_CPU
-          mkdir -p packed/radarsimlib_windows_all/trial/Windows_x86_64_GPU
-          mkdir -p packed/radarsimlib_windows_all/standard/Windows_x86_64_GPU
+          # Create the directory structure for full archive
+          mkdir -p packed/radarsimlib_windows_all/trial
+          mkdir -p packed/radarsimlib_windows_all/standard
+
+          # Create temporary directories for organizing files before zipping
+          mkdir -p temp/trial/Windows_x86_64_CPU
+          mkdir -p temp/trial/Windows_x86_64_GPU
+          mkdir -p temp/standard/Windows_x86_64_CPU
+          mkdir -p temp/standard/Windows_x86_64_GPU
 
           # Copy each artifact to appropriate directory based on architecture and tier
           for dir in artifacts/*/; do
@@ -211,16 +215,16 @@ jobs:
               if [[ "$artifact_name" == *"gpu"* ]]; then
                 # GPU builds
                 if [[ "$artifact_name" == *"_free"* ]]; then
-                  target_dir="packed/radarsimlib_windows_all/trial/Windows_x86_64_GPU"
+                  target_dir="temp/trial/Windows_x86_64_GPU"
                 else
-                  target_dir="packed/radarsimlib_windows_all/standard/Windows_x86_64_GPU"
+                  target_dir="temp/standard/Windows_x86_64_GPU"
                 fi
               else
                 # CPU builds
                 if [[ "$artifact_name" == *"_free"* ]]; then
-                  target_dir="packed/radarsimlib_windows_all/trial/Windows_x86_64_CPU"
+                  target_dir="temp/trial/Windows_x86_64_CPU"
                 else
-                  target_dir="packed/radarsimlib_windows_all/standard/Windows_x86_64_CPU"
+                  target_dir="temp/standard/Windows_x86_64_CPU"
                 fi
               fi
               
@@ -233,20 +237,34 @@ jobs:
             fi
           done
 
+          # Create zip files for each tier/architecture combination
+          cd temp
+          
+          # Create zip files in standard directory
+          cd standard
+          zip -r ../../packed/radarsimlib_windows_all/standard/Windows_x86_64_CPU.zip Windows_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_windows_all/standard/Windows_x86_64_GPU.zip Windows_x86_64_GPU/
+          cd ..
+          
+          # Create zip files in trial directory
+          cd trial
+          zip -r ../../packed/radarsimlib_windows_all/trial/Windows_x86_64_CPU.zip Windows_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_windows_all/trial/Windows_x86_64_GPU.zip Windows_x86_64_GPU/
+          cd ..
+          
+          cd ..
+
       - name: Verify artifact structure
         run: |
           echo "::group::Artifact Structure Verification"
           echo "Final directory structure:"
-          find packed/radarsimlib_windows_all -type d | sort
+          find packed/radarsimlib_windows_all -type f | sort
           echo ""
-          echo "Files in each directory:"
-          for dir in packed/radarsimlib_windows_all/*/Windows_*; do
-            if [ -d "$dir" ]; then
-              echo "Contents of $dir:"
-              ls -la "$dir" || echo "Directory is empty or doesn't exist"
-              echo ""
-            fi
-          done
+          echo "Zip files created:"
+          ls -la packed/radarsimlib_windows_all/standard/*.zip packed/radarsimlib_windows_all/trial/*.zip
+          echo ""
+          echo "Archive sizes:"
+          ls -lh packed/radarsimlib_windows_all/standard/*.zip packed/radarsimlib_windows_all/trial/*.zip
           echo "::endgroup::"
 
       - name: Create README for packed artifacts
@@ -254,7 +272,7 @@ jobs:
           cat > packed/radarsimlib_windows_all/README.md << 'EOF'
           # RadarSimLib Windows Build Artifacts
 
-          This archive contains all RadarSimLib builds for Windows platforms organized by architecture and tier.
+          This archive contains all RadarSimLib builds for Windows platforms organized by tier and architecture.
 
           ## Directory Structure
 
@@ -262,42 +280,34 @@ jobs:
 
           ```
           standard/
-          ├── Windows_x86_64_CPU/
-          │   ├── radarsimc.dll
-          │   ├── radarsimc.lib
-          │   └── radarsim.h
-          └── Windows_x86_64_GPU/
-              ├── radarsimc.dll
-              ├── radarsimc.lib
-              └── radarsim.h
+          ├── Windows_x86_64_CPU.zip
+          └── Windows_x86_64_GPU.zip
 
           trial/
-          ├── Windows_x86_64_CPU/
-          │   ├── radarsimc.dll
-          │   ├── radarsimc.lib
-          │   └── radarsim.h
-          └── Windows_x86_64_GPU/
-              ├── radarsimc.dll
-              ├── radarsimc.lib
-              └── radarsim.h
+          ├── Windows_x86_64_CPU.zip
+          └── Windows_x86_64_GPU.zip
           ```
+
+          ## Zip File Contents
+
+          Each zip file contains the following:
+          - `radarsimc.dll` - Dynamic library
+          - `radarsimc.lib` - Import library for linking
+          - `radarsim.h` - Header file for C/C++ integration
 
           ## Architecture and Tier Information
 
-          ### Windows_x86_64_CPU (CPU-only builds)
-          - **standard/**: Full-featured builds with all capabilities
-          - **trial/**: Free tier builds with limited features
-          - Compatible with any x86_64 Windows system
+          ### Standard Tier
+          - **Windows_x86_64_CPU.zip**: Full-featured CPU-only build
+          - **Windows_x86_64_GPU.zip**: Full-featured CUDA GPU-accelerated build
 
-          ### Windows_x86_64_GPU (CUDA GPU-accelerated builds)
-          - **standard/**: Full-featured builds with GPU acceleration
-          - **trial/**: Free tier builds with limited GPU features
-          - Requires CUDA 12.8.1 or compatible version
-          - Compatible with NVIDIA GPUs
+          ### Trial Tier
+          - **Windows_x86_64_CPU.zip**: Limited-feature CPU-only build
+          - **Windows_x86_64_GPU.zip**: Limited-feature CUDA GPU-accelerated build
 
           ## Build Information
 
-          - **Total Builds**: 4
+          - **Total Builds**: 4 zip files (2 architectures × 2 tiers)
           - **Architectures**: x86_64 CPU, x86_64 GPU (CUDA)
           - **Tiers**: Standard (full features), Trial (limited features)
           - **Library Type**: Dynamic library (.dll) with import library (.lib)
@@ -306,17 +316,22 @@ jobs:
 
           ## Usage
 
-          1. Choose the appropriate architecture directory for your system
-          2. Choose between standard or trial tier based on your needs
-          3. Link against radarsimc.lib and include radarsim.h in your project
-          4. Ensure radarsimc.dll is accessible at runtime
-          5. For GPU builds, ensure CUDA runtime is installed on target system
+          1. Choose the appropriate tier (standard or trial) based on your license
+          2. Choose the appropriate architecture (CPU or GPU) for your system
+          3. Extract the corresponding zip file
+          4. Link against radarsimc.lib and include radarsim.h in your project
+          5. Ensure radarsimc.dll is accessible at runtime
 
           ## Requirements
 
-          - **CPU builds**: Any x86_64 Windows system
-          - **GPU builds**: NVIDIA GPU with CUDA 12.8.1+ support
-          - **Runtime**: Microsoft Visual C++ Redistributable
+          ### CPU Builds (Windows_x86_64_CPU.zip)
+          - Any x86_64 Windows system
+          - Microsoft Visual C++ Redistributable
+
+          ### GPU Builds (Windows_x86_64_GPU.zip)
+          - x86_64 Windows system with NVIDIA GPU
+          - CUDA 12.8.1 or compatible version
+          - Microsoft Visual C++ Redistributable
           EOF
 
       - name: Create compressed archive
@@ -373,7 +388,7 @@ jobs:
             echo "**All artifacts successfully packed into single archive**" >> $env:GITHUB_STEP_SUMMARY
             echo "- Archive: ``radarsimlib_windows_all_builds``" >> $env:GITHUB_STEP_SUMMARY
             echo "- Formats: tar.gz, zip" >> $env:GITHUB_STEP_SUMMARY
-            echo "- Contains: All 4 build variants organized by configuration" >> $env:GITHUB_STEP_SUMMARY
+            echo "- Contains: All 4 build variants organized by tier and architecture" >> $env:GITHUB_STEP_SUMMARY
           } else {
             echo "**Artifact packing failed or was skipped**" >> $env:GITHUB_STEP_SUMMARY
           }

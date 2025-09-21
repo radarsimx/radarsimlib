@@ -308,17 +308,19 @@ jobs:
         run: |
           mkdir -p packed/radarsimlib_ubuntu_all
 
-          # Create the directory structure for Ubuntu 22
-          mkdir -p packed/radarsimlib_ubuntu_all/trial/Ubuntu22_x86_64_CPU
-          mkdir -p packed/radarsimlib_ubuntu_all/standard/Ubuntu22_x86_64_CPU
-          mkdir -p packed/radarsimlib_ubuntu_all/trial/Ubuntu22_x86_64_GPU
-          mkdir -p packed/radarsimlib_ubuntu_all/standard/Ubuntu22_x86_64_GPU
+          # Create the directory structure for tier-based archives
+          mkdir -p packed/radarsimlib_ubuntu_all/trial
+          mkdir -p packed/radarsimlib_ubuntu_all/standard
 
-          # Create the directory structure for Ubuntu 24
-          mkdir -p packed/radarsimlib_ubuntu_all/trial/Ubuntu24_x86_64_CPU
-          mkdir -p packed/radarsimlib_ubuntu_all/standard/Ubuntu24_x86_64_CPU
-          mkdir -p packed/radarsimlib_ubuntu_all/trial/Ubuntu24_x86_64_GPU
-          mkdir -p packed/radarsimlib_ubuntu_all/standard/Ubuntu24_x86_64_GPU
+          # Create temporary directories for organizing files before zipping
+          mkdir -p temp/trial/Ubuntu22_x86_64_CPU
+          mkdir -p temp/trial/Ubuntu22_x86_64_GPU
+          mkdir -p temp/trial/Ubuntu24_x86_64_CPU
+          mkdir -p temp/trial/Ubuntu24_x86_64_GPU
+          mkdir -p temp/standard/Ubuntu22_x86_64_CPU
+          mkdir -p temp/standard/Ubuntu22_x86_64_GPU
+          mkdir -p temp/standard/Ubuntu24_x86_64_CPU
+          mkdir -p temp/standard/Ubuntu24_x86_64_GPU
 
           # Copy each artifact to appropriate directory based on architecture and tier
           for dir in artifacts/*/; do
@@ -340,16 +342,16 @@ jobs:
               if [[ "$artifact_name" == *"gpu"* ]]; then
                 # GPU builds
                 if [[ "$artifact_name" == *"_free"* ]]; then
-                  target_dir="packed/radarsimlib_ubuntu_all/trial/${ubuntu_ver}_x86_64_GPU"
+                  target_dir="temp/trial/${ubuntu_ver}_x86_64_GPU"
                 else
-                  target_dir="packed/radarsimlib_ubuntu_all/standard/${ubuntu_ver}_x86_64_GPU"
+                  target_dir="temp/standard/${ubuntu_ver}_x86_64_GPU"
                 fi
               else
                 # CPU builds
                 if [[ "$artifact_name" == *"_free"* ]]; then
-                  target_dir="packed/radarsimlib_ubuntu_all/trial/${ubuntu_ver}_x86_64_CPU"
+                  target_dir="temp/trial/${ubuntu_ver}_x86_64_CPU"
                 else
-                  target_dir="packed/radarsimlib_ubuntu_all/standard/${ubuntu_ver}_x86_64_CPU"
+                  target_dir="temp/standard/${ubuntu_ver}_x86_64_CPU"
                 fi
               fi
               
@@ -362,20 +364,38 @@ jobs:
             fi
           done
 
+          # Create zip files for each tier/architecture combination
+          cd temp
+          
+          # Create zip files in standard directory
+          cd standard
+          zip -r ../../packed/radarsimlib_ubuntu_all/standard/Ubuntu22_x86_64_CPU.zip Ubuntu22_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/standard/Ubuntu22_x86_64_GPU.zip Ubuntu22_x86_64_GPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/standard/Ubuntu24_x86_64_CPU.zip Ubuntu24_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/standard/Ubuntu24_x86_64_GPU.zip Ubuntu24_x86_64_GPU/
+          cd ..
+          
+          # Create zip files in trial directory
+          cd trial
+          zip -r ../../packed/radarsimlib_ubuntu_all/trial/Ubuntu22_x86_64_CPU.zip Ubuntu22_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/trial/Ubuntu22_x86_64_GPU.zip Ubuntu22_x86_64_GPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/trial/Ubuntu24_x86_64_CPU.zip Ubuntu24_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/trial/Ubuntu24_x86_64_GPU.zip Ubuntu24_x86_64_GPU/
+          cd ..
+          
+          cd ..
+
       - name: Verify artifact structure
         run: |
           echo "::group::Artifact Structure Verification"
           echo "Final directory structure:"
-          find packed/radarsimlib_ubuntu_all -type d | sort
+          find packed/radarsimlib_ubuntu_all -type f | sort
           echo ""
-          echo "Files in each directory:"
-          for dir in packed/radarsimlib_ubuntu_all/*/Ubuntu*; do
-            if [ -d "$dir" ]; then
-              echo "Contents of $dir:"
-              ls -la "$dir" || echo "Directory is empty or doesn't exist"
-              echo ""
-            fi
-          done
+          echo "Zip files created:"
+          ls -la packed/radarsimlib_ubuntu_all/standard/*.zip packed/radarsimlib_ubuntu_all/trial/*.zip
+          echo ""
+          echo "Archive sizes:"
+          ls -lh packed/radarsimlib_ubuntu_all/standard/*.zip packed/radarsimlib_ubuntu_all/trial/*.zip
           echo "::endgroup::"
 
       - name: Create README for packed artifacts
@@ -383,7 +403,7 @@ jobs:
           cat > packed/radarsimlib_ubuntu_all/README.md << 'EOF'
           # RadarSimLib Ubuntu Build Artifacts
 
-          This archive contains all RadarSimLib builds for Ubuntu platforms organized by version, architecture and tier.
+          This archive contains all RadarSimLib builds for Ubuntu platforms organized by tier, version and architecture.
 
           ## Directory Structure
 
@@ -391,53 +411,41 @@ jobs:
 
           ```
           standard/
-          ├── Ubuntu22_x86_64_CPU/
-          │   ├── libradarsimc.so
-          │   └── radarsim.h
-          ├── Ubuntu22_x86_64_GPU/
-          │   ├── libradarsimc.so
-          │   └── radarsim.h
-          ├── Ubuntu24_x86_64_CPU/
-          │   ├── libradarsimc.so
-          │   └── radarsim.h
-          └── Ubuntu24_x86_64_GPU/
-              ├── libradarsimc.so
-              └── radarsim.h
+          ├── Ubuntu22_x86_64_CPU.zip
+          ├── Ubuntu22_x86_64_GPU.zip
+          ├── Ubuntu24_x86_64_CPU.zip
+          └── Ubuntu24_x86_64_GPU.zip
 
           trial/
-          ├── Ubuntu22_x86_64_CPU/
-          │   ├── libradarsimc.so
-          │   └── radarsim.h
-          ├── Ubuntu22_x86_64_GPU/
-          │   ├── libradarsimc.so
-          │   └── radarsim.h
-          ├── Ubuntu24_x86_64_CPU/
-          │   ├── libradarsimc.so
-          │   └── radarsim.h
-          └── Ubuntu24_x86_64_GPU/
-              ├── libradarsimc.so
-              └── radarsim.h
+          ├── Ubuntu22_x86_64_CPU.zip
+          ├── Ubuntu22_x86_64_GPU.zip
+          ├── Ubuntu24_x86_64_CPU.zip
+          └── Ubuntu24_x86_64_GPU.zip
           ```
+
+          ## Zip File Contents
+
+          Each zip file contains the following:
+          - `libradarsimc.so` - Shared library
+          - `radarsim.h` - Header file for C/C++ integration
 
           ## Platform and Tier Information
 
-          ### Ubuntu 22.04 LTS Builds
-          - **CPU**: CPU-only builds compatible with Ubuntu 22.04 x86_64 systems
-          - **GPU**: CUDA GPU-accelerated builds for Ubuntu 22.04 with NVIDIA GPUs
-          - **standard/**: Full-featured builds with all capabilities
-          - **trial/**: Free tier builds with limited features
-          - **Compiler**: GCC 11
+          ### Standard Tier
+          - **Ubuntu22_x86_64_CPU.zip**: Full-featured CPU-only build for Ubuntu 22.04 LTS
+          - **Ubuntu22_x86_64_GPU.zip**: Full-featured CUDA GPU-accelerated build for Ubuntu 22.04 LTS
+          - **Ubuntu24_x86_64_CPU.zip**: Full-featured CPU-only build for Ubuntu 24.04 LTS
+          - **Ubuntu24_x86_64_GPU.zip**: Full-featured CUDA GPU-accelerated build for Ubuntu 24.04 LTS
 
-          ### Ubuntu 24.04 LTS Builds  
-          - **CPU**: CPU-only builds compatible with Ubuntu 24.04 x86_64 systems
-          - **GPU**: CUDA GPU-accelerated builds for Ubuntu 24.04 with NVIDIA GPUs
-          - **standard/**: Full-featured builds with all capabilities
-          - **trial/**: Free tier builds with limited features
-          - **Compiler**: GCC 13
+          ### Trial Tier
+          - **Ubuntu22_x86_64_CPU.zip**: Limited-feature CPU-only build for Ubuntu 22.04 LTS
+          - **Ubuntu22_x86_64_GPU.zip**: Limited-feature CUDA GPU-accelerated build for Ubuntu 22.04 LTS
+          - **Ubuntu24_x86_64_CPU.zip**: Limited-feature CPU-only build for Ubuntu 24.04 LTS
+          - **Ubuntu24_x86_64_GPU.zip**: Limited-feature CUDA GPU-accelerated build for Ubuntu 24.04 LTS
 
           ## Build Information
 
-          - **Total Builds**: 8
+          - **Total Builds**: 8 zip files (2 Ubuntu versions × 2 architectures × 2 tiers)
           - **Ubuntu Versions**: 22.04 LTS (GCC 11), 24.04 LTS (GCC 13)
           - **Architectures**: x86_64 CPU, x86_64 GPU (CUDA)
           - **Tiers**: Standard (full features), Trial (limited features)
@@ -446,18 +454,23 @@ jobs:
 
           ## Usage
 
-          1. Choose the appropriate Ubuntu version directory for your system
-          2. Choose the appropriate architecture directory (CPU or GPU)
-          3. Choose between standard or trial tier based on your needs
-          4. Link against libradarsimc.so and include radarsim.h in your project
-          5. For GPU builds, ensure CUDA runtime is installed on target system
+          1. Choose the appropriate tier (standard or trial) based on your license
+          2. Choose the appropriate Ubuntu version for your system
+          3. Choose the appropriate architecture (CPU or GPU) for your system
+          4. Extract the corresponding zip file
+          5. Link against libradarsimc.so and include radarsim.h in your project
 
           ## Requirements
 
-          - **CPU builds**: Any x86_64 Ubuntu system (22.04 or 24.04)
-          - **GPU builds**: NVIDIA GPU with CUDA support
-          - **Ubuntu 22.04**: Compatible with Ubuntu 22.04 LTS and newer
-          - **Ubuntu 24.04**: Compatible with Ubuntu 24.04 LTS and newer
+          ### Ubuntu 22.04 Builds
+          - **CPU builds**: Ubuntu 22.04 LTS or newer x86_64 system
+          - **GPU builds**: Ubuntu 22.04 LTS or newer x86_64 system with NVIDIA GPU and CUDA support
+          - **Compiler**: Built with GCC 11
+
+          ### Ubuntu 24.04 Builds
+          - **CPU builds**: Ubuntu 24.04 LTS or newer x86_64 system
+          - **GPU builds**: Ubuntu 24.04 LTS or newer x86_64 system with NVIDIA GPU and CUDA support
+          - **Compiler**: Built with GCC 13
           EOF
 
       - name: Create compressed archive
