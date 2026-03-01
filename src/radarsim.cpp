@@ -14,7 +14,7 @@
  * - Exception-safe resource handling
  *
  * @note Automatic cleanup provides safety net; manual Free_* calls recommended.
- * @warning Free tier has channel, target, and mesh complexity limits.
+ * @warning Unlicensed usage has channel, target, and mesh complexity limits.
  *
  *    ----------
  *
@@ -40,6 +40,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <functional>
 #include <iostream>
@@ -50,7 +51,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "libs/free_tier.hpp"
+#include "libs/license_manager.hpp"
 #include "point.hpp"
 #include "points_manager.hpp"
 #include "radar.hpp"
@@ -413,6 +414,72 @@ void Get_Version(int version[3]) {
 
 /*********************************************
  *
+ *  License Management
+ *
+ *********************************************/
+/**
+ * @brief Set license from a single license file
+ *
+ * @param[in] license_file_path Path to the license file (NULL or empty for
+ * default)
+ * @param[in] product Expected product name for validation (NULL or empty to
+ * skip product check)
+ */
+void Set_License(const char *license_file_path, const char *product) {
+  std::string path = (license_file_path != nullptr) ? license_file_path : "";
+  std::string prod = (product != nullptr) ? product : "";
+  LicenseManager::GetInstance().SetLicense(path, prod);
+}
+
+/**
+ * @brief Set license from multiple license files
+ *
+ * @param[in] license_file_paths Array of paths to license files
+ * @param[in] num_files Number of license file paths
+ * @param[in] product Expected product name for validation (NULL or empty to
+ * skip product check)
+ */
+void Set_License_Files(const char **license_file_paths, int num_files,
+                       const char *product) {
+  std::vector<std::string> paths;
+  if (license_file_paths != nullptr && num_files > 0) {
+    paths.reserve(num_files);
+    for (int i = 0; i < num_files; i++) {
+      paths.emplace_back(
+          (license_file_paths[i] != nullptr) ? license_file_paths[i] : "");
+    }
+  }
+  std::string prod = (product != nullptr) ? product : "";
+  LicenseManager::GetInstance().SetLicense(paths, prod);
+}
+
+/**
+ * @brief Check if a valid license is active
+ *
+ * @return int 1 if licensed, 0 if not licensed
+ */
+int Is_Licensed() { return LicenseManager::GetInstance().IsLicensed() ? 1 : 0; }
+
+/**
+ * @brief Get license information string
+ *
+ * @param[out] buffer Pre-allocated buffer to store the license info string
+ * @param[in] buffer_size Size of the buffer in bytes
+ * @return int Actual length of the license info string
+ */
+int Get_License_Info(char *buffer, int buffer_size) {
+  std::string info = LicenseManager::GetInstance().GetLicenseInfo();
+  int len = static_cast<int>(info.length());
+  if (buffer != nullptr && buffer_size > 0) {
+    int copy_len = (len < buffer_size - 1) ? len : (buffer_size - 1);
+    std::memcpy(buffer, info.c_str(), copy_len);
+    buffer[copy_len] = '\0';
+  }
+  return len;
+}
+
+/*********************************************
+ *
  *  Memory Management
  *
  *********************************************/
@@ -557,6 +624,102 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
 }
 
 /**
+ * @brief Create a Transmitter object with waveform parameters and phase noise
+ *
+ * @param[in] freq Frequency vector (Hz) - must not be NULL
+ * @param[in] freq_time Timestamp vector for frequency samples (s) - must not be
+ * NULL
+ * @param[in] waveform_size Length of freq and freq_time arrays - must be > 0
+ * @param[in] freq_offset Frequency offset per pulse (Hz) - must not be NULL
+ * @param[in] pulse_start_time Pulse start time vector (s) - must not be NULL
+ * @param[in] num_pulses Number of pulses - must be > 0
+ * @param[in] tx_power Transmitter power (dBm)
+ * @param[in] phase_noise_real Real part of phase noise vector - must not be NULL
+ * @param[in] phase_noise_imag Imaginary part of phase noise vector - must not
+ * be NULL
+ * @param[in] phase_noise_size Length of phase noise arrays - must be > 0
+ *
+ * @return t_Transmitter* Pointer to Transmitter object, NULL on failure
+ */
+t_Transmitter *Create_Transmitter_PhaseNoise(
+    double *freq, double *freq_time, int waveform_size, double *freq_offset,
+    double *pulse_start_time, int num_pulses, float tx_power,
+    double *phase_noise_real, double *phase_noise_imag, int phase_noise_size) {
+  // Input validation
+  if (freq == nullptr || freq_time == nullptr || waveform_size <= 0) {
+    return nullptr;
+  }
+  if (freq_offset == nullptr || pulse_start_time == nullptr ||
+      num_pulses <= 0) {
+    return nullptr;
+  }
+  if (phase_noise_real == nullptr || phase_noise_imag == nullptr ||
+      phase_noise_size <= 0) {
+    return nullptr;
+  }
+
+  t_Transmitter *ptr_tx_c = nullptr;
+
+  try {
+    ptr_tx_c = new t_Transmitter();
+
+    if (ptr_tx_c == nullptr) {
+      return nullptr;
+    }
+
+    // Convert C arrays to C++ vectors
+    std::vector<double> freq_vt(freq, freq + waveform_size);
+    std::vector<double> freq_time_vt(freq_time, freq_time + waveform_size);
+    std::vector<double> freq_offset_vt(freq_offset, freq_offset + num_pulses);
+    std::vector<double> pulse_start_time_vt(pulse_start_time,
+                                            pulse_start_time + num_pulses);
+
+    std::vector<std::complex<double>> phase_noise_vt;
+    phase_noise_vt.reserve(phase_noise_size);
+    for (int idx = 0; idx < phase_noise_size; idx++) {
+      phase_noise_vt.push_back(
+          std::complex<double>(phase_noise_real[idx], phase_noise_imag[idx]));
+    }
+
+    // Create the Transmitter object with phase noise
+    ptr_tx_c->_ptr_transmitter = std::make_shared<Transmitter<double, float>>(
+        tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt,
+        phase_noise_vt);
+
+    // Register for automatic cleanup
+#ifdef RADARSIM_SIMPLE_CLEANUP
+    AutoCleanupRegistry::register_object(ptr_tx_c, cleanup_transmitter);
+#else
+    AutoCleanupRegistry::register_object(ptr_tx_c,
+                                         [ptr_tx_c]() { delete ptr_tx_c; });
+#endif
+
+  } catch (const std::bad_alloc &e) {
+    std::cerr << "Create_Transmitter_PhaseNoise: Memory allocation failed: "
+              << e.what() << std::endl;
+    delete ptr_tx_c;
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    std::cerr << "Create_Transmitter_PhaseNoise: Invalid argument: "
+              << e.what() << std::endl;
+    delete ptr_tx_c;
+    return nullptr;
+  } catch (const std::exception &e) {
+    std::cerr << "Create_Transmitter_PhaseNoise: Unexpected error: "
+              << e.what() << std::endl;
+    delete ptr_tx_c;
+    return nullptr;
+  } catch (...) {
+    std::cerr << "Create_Transmitter_PhaseNoise: Unknown error occurred"
+              << std::endl;
+    delete ptr_tx_c;
+    return nullptr;
+  }
+
+  return ptr_tx_c;
+}
+
+/**
  * @brief Add a transmitter channel with antenna pattern and modulation
  *
  * @param[in] location Channel location {x, y, z} (m)
@@ -581,7 +744,7 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
  *
  * @return int 0 for success, 1 for failure
  *
- * @note Free tier limited to 1 transmitter channel.
+ * @note Unlicensed usage limited to 1 transmitter channel.
  */
 int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
                   float *phi, float *phi_ptn, int phi_length, float *theta,
@@ -594,9 +757,13 @@ int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
     return 1;
   }
 
-  if (IsFreeTier() && ptr_tx_c->_ptr_transmitter->channel_size_ > 0) {
-    return 1;
+  // License check: limit to 1 transmitter channel
+  if (!LicenseManager::GetInstance().IsLicensed()) {
+    if (ptr_tx_c->_ptr_transmitter->channel_size_ >= 1) {
+      return 1;
+    }
   }
+
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
   phi_ptn_vt.reserve(phi_length);
@@ -759,7 +926,7 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
  *
  * @return int 0 for success, 1 for failure
  *
- * @note Free tier limited to 1 receiver channel.
+ * @note Unlicensed usage limited to 1 receiver channel.
  */
 int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
                   float *phi, float *phi_ptn, int phi_length, float *theta,
@@ -770,9 +937,13 @@ int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
     return 1;
   }
 
-  if (IsFreeTier() && ptr_rx_c->_ptr_receiver->channel_size_ > 0) {
-    return 1;
+  // License check: limit to 1 receiver channel
+  if (!LicenseManager::GetInstance().IsLicensed()) {
+    if (ptr_rx_c->_ptr_receiver->channel_size_ >= 1) {
+      return 1;
+    }
   }
+
   std::vector<float> phi_vt, phi_ptn_vt;
   phi_vt.reserve(phi_length);
   phi_ptn_vt.reserve(phi_length);
@@ -929,6 +1100,107 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
 }
 
 /**
+ * @brief Create a Radar system with time-varying platform motion
+ *
+ * @param[in] ptr_tx_c Pointer to configured Transmitter object
+ * @param[in] ptr_rx_c Pointer to configured Receiver object
+ * @param[in] frame_start_time Frame start time vector (s)
+ * @param[in] num_frames Number of radar frames - must be > 0
+ * @param[in] location_array Platform positions over time [x₁,y₁,z₁, ...]
+ * @param[in] num_locations Number of location entries - must be > 0
+ * @param[in] speed Radar platform velocity {x, y, z} (m/s)
+ * @param[in] rotation_array Platform orientations over time (rad)
+ * @param[in] num_rotations Number of rotation entries - must be > 0
+ * @param[in] rotation_rate Radar platform angular velocity {x, y, z} (rad/s)
+ *
+ * @return t_Radar* Pointer to Radar system object, NULL on failure
+ */
+t_Radar *Create_Radar_Array(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
+                            double *frame_start_time, int num_frames,
+                            float *location_array, int num_locations,
+                            float *speed, float *rotation_array,
+                            int num_rotations, float *rotation_rate) {
+  // Input validation
+  if (ptr_tx_c == nullptr || ptr_rx_c == nullptr ||
+      frame_start_time == nullptr || num_frames <= 0 ||
+      location_array == nullptr || num_locations <= 0 || speed == nullptr ||
+      rotation_array == nullptr || num_rotations <= 0 ||
+      rotation_rate == nullptr) {
+    return nullptr;
+  }
+
+  t_Radar *ptr_radar_c = nullptr;
+
+  try {
+    ptr_radar_c = new t_Radar();
+    if (ptr_radar_c == nullptr) {
+      return nullptr;
+    }
+
+    ptr_radar_c->_ptr_tx = ptr_tx_c;
+    ptr_radar_c->_ptr_rx = ptr_rx_c;
+
+    // Convert C arrays to C++ vectors
+    std::vector<double> frame_start_time_vt(frame_start_time,
+                                            frame_start_time + num_frames);
+
+    std::vector<rsv::Vec3<float>> loc_vt;
+    loc_vt.reserve(num_locations);
+    for (int idx = 0; idx < num_locations; idx++) {
+      loc_vt.push_back(rsv::Vec3<float>(location_array[idx * 3],
+                                        location_array[idx * 3 + 1],
+                                        location_array[idx * 3 + 2]));
+    }
+
+    std::vector<rsv::Vec3<float>> rot_vt;
+    rot_vt.reserve(num_rotations);
+    for (int idx = 0; idx < num_rotations; idx++) {
+      rot_vt.push_back(rsv::Vec3<float>(rotation_array[idx * 3],
+                                        rotation_array[idx * 3 + 1],
+                                        rotation_array[idx * 3 + 2]));
+    }
+
+    // Create the Radar object
+    ptr_radar_c->_ptr_radar = std::make_shared<Radar<double, float>>(
+        ptr_tx_c->_ptr_transmitter, ptr_rx_c->_ptr_receiver,
+        frame_start_time_vt, loc_vt,
+        rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
+        rsv::Vec3<float>(rotation_rate[0], rotation_rate[1],
+                         rotation_rate[2]));
+
+    // Register for automatic cleanup
+#ifdef RADARSIM_SIMPLE_CLEANUP
+    AutoCleanupRegistry::register_object(ptr_radar_c, cleanup_radar);
+#else
+    AutoCleanupRegistry::register_object(
+        ptr_radar_c, [ptr_radar_c]() { delete ptr_radar_c; });
+#endif
+
+  } catch (const std::bad_alloc &e) {
+    std::cerr << "Create_Radar_Array: Memory allocation failed: " << e.what()
+              << std::endl;
+    delete ptr_radar_c;
+    return nullptr;
+  } catch (const std::invalid_argument &e) {
+    std::cerr << "Create_Radar_Array: Invalid argument: " << e.what()
+              << std::endl;
+    delete ptr_radar_c;
+    return nullptr;
+  } catch (const std::exception &e) {
+    std::cerr << "Create_Radar_Array: Unexpected error: " << e.what()
+              << std::endl;
+    delete ptr_radar_c;
+    return nullptr;
+  } catch (...) {
+    std::cerr << "Create_Radar_Array: Unknown error occurred" << std::endl;
+    delete ptr_radar_c;
+    return nullptr;
+  }
+
+  return ptr_radar_c;
+}
+
+/**
  * @brief Get the required baseband buffer size for the given radar
  *
  * @details Returns the total number of samples required for baseband buffers
@@ -1041,7 +1313,7 @@ t_Targets *Init_Targets() {
  *
  * @return int 0 for success, 1 for failure
  *
- * @note Free tier limited to 2 point targets.
+ * @note Unlicensed usage limited to 2 point targets.
  */
 int Add_Point_Target(float *location, float *speed, float rcs, float phs,
                      t_Targets *ptr_targets_c) {
@@ -1050,12 +1322,67 @@ int Add_Point_Target(float *location, float *speed, float rcs, float phs,
     return 1;
   }
 
-  if (IsFreeTier() && ptr_targets_c->_ptr_points->vect_points_.size() > 1) {
-    return 1;
+  // License check: limit to 2 point targets
+  if (!LicenseManager::GetInstance().IsLicensed()) {
+    if (ptr_targets_c->_ptr_points->vect_points_.size() >= 2) {
+      return 1;
+    }
   }
+
   ptr_targets_c->_ptr_points->AddPointSimple(
       rsv::Vec3<float>(location[0], location[1], location[2]),
       rsv::Vec3<float>(speed[0], speed[1], speed[2]), rcs, phs);
+  return 0;
+}
+
+/**
+ * @brief Add a time-varying ideal point scatterer to the simulation
+ *
+ * @param[in] location_array Target's locations over time [x₁,y₁,z₁, x₂,y₂,z₂,
+ * ...] (m)
+ * @param[in] num_locations Number of location entries
+ * @param[in] speed Target's velocity vector {x, y, z} (m/s)
+ * @param[in] rcs_array Target's RCS values over time (dBsm)
+ * @param[in] phase_array Target's phase values over time (rad)
+ * @param[in] num_rcs Number of RCS/phase entries
+ * @param[in] ptr_targets_c Pointer to the target management system
+ *
+ * @return int 0 for success, 1 for failure
+ *
+ * @note Unlicensed usage limited to 2 point targets.
+ */
+int Add_Point_Target_Array(float *location_array, int num_locations,
+                           float *speed, float *rcs_array, float *phase_array,
+                           int num_rcs, t_Targets *ptr_targets_c) {
+  // Input validation
+  if (ptr_targets_c == nullptr || location_array == nullptr ||
+      speed == nullptr || rcs_array == nullptr || phase_array == nullptr ||
+      num_locations <= 0 || num_rcs <= 0) {
+    return 1;
+  }
+
+  // License check: limit to 2 point targets
+  if (!LicenseManager::GetInstance().IsLicensed()) {
+    if (ptr_targets_c->_ptr_points->vect_points_.size() >= 2) {
+      return 1;
+    }
+  }
+
+  // Convert C arrays to C++ vectors
+  std::vector<rsv::Vec3<float>> location_vt;
+  location_vt.reserve(num_locations);
+  for (int idx = 0; idx < num_locations; idx++) {
+    location_vt.push_back(rsv::Vec3<float>(location_array[idx * 3],
+                                           location_array[idx * 3 + 1],
+                                           location_array[idx * 3 + 2]));
+  }
+
+  std::vector<float> rcs_vt(rcs_array, rcs_array + num_rcs);
+  std::vector<float> phase_vt(phase_array, phase_array + num_rcs);
+
+  ptr_targets_c->_ptr_points->AddPoint(
+      location_vt, rsv::Vec3<float>(speed[0], speed[1], speed[2]), rcs_vt,
+      phase_vt);
   return 0;
 }
 
@@ -1074,17 +1401,20 @@ int Add_Point_Target(float *location, float *speed, float rcs, float phs,
  * @param[in] ep_imag Imaginary part of relative permittivity εᵣ
  * @param[in] mu_real Real part of relative permeability μᵣ
  * @param[in] mu_imag Imaginary part of relative permeability μᵣ
- * @param[in] is_ground Flag for ground surface (affects ray tracing)
+ * @param[in] skip_diffusion Flag to skip diffusion calculations
+ * @param[in] density Ray density for this target (0.0 uses global density)
+ * @param[in] environment Environment flag for target
  * @param[in] ptr_targets_c Pointer to the target management system
  *
  * @return int 0 for success, 1 for failure
  *
- * @note Free tier limits: 2 mesh targets max, 8 triangles per mesh max.
+ * @note Unlicensed usage limits: 2 mesh targets max, 8 triangles per mesh max.
  */
 int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
                     float *location, float *speed, float *rotation,
                     float *rotation_rate, float ep_real, float ep_imag,
-                    float mu_real, float mu_imag, bool is_ground,
+                    float mu_real, float mu_imag, bool skip_diffusion,
+                    float density, bool environment,
                     t_Targets *ptr_targets_c) {
   // Input validation - check for null pointers and invalid parameters
   if (ptr_targets_c == nullptr || points == nullptr || cells == nullptr ||
@@ -1093,12 +1423,14 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
     return 1;
   }
 
-  if (IsFreeTier() && ptr_targets_c->_ptr_targets->vect_targets_.size() > 1) {
-    return 1;
-  }
-
-  if (IsFreeTier() && cell_size > 8) {
-    return 1;
+  // License check: limit to 2 mesh targets, 8 triangles per mesh
+  if (!LicenseManager::GetInstance().IsLicensed()) {
+    if (ptr_targets_c->_ptr_targets->vect_targets_.size() >= 2) {
+      return 1;
+    }
+    if (cell_size > 8) {
+      return 1;
+    }
   }
 
   // Create single-element arrays for the time-varying parameters
@@ -1123,7 +1455,89 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
   ptr_targets_c->_ptr_targets->AddTarget(
       points, cells, cell_size,
       rsv::Vec3<float>(origin[0], origin[1], origin[2]), location_array,
-      speed_array, rotation_array, rotrate_array, ep, mu, is_ground);
+      speed_array, rotation_array, rotrate_array, ep, mu, skip_diffusion,
+      density, environment);
+  return 0;
+}
+
+/**
+ * @brief Add a 3D mesh target with time-varying motion arrays
+ *
+ * @param[in] points Mesh vertex coordinates [x₁,y₁,z₁, x₂,y₂,z₂, ...]
+ * @param[in] cells Triangle connectivity array [v₁,v₂,v₃, ...] (0-indexed)
+ * @param[in] cell_size Number of triangular mesh faces
+ * @param[in] origin Target's local coordinate origin (m)
+ * @param[in] location_array Target's locations over time [x₁,y₁,z₁, ...]
+ * @param[in] speed_array Target's velocities over time [vx₁,vy₁,vz₁, ...]
+ * @param[in] rotation_array Target's orientations over time (rad)
+ * @param[in] rotation_rate_array Target's angular velocities over time (rad/s)
+ * @param[in] num_motions Number of motion entries in each array
+ * @param[in] ep_real Real part of relative permittivity εᵣ
+ * @param[in] ep_imag Imaginary part of relative permittivity εᵣ
+ * @param[in] mu_real Real part of relative permeability μᵣ
+ * @param[in] mu_imag Imaginary part of relative permeability μᵣ
+ * @param[in] skip_diffusion Flag to skip diffusion calculations
+ * @param[in] density Ray density for this target (0.0 uses global density)
+ * @param[in] environment Environment flag for target
+ * @param[in] ptr_targets_c Pointer to the target management system
+ *
+ * @return int 0 for success, 1 for failure
+ *
+ * @note Unlicensed usage limits: 2 mesh targets max, 8 triangles per mesh max.
+ */
+int Add_Mesh_Target_Array(float *points, int *cells, int cell_size,
+                          float *origin, float *location_array,
+                          float *speed_array, float *rotation_array,
+                          float *rotation_rate_array, int num_motions,
+                          float ep_real, float ep_imag, float mu_real,
+                          float mu_imag, bool skip_diffusion, float density,
+                          bool environment, t_Targets *ptr_targets_c) {
+  // Input validation
+  if (ptr_targets_c == nullptr || points == nullptr || cells == nullptr ||
+      cell_size <= 0 || origin == nullptr || location_array == nullptr ||
+      speed_array == nullptr || rotation_array == nullptr ||
+      rotation_rate_array == nullptr || num_motions <= 0) {
+    return 1;
+  }
+
+  // License check: limit to 2 mesh targets, 8 triangles per mesh
+  if (!LicenseManager::GetInstance().IsLicensed()) {
+    if (ptr_targets_c->_ptr_targets->vect_targets_.size() >= 2) {
+      return 1;
+    }
+    if (cell_size > 8) {
+      return 1;
+    }
+  }
+
+  // Convert C arrays to C++ vectors
+  std::vector<rsv::Vec3<float>> loc_vt, spd_vt, rot_vt, rotrate_vt;
+  loc_vt.reserve(num_motions);
+  spd_vt.reserve(num_motions);
+  rot_vt.reserve(num_motions);
+  rotrate_vt.reserve(num_motions);
+  for (int idx = 0; idx < num_motions; idx++) {
+    loc_vt.push_back(rsv::Vec3<float>(location_array[idx * 3],
+                                      location_array[idx * 3 + 1],
+                                      location_array[idx * 3 + 2]));
+    spd_vt.push_back(rsv::Vec3<float>(speed_array[idx * 3],
+                                      speed_array[idx * 3 + 1],
+                                      speed_array[idx * 3 + 2]));
+    rot_vt.push_back(rsv::Vec3<float>(rotation_array[idx * 3],
+                                      rotation_array[idx * 3 + 1],
+                                      rotation_array[idx * 3 + 2]));
+    rotrate_vt.push_back(rsv::Vec3<float>(rotation_rate_array[idx * 3],
+                                          rotation_rate_array[idx * 3 + 1],
+                                          rotation_rate_array[idx * 3 + 2]));
+  }
+
+  std::complex<float> ep = std::complex(ep_real, ep_imag);
+  std::complex<float> mu = std::complex(mu_real, mu_imag);
+
+  ptr_targets_c->_ptr_targets->AddTarget(
+      points, cells, cell_size,
+      rsv::Vec3<float>(origin[0], origin[1], origin[2]), loc_vt, spd_vt,
+      rot_vt, rotrate_vt, ep, mu, skip_diffusion, density, environment);
   return 0;
 }
 
@@ -1166,15 +1580,32 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  *
  * @note Buffer size: [num_pulses × num_rx_channels × samples_per_pulse]
  * @warning Buffers must be pre-allocated to correct size.
+ *
+ * @return int 0 for success, non-zero RadarSimErrorCode on failure
  */
-void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
-                        int level, float density, int *ray_filter,
-                        double *ptr_bb_real, double *ptr_bb_imag) {
+int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
+                       int level, float density, int *ray_filter,
+                       double *ptr_bb_real, double *ptr_bb_imag) {
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_bb_real, ptr_bb_imag);
+
+  // Finalize point and target initialization before simulation
+  if (!ptr_targets_c->_ptr_points->is_finalized &&
+      ptr_targets_c->_ptr_points->vect_points_.size() > 0) {
+    ptr_targets_c->_ptr_points->CompletePointInitialization();
+  }
+  if (!ptr_targets_c->_ptr_targets->is_finalized &&
+      ptr_targets_c->_ptr_targets->vect_targets_.size() > 0) {
+    ptr_targets_c->_ptr_targets->CompleteTargetInitialization();
+  }
+
   if (ptr_targets_c->_ptr_points->vect_points_.size() > 0) {
     PointSimulator<double, float> simc = PointSimulator<double, float>();
 
-    simc.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points);
+    RadarSimErrorCode error_code =
+        simc.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points);
+    if (error_code != SUCCESS) {
+      return static_cast<int>(error_code);
+    }
   }
 
   if (ptr_targets_c->_ptr_targets->vect_targets_.size() > 0) {
@@ -1183,10 +1614,15 @@ void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
     rsv::Vec2<int> ray_filter_vec2 =
         rsv::Vec2<int>(ray_filter[0], ray_filter[1]);
 
-    scene_c.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_targets, level,
-                density, ray_filter_vec2, false, "", false);
+    RadarSimErrorCode error_code = scene_c.Run(
+        ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_targets, level, density,
+        ray_filter_vec2, false, "", false);
+    if (error_code != SUCCESS) {
+      return static_cast<int>(error_code);
+    }
   }
   ptr_radar_c->_ptr_radar->SyncBaseband();
+  return 0;
 }
 
 /**
@@ -1252,6 +1688,12 @@ int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
   }
 
   try {
+    // Finalize target initialization before simulation
+    if (!ptr_targets_c->_ptr_targets->is_finalized &&
+        ptr_targets_c->_ptr_targets->vect_targets_.size() > 0) {
+      ptr_targets_c->_ptr_targets->CompleteTargetInitialization();
+    }
+
     // Create RCS simulator
     RcsSimulator<double> rcs_sim;
 
@@ -1357,6 +1799,12 @@ int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
   }
 
   try {
+    // Finalize target initialization before simulation
+    if (!ptr_targets_c->_ptr_targets->is_finalized &&
+        ptr_targets_c->_ptr_targets->vect_targets_.size() > 0) {
+      ptr_targets_c->_ptr_targets->CompleteTargetInitialization();
+    }
+
     // Create LiDAR simulator
     LidarSimulator<float> lidar_sim;
 

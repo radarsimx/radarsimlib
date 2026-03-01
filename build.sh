@@ -25,7 +25,6 @@
 #
 # OPTIONS:
 #   --help              Show help message
-#   --tier=TIER         Build tier: 'standard' or 'free' (default: standard)
 #   --arch=ARCH         Build architecture: 'cpu' or 'gpu' (default: cpu)
 #   --test=TEST         Enable unit tests: 'on' or 'off' (default: on)
 #   --jobs=N            Number of parallel build jobs (default: auto-detect)
@@ -35,7 +34,7 @@
 #
 # EXAMPLES:
 #   ./build_linux.sh                                    # Default build
-#   ./build_linux.sh --tier=free --arch=gpu           # GPU build with free tier
+#   ./build_linux.sh --arch=gpu                       # GPU build
 #   ./build_linux.sh --jobs=8 --verbose               # 8-core parallel build
 #   ./build_linux.sh --cmake-args="-DCUSTOM_FLAG=ON"  # Custom CMake flags
 #
@@ -46,7 +45,7 @@
 #   >1 - Test failures (number indicates failed test suites)
 #
 # FILES CREATED:
-#   - ./radarsimlib_{platform}_{arch}_{type}[_free]/   # Output directory with built libraries
+#   - ./radarsimlib_{platform}_{arch}_{type}/          # Output directory with built libraries
 #   - ./build_logs/build_YYYYMMDD_HHMMSS.log           # Timestamped build log
 #
 #===============================================================================
@@ -66,7 +65,7 @@ case "${PLATFORM}" in
     *)          PLATFORM_NAME="Unknown";;
 esac
 
-readonly LOG_FILE="${SCRIPT_DIR}/build_logs/build_$(date +%Y%m%d_%H%M%S).log"
+readonly LOG_FILE="${SCRIPT_DIR}/build_logs/${PLATFORM_NAME}_build_$(date +%Y%m%d_%H%M%S).log"
 if [ ! -d "${SCRIPT_DIR}/build_logs" ]; then
     mkdir -p "${SCRIPT_DIR}/build_logs"
 fi
@@ -79,7 +78,7 @@ readonly BLUE='\033[0;34m'
 readonly NC='\033[0m' # No Color
 
 # Default configuration
-TIER="standard"
+LICENSE="off"
 ARCH="cpu"
 TEST="on"
 JOBS="auto"
@@ -88,8 +87,6 @@ VERBOSE="true"
 CMAKE_ARGS=""
 
 # Error tracking
-BUILD_FAILED=0
-CMAKE_FAILED=0
 TEST_FAILED=0
 
 # Logging functions
@@ -100,9 +97,7 @@ TEST_FAILED=0
 # Output:
 #   Writes the message to both stdout and the log file with [INFO] prefix
 log_info() {
-    local message="$1"
-    local timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-    echo -e "${BLUE}[INFO]${NC} ${message}" | tee -a "${LOG_FILE}"
+    echo -e "${BLUE}[INFO]${NC} $1" | tee -a "${LOG_FILE}"
 }
 
 #
@@ -112,9 +107,7 @@ log_info() {
 # Output:
 #   Writes the message to both stdout and the log file with [SUCCESS] prefix
 log_success() {
-    local message="$1"
-    local timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-    echo -e "${GREEN}[SUCCESS]${NC} ${message}" | tee -a "${LOG_FILE}"
+    echo -e "${GREEN}[SUCCESS]${NC} $1" | tee -a "${LOG_FILE}"
 }
 
 #
@@ -124,9 +117,7 @@ log_success() {
 # Output:
 #   Writes the message to both stdout and the log file with [WARNING] prefix
 log_warning() {
-    local message="$1"
-    local timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-    echo -e "${YELLOW}[WARNING]${NC} ${message}" | tee -a "${LOG_FILE}"
+    echo -e "${YELLOW}[WARNING]${NC} $1" | tee -a "${LOG_FILE}"
 }
 
 #
@@ -136,9 +127,7 @@ log_warning() {
 # Output:
 #   Writes the message to both stdout and the log file with [ERROR] prefix
 log_error() {
-    local message="$1"
-    local timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-    echo -e "${RED}[ERROR]${NC} ${message}" | tee -a "${LOG_FILE}"
+    echo -e "${RED}[ERROR]${NC} $1" | tee -a "${LOG_FILE}"
 }
 
 #
@@ -165,7 +154,7 @@ Current Platform: ${PLATFORM_NAME}
 
 OPTIONS:
   --help              Show this help message
-  --tier=TIER         Build tier: 'standard' or 'free' (default: standard)
+  --license=LICENSE   Enable license verification: 'on' or 'off' (default: off)
   --arch=ARCH         Build architecture: 'cpu' or 'gpu' (default: cpu)
   --test=TEST         Enable unit tests: 'on' or 'off' (default: on)
   --jobs=N            Number of parallel build jobs (default: auto-detect)
@@ -174,10 +163,10 @@ OPTIONS:
   --cmake-args=ARGS   Additional CMake arguments
 
 EXAMPLES:
-  ${0##*/}                                    # Default build
-  ${0##*/} --tier=free --arch=gpu           # GPU build with free tier
-  ${0##*/} --jobs=8 --verbose               # 8-core parallel build
-  ${0##*/} --cmake-args="-DCUSTOM_FLAG=ON"  # Custom CMake flags
+  ${0##*/}                                        # Default build
+  ${0##*/} --license=on --arch=gpu              # GPU build with license verification
+  ${0##*/} --jobs=8 --verbose                   # 8-core parallel build
+  ${0##*/} --cmake-args="-DCUSTOM_FLAG=ON"      # Custom CMake flags
 
 PLATFORM-SPECIFIC NOTES:
   Linux:
@@ -199,8 +188,8 @@ EXIT CODES:
   >1 - Test failures (number indicates failed test suites)
 
 FILES CREATED:
-  - ./radarsimlib_{platform}_{arch}_{type}[_free]/ # Output directory with built libraries
-  - ./build_logs/build_YYYYMMDD_HHMMSS.log         # Timestamped build log
+  - ./radarsimlib_{platform}_{arch}_{type}/        # Output directory with built libraries
+  - ./build_logs/${PLATFORM_NAME}_build_YYYYMMDD_HHMMSS.log  # Timestamped build log
 
 EOF
 }
@@ -210,51 +199,20 @@ EOF
 # Description:
 #   Handles cleanup operations when the script exits, either normally or due to
 #   errors/interruptions. Logs appropriate error messages and ensures proper
-#   exit code propagation. Provides detailed error information for debugging.
+#   exit code propagation.
 # Arguments:
 #   None (uses $? to get the exit code)
 # Global Variables:
 #   LOG_FILE - Path to the log file for error reporting
-#   BUILD_FAILED, CMAKE_FAILED, TEST_FAILED - Error state tracking
 # Exit:
 #   Exits with the same code that triggered the cleanup
 cleanup() {
     local exit_code=$?
-    
-    if [ ${exit_code} -ne 0 ]; then
-        echo ""
-        log_error "======================================================================"
-        log_error "BUILD PROCESS FAILED"
-        log_error "======================================================================"
-        log_error "Build process interrupted or failed with exit code ${exit_code}"
-        log_error "Platform: ${PLATFORM_NAME}"
-        log_error "Architecture: ${ARCH}"
-        log_error "Tier: ${TIER}"
-        
-        # Provide specific error context
-        if [ ${CMAKE_FAILED} -eq 1 ]; then
-            log_error "CMake configuration or compilation failed"
-        fi
-        if [ ${TEST_FAILED} -gt 0 ]; then
-            log_error "Unit tests failed (${TEST_FAILED} failures)"
-        fi
-        
-        log_error "Check ${LOG_FILE} for detailed error information"
-        log_error "======================================================================"
-        
-        # On macOS, provide platform-specific troubleshooting tips
-        if [ "${PLATFORM_NAME}" = "macOS" ]; then
-            echo ""
-            log_info "macOS Troubleshooting Tips:"
-            log_info "1. Ensure Xcode Command Line Tools are installed: xcode-select --install"
-            log_info "2. Check if you need to accept Xcode license: sudo xcodebuild -license accept"
-            log_info "3. For M1/M2 Macs, ensure you're using compatible dependencies"
-        fi
-    else
-        log_success "Build process completed successfully"
+    if [ $exit_code -ne 0 ]; then
+        log_error "Build failed with exit code $exit_code"
+        log_info "Check log file: ${LOG_FILE}"
     fi
-    
-    exit ${exit_code}
+    exit $exit_code
 }
 
 #
@@ -275,22 +233,29 @@ cleanup() {
 #   Linux: /proc/cpuinfo parsing (fallback for older systems)
 #   Fallback: Hard-coded value of 4
 detect_cores() {
-    local cores=4  # Default fallback
-    
-    if [ "${PLATFORM_NAME}" = "macOS" ] && command -v sysctl >/dev/null 2>&1; then
-        cores=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
-    elif command -v nproc >/dev/null 2>&1; then
-        cores=$(nproc 2>/dev/null || echo 4)
-    elif [ -r /proc/cpuinfo ]; then
-        cores=$(grep -c ^processor /proc/cpuinfo 2>/dev/null || echo 4)
-    fi
-    
-    # Ensure we have a positive integer
-    if ! echo "${cores}" | grep -q '^[1-9][0-9]*$'; then
-        cores=4
-    fi
-    
-    echo "${cores}"
+    case "${PLATFORM_NAME}" in
+        "macOS")
+            if command -v sysctl &> /dev/null; then
+                sysctl -n hw.ncpu
+            elif command -v nproc &> /dev/null; then
+                nproc
+            else
+                echo "4" # fallback
+            fi
+            ;;
+        "Linux")
+            if command -v nproc &> /dev/null; then
+                nproc
+            elif [ -f /proc/cpuinfo ]; then
+                grep -c ^processor /proc/cpuinfo
+            else
+                echo "4" # fallback
+            fi
+            ;;
+        *)
+            echo "4" # fallback for unknown platforms
+            ;;
+    esac
 }
 
 #
@@ -341,6 +306,30 @@ get_library_extension() {
         Linux) echo "so" ;;
         macOS) echo "dylib" ;;
         *) echo "so" ;;  # Default to .so
+    esac
+}
+
+#
+# get_cpp_compiler() - Returns the appropriate C++ compiler for the platform
+# Description:
+#   Returns the platform-specific C++ compiler (clang++ for macOS, g++ for Linux)
+# Arguments:
+#   None
+# Output:
+#   Prints the compiler command to stdout
+# Return:
+#   Always returns 0 (success)
+get_cpp_compiler() {
+    case "${PLATFORM_NAME}" in
+        "macOS")
+            echo "clang++"
+            ;;
+        "Linux")
+            echo "g++"
+            ;;
+        *)
+            echo "g++" # fallback
+            ;;
     esac
 }
 
@@ -426,65 +415,62 @@ get_arch_suffix() {
 # Exit:
 #   Exits with code 1 if any required dependencies are missing
 check_requirements() {
-    log_info "Validating system dependencies for ${PLATFORM_NAME}..."
-    local missing_deps=0
-    
-    # Check for CMake
-    if ! command_exists cmake; then
-        log_error "CMake is not installed or not in PATH"
-        log_error "Please install CMake 3.18 or higher"
-        missing_deps=1
-    else
-        local cmake_version=$(cmake --version | head -n1 | grep -o '[0-9]\+\.[0-9]\+')
-        log_info "CMake found: version ${cmake_version}"
-    fi
-    
-    # Check for CTest (usually comes with CMake)
+    log_info "Checking system requirements for ${PLATFORM_NAME}..."
+
+    local missing_deps=()
+    local cpp_compiler
+    cpp_compiler=$(get_cpp_compiler)
+
+    # Check for required commands
+    for cmd in cmake "${cpp_compiler}"; do
+        if ! command_exists "$cmd"; then
+            missing_deps+=("$cmd")
+        fi
+    done
+
+    # Check for CTest (part of CMake, needed for parallel testing)
     if ! command_exists ctest; then
-        log_warning "CTest is not available, unit tests will be skipped"
+        missing_deps+=("ctest (part of CMake)")
     fi
-    
-    # Check for CUDA if GPU build is requested
-    if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
+
+    # Add gcc for Linux (in addition to g++)
+    if [ "${PLATFORM_NAME}" = "Linux" ]; then
+        if ! command_exists gcc; then
+            missing_deps+=("gcc")
+        fi
+    fi
+
+    # Check for GPU-specific requirements
+    arch_lower=$(echo "${ARCH}" | tr '[:upper:]' '[:lower:]')
+    if [ "${arch_lower}" = "gpu" ]; then
         if [ "${PLATFORM_NAME}" = "macOS" ]; then
             log_warning "GPU builds are not officially supported on macOS"
             log_warning "Continuing with CPU build instead"
             ARCH="cpu"
         elif ! command_exists nvcc; then
-            log_error "CUDA toolkit is not installed or not in PATH"
-            log_error "Please install CUDA SDK for GPU builds"
-            missing_deps=1
-        else
-            local cuda_version=$(nvcc --version | grep "release" | grep -o '[0-9]\+\.[0-9]\+')
-            log_info "CUDA toolkit found: version ${cuda_version}"
+            missing_deps+=("nvcc (CUDA toolkit)")
         fi
     fi
-    
-    # Platform-specific checks
+
+    # Check for platform-specific requirements
     case "${PLATFORM_NAME}" in
-        macOS)
-            # Check for Xcode Command Line Tools
-            if ! xcode-select -p >/dev/null 2>&1; then
-                log_warning "Xcode Command Line Tools may not be properly installed"
-                log_warning "If build fails, run: xcode-select --install"
+        "macOS")
+            if ! xcode-select -p &> /dev/null; then
+                missing_deps+=("Xcode Command Line Tools")
             fi
             ;;
-        Linux)
-            # Check for essential build tools
-            for tool in make ar; do
-                if ! command_exists "${tool}"; then
-                    log_error "Essential build tool '${tool}' is missing"
-                    missing_deps=1
-                fi
-            done
+        "Linux")
+            # Additional Linux-specific checks can be added here if needed
             ;;
     esac
-    
-    if [ ${missing_deps} -eq 1 ]; then
-        log_error "Missing required dependencies. Please install them and try again."
+
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        log_error "Missing required dependencies:"
+        printf '  - %s\n' "${missing_deps[@]}"
+        log_error "Please install the missing dependencies and try again."
         exit 1
     fi
-    
+
     log_success "All system requirements satisfied for ${PLATFORM_NAME}"
 }
 
@@ -497,8 +483,8 @@ check_requirements() {
 # Arguments:
 #   $@ - All command line arguments passed to the script
 # Global Variables Set:
-#   TIER - Build tier (standard/free)
-#   ARCH - Build architecture (cpu/gpu)  
+#   LICENSE - License verification (on/off)
+#   ARCH - Build architecture (cpu/gpu)
 #   TEST - Unit test flag (on/off)
 #   JOBS - Number of parallel build jobs
 #   CLEAN - Clean build artifacts flag (true/false)
@@ -506,7 +492,7 @@ check_requirements() {
 #   CMAKE_ARGS - Additional CMake arguments
 # Supported Options:
 #   --help: Shows help and exits
-#   --tier=VALUE: Sets build tier
+#   --license=VALUE: Enables/disables license verification
 #   --arch=VALUE: Sets architecture
 #   --test=VALUE: Enables/disables tests
 #   --jobs=VALUE: Sets parallel job count
@@ -523,8 +509,8 @@ parse_arguments() {
                 Help
                 exit 0
                 ;;
-            --tier=*)
-                TIER="${1#*=}"
+            --license=*)
+                LICENSE="${1#*=}"
                 shift
                 ;;
             --arch=*)
@@ -563,7 +549,7 @@ parse_arguments() {
                 ;;
         esac
     done
-    
+
     # Handle auto-detection of CPU cores
     if [ "${JOBS}" = "auto" ]; then
         JOBS=$(detect_cores)
@@ -580,13 +566,13 @@ parse_arguments() {
 # Arguments:
 #   None
 # Global Variables Used:
-#   TIER - Validated against 'standard' and 'free'
+#   LICENSE - Validated against 'on' and 'off'
 #   ARCH - Validated against 'cpu' and 'gpu'
 #   TEST - Validated against 'on' and 'off'
 #   JOBS - Validated as positive integer
 #   CLEAN - Validated against 'true' and 'false'
 # Validation Rules:
-#   - TIER: Must be 'standard' or 'free' (case insensitive)
+#   - LICENSE: Must be 'on' or 'off' (case insensitive)
 #   - ARCH: Must be 'cpu' or 'gpu' (case insensitive)
 #   - TEST: Must be 'on' or 'off' (case insensitive)
 #   - JOBS: Must be positive integer >= 1
@@ -594,44 +580,60 @@ parse_arguments() {
 # Exit:
 #   Exits with code 1 if any validation errors are found
 validate_parameters() {
-    local validation_errors=0
-    
-    # Validate TIER
-    if [ "$(to_lowercase "$TIER")" != "standard" ] && [ "$(to_lowercase "$TIER")" != "free" ]; then
-        log_error "Invalid --tier parameter '${TIER}'. Please choose 'standard' or 'free'"
-        validation_errors=1
+    local errors=0
+
+    # Validate license parameter
+    license_lower=$(echo "${LICENSE}" | tr '[:upper:]' '[:lower:]')
+    case "${license_lower}" in
+        "on"|"off") ;;
+        *)
+            log_error "Invalid --license parameter: '$LICENSE'. Choose 'on' or 'off'"
+            errors=$((errors + 1))
+            ;;
+    esac
+
+    # Validate architecture parameter
+    arch_lower=$(echo "${ARCH}" | tr '[:upper:]' '[:lower:]')
+    case "${arch_lower}" in
+        "cpu"|"gpu") ;;
+        *)
+            log_error "Invalid --arch parameter: '$ARCH'. Choose 'cpu' or 'gpu'"
+            errors=$((errors + 1))
+            ;;
+    esac
+
+    # Validate test parameter
+    test_lower=$(echo "${TEST}" | tr '[:upper:]' '[:lower:]')
+    case "${test_lower}" in
+        "on"|"off") ;;
+        *)
+            log_error "Invalid --test parameter: '$TEST'. Choose 'on' or 'off'"
+            errors=$((errors + 1))
+            ;;
+    esac
+
+    # Validate jobs parameter
+    if ! [[ "$JOBS" =~ ^[0-9]+$ ]] || [ "$JOBS" -lt 1 ]; then
+        log_error "Invalid --jobs parameter: '$JOBS'. Must be a positive integer"
+        errors=$((errors + 1))
     fi
-    
-    # Validate ARCH
-    if [ "$(to_lowercase "$ARCH")" != "cpu" ] && [ "$(to_lowercase "$ARCH")" != "gpu" ]; then
-        log_error "Invalid --arch parameter '${ARCH}'. Please choose 'cpu' or 'gpu'"
-        validation_errors=1
-    fi
-    
-    # Validate TEST
-    if [ "$(to_lowercase "$TEST")" != "on" ] && [ "$(to_lowercase "$TEST")" != "off" ]; then
-        log_error "Invalid --test parameter '${TEST}'. Please choose 'on' or 'off'"
-        validation_errors=1
-    fi
-    
-    # Validate JOBS
-    if ! echo "${JOBS}" | grep -q '^[1-9][0-9]*$'; then
-        log_error "Invalid --jobs parameter '${JOBS}'. Please provide a positive integer"
-        validation_errors=1
-    fi
-    
-    # Validate CLEAN
-    if [ "$(to_lowercase "$CLEAN")" != "true" ] && [ "$(to_lowercase "$CLEAN")" != "false" ]; then
-        log_error "Invalid --clean parameter '${CLEAN}'. Please choose 'true' or 'false'"
-        validation_errors=1
-    fi
-    
-    if [ ${validation_errors} -eq 1 ]; then
-        log_error "Parameter validation failed. Use --help for usage information."
+
+    # Validate clean parameter
+    clean_lower=$(echo "${CLEAN}" | tr '[:upper:]' '[:lower:]')
+    case "${clean_lower}" in
+        "true"|"false") ;;
+        *)
+            log_error "Invalid --clean parameter: '$CLEAN'. Choose 'true' or 'false'"
+            errors=$((errors + 1))
+            ;;
+    esac
+
+    if [ $errors -gt 0 ]; then
+        log_error "Parameter validation failed with $errors error(s)"
         exit 1
     fi
-    
-    log_info "All parameters validated successfully"
+
+    log_success "All parameters validated successfully"
 }
 
 #
@@ -644,8 +646,8 @@ validate_parameters() {
 #   None
 # Global Variables Used:
 #   PLATFORM_NAME - Current platform
-#   TIER - Build tier setting
-#   ARCH - Architecture setting  
+#   LICENSE - License verification setting
+#   ARCH - Architecture setting
 #   TEST - Test execution setting
 #   JOBS - Number of parallel jobs
 #   CLEAN - Clean build setting
@@ -665,17 +667,15 @@ display_banner() {
     echo ""
     echo "Build Configuration (${PLATFORM_NAME}):"
     echo "  - Platform: ${PLATFORM_NAME}"
-    echo "  - Tier: ${TIER}"
-    echo "  - Architecture: ${ARCH}"
-    echo "  - Tests: ${TEST}"
+    echo "  - License Verification: $(echo "${LICENSE}" | tr '[:lower:]' '[:upper:]')"
+    echo "  - Architecture: $(echo "${ARCH}" | tr '[:lower:]' '[:upper:]')"
+    echo "  - Tests: $(echo "${TEST}" | tr '[:lower:]' '[:upper:]')"
     echo "  - Parallel Jobs: ${JOBS}"
-    echo "  - Clean Build: ${CLEAN}"
-    echo "  - Verbose Output: ${VERBOSE}"
+    echo "  - Clean Build: $(echo "${CLEAN}" | tr '[:lower:]' '[:upper:]')"
+    echo "  - Verbose Output: $(echo "${VERBOSE}" | tr '[:lower:]' '[:upper:]')"
     echo "  - Script Directory: ${SCRIPT_DIR}"
     echo "  - Log File: ${LOG_FILE}"
-    if [ -n "${CMAKE_ARGS}" ]; then
-        echo "  - Additional CMake Args: ${CMAKE_ARGS}"
-    fi
+    [ -n "$CMAKE_ARGS" ] && echo "  - Additional CMake Args: ${CMAKE_ARGS}"
     echo ""
     echo "██████╗  █████╗ ██████╗  █████╗ ██████╗ ███████╗██╗███╗   ███╗██╗  ██╗"
     echo "██╔══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗██╔════╝██║████╗ ████║╚██╗██╔╝"
@@ -730,7 +730,7 @@ clean_build_artifacts() {
 # Global Variables Used:
 #   PLATFORM_NAME - Current platform for library naming
 #   ARCH - Determines GPU build flags
-#   TIER - Determines FREETIER build flags
+#   LICENSE - Determines ENABLE_LICENSE build flag
 #   TEST - Controls Google Test compilation
 #   CMAKE_ARGS - Additional CMake arguments
 #   JOBS - Number of parallel compilation jobs
@@ -745,25 +745,29 @@ clean_build_artifacts() {
 # CMake Flags Set:
 #   - CMAKE_BUILD_TYPE=Release (always)
 #   - GPU_BUILD=ON/OFF (based on ARCH setting)
-#   - FREETIER=ON/OFF (based on TIER setting)
+#   - ENABLE_LICENSE=ON/OFF (based on LICENSE setting)
 #   - GTEST=ON/OFF (based on TEST setting)
 #   - Custom flags from CMAKE_ARGS
 build_cpp_library() {
-    log_info "Building RadarSimLib C++ library..."
     local build_start_time=$(date +%s)
-    local workpath=$(pwd)
-    
+    local lib_ext
+    lib_ext=$(get_library_extension)
+
+    log_info "Building libradarsimc.${lib_ext} with $(echo "${ARCH}" | tr '[:lower:]' '[:upper:]') architecture on ${PLATFORM_NAME}..."
+
     # Create and enter build directory
     mkdir -p "./build"
     cd "./build"
-    
+
     # Configure CMake options
     local cmake_options="-DCMAKE_BUILD_TYPE=Release"
-    
-    if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
+
+    # Add architecture-specific flags
+    arch_lower=$(echo "${ARCH}" | tr '[:upper:]' '[:lower:]')
+    if [ "${arch_lower}" = "gpu" ]; then
         cmake_options="${cmake_options} -DGPU_BUILD=ON"
         log_info "Configuring for GPU build"
-        
+
         # Warn about macOS GPU support
         if [ "${PLATFORM_NAME}" = "macOS" ]; then
             log_warning "GPU builds on macOS may have limited CUDA support"
@@ -772,64 +776,64 @@ build_cpp_library() {
         cmake_options="${cmake_options} -DGPU_BUILD=OFF"
         log_info "Configuring for CPU build"
     fi
-    
-    if [ "$(to_lowercase "$TIER")" = "free" ]; then
-        cmake_options="${cmake_options} -DFREETIER=ON"
-        log_info "Configuring for free tier"
+
+    # Add license verification flag
+    license_lower=$(echo "${LICENSE}" | tr '[:upper:]' '[:lower:]')
+    if [ "${license_lower}" = "on" ]; then
+        cmake_options="${cmake_options} -DENABLE_LICENSE=ON"
     else
-        cmake_options="${cmake_options} -DFREETIER=OFF"
-        log_info "Configuring for standard tier"
+        cmake_options="${cmake_options} -DENABLE_LICENSE=OFF"
     fi
-    
-    if [ "$(to_lowercase "$TEST")" = "on" ]; then
+
+    # Add test flags
+    test_lower=$(echo "${TEST}" | tr '[:upper:]' '[:lower:]')
+    if [ "${test_lower}" = "on" ]; then
         cmake_options="${cmake_options} -DGTEST=ON"
         log_info "Enabling unit tests"
     else
         cmake_options="${cmake_options} -DGTEST=OFF"
         log_info "Disabling unit tests"
     fi
-    
+
     # Add custom CMake arguments
     if [ -n "${CMAKE_ARGS}" ]; then
         cmake_options="${cmake_options} ${CMAKE_ARGS}"
         log_info "Adding custom CMake arguments: ${CMAKE_ARGS}"
     fi
-    
+
     # Configure build
-    log_info "Configuring CMake build..."
-    if [ "$(to_lowercase "$VERBOSE")" = "true" ]; then
+    log_info "Configuring CMake with args: $cmake_options"
+    if [ "$(echo "${VERBOSE}" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
         eval "cmake ${cmake_options} .."
     else
         eval "cmake ${cmake_options} .." >> "${LOG_FILE}" 2>&1
     fi
-    
+
     if [ $? -ne 0 ]; then
         log_error "CMake configuration failed"
-        CMAKE_FAILED=1
-        cd "${workpath}"
+        cd "${WORKPATH}"
         exit 1
     fi
-    
+
     # Build the library
     log_info "Building C++ library with ${JOBS} parallel jobs..."
-    if [ "$(to_lowercase "$VERBOSE")" = "true" ]; then
+    if [ "$(echo "${VERBOSE}" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
         cmake --build . --parallel "${JOBS}"
     else
         cmake --build . --parallel "${JOBS}" >> "${LOG_FILE}" 2>&1
     fi
-    
+
     if [ $? -ne 0 ]; then
         log_error "C++ library build failed"
-        CMAKE_FAILED=1
-        cd "${workpath}"
+        cd "${WORKPATH}"
         exit 1
     fi
-    
+
     local build_end_time=$(date +%s)
     local build_duration=$((build_end_time - build_start_time))
-    log_success "C++ library build completed in ${build_duration} seconds"
-    
-    cd "${workpath}"
+    log_success "C++ library built successfully in ${build_duration}s"
+
+    cd "${WORKPATH}"
 }
 
 #
@@ -844,7 +848,6 @@ build_cpp_library() {
 # Global Variables Used:
 #   PLATFORM_NAME - Current platform for library file detection
 #   ARCH - Architecture setting for output directory naming
-#   TIER - Tier setting for output directory naming
 # Installation Process:
 #   1. Determines output directory based on architecture and tier
 #   2. Creates output directory structure
@@ -867,17 +870,9 @@ install_libraries() {
     local header_file="./src/includes/radarsim.h"
     
     if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
-        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
-            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu"
-        else
-            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu_free"
-        fi
+        release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu"
     else
-        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
-            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu"
-        else
-            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu_free"
-        fi
+        release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu"
     fi
     
     # Remove and create output directory
@@ -938,7 +933,7 @@ install_libraries() {
 # Arguments:
 #   None
 # Global Variables Used:
-#   ARCH, TIER, PLATFORM_NAME - Used to determine output paths
+#   ARCH, PLATFORM_NAME - Used to determine output paths
 # Exit:
 #   Exits with code 1 if validation fails
 validate_build_output() {
@@ -951,17 +946,9 @@ validate_build_output() {
     local release_path
     
     if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
-        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
-            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu"
-        else
-            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu_free"
-        fi
+        release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_gpu"
     else
-        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
-            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu"
-        else
-            release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu_free"
-        fi
+        release_path="./radarsimlib_${platform_suffix}_${arch_suffix}_cpu"
     fi
     
     # Verify output directory exists
@@ -1132,7 +1119,7 @@ build_success() {
     echo ""
     echo "Build Summary (${PLATFORM_NAME}):"
     echo "  - Platform: ${PLATFORM_NAME}"
-    echo "  - Tier: ${TIER}"
+    echo "  - License Verification: $(echo "${LICENSE}" | tr '[:lower:]' '[:upper:]')"
     echo "  - Architecture: ${ARCH}"
     echo "  - Tests: ${TEST}"
     echo "  - Parallel Jobs: ${JOBS}"
@@ -1146,17 +1133,9 @@ build_success() {
     local arch_suffix=$(get_arch_suffix)
     
     if [ "$(to_lowercase "$ARCH")" = "gpu" ]; then
-        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
-            echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_gpu/"
-        else
-            echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_gpu_free/"
-        fi
+        echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_gpu/"
     else
-        if [ "$(to_lowercase "$TIER")" = "standard" ]; then
-            echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_cpu/"
-        else
-            echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_cpu_free/"
-        fi
+        echo "  - Output Directory: ./radarsimlib_${platform_suffix}_${arch_suffix}_cpu/"
     fi
     echo "  - Library File: libradarsimc.${lib_ext}"
     echo "  - Header File: radarsim.h"
@@ -1190,15 +1169,12 @@ build_failed() {
     echo ""
     echo "Build Configuration (${PLATFORM_NAME}):"
     echo "  - Platform: ${PLATFORM_NAME}"
-    echo "  - Tier: ${TIER}"
+    echo "  - License Verification: ${LICENSE}"
     echo "  - Architecture: ${ARCH}"
     echo "  - Tests: ${TEST}"
     echo "  - Parallel Jobs: ${JOBS}"
     echo ""
     echo "Error Summary:"
-    if [ ${CMAKE_FAILED} -ne 0 ]; then
-        echo "  - CMake configuration or build failed"
-    fi
     if [ ${TEST_FAILED} -ne 0 ]; then
         echo "  - Unit tests failed"
     fi
@@ -1224,46 +1200,51 @@ build_failed() {
     echo "======================================================================"
 }
 
-# Set up signal handlers
-trap cleanup EXIT
-trap 'exit 130' INT  # Handle Ctrl+C
-
 # Main execution flow
 main() {
+    # Set up signal handlers for graceful error handling and cleanup
+    trap cleanup EXIT
+    trap 'log_error "Build interrupted by user"; exit 130' INT TERM
+
     # Parse command line arguments
     parse_arguments "$@"
-    
+
+    # Store current working directory for reference throughout the build
+    readonly WORKPATH=$(pwd)
+    log_info "Working directory: ${WORKPATH}"
+    log_info "Detected platform: ${PLATFORM_NAME}"
+
     # Validate parameters
     validate_parameters
-    
-    # Display banner and configuration
-    display_banner
-    
+
     # Check system requirements
     check_requirements
-    
+
+    # Display banner and configuration
+    display_banner
+
     # Start build process
     log_info "Starting build process..."
     log_info "Build started at: $(date)"
-    
+
     # Clean previous build artifacts
     clean_build_artifacts
-    
+
     # Build C++ library
     build_cpp_library
-    
+
     # Install libraries
     install_libraries
-    
+
     # Validate build output
     validate_build_output
-    
+
     # Run tests if enabled
     run_tests
-    
+
     # Display success message
     build_success
-    
+
     exit 0
 }
 

@@ -201,11 +201,12 @@ TEST_F(ReceiverTest, GetNumRxChannels) {
 
   EXPECT_EQ(Get_Num_Rxchannel(valid_receiver), 1);
 
-  // Add another channel
-  Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                theta, theta_ptn, theta_length, antenna_gain, valid_receiver);
-
-  EXPECT_EQ(Get_Num_Rxchannel(valid_receiver), 2);
+  // Adding another channel should fail (unlicensed limit: 1 channel)
+  int result =
+      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
+                    theta, theta_ptn, theta_length, antenna_gain, valid_receiver);
+  EXPECT_NE(result, 0);
+  EXPECT_EQ(Get_Num_Rxchannel(valid_receiver), 1);
 }
 
 /**
@@ -292,4 +293,26 @@ TEST_F(ReceiverTest, AutomaticCleanupControl) {
   EXPECT_EQ(Get_Num_Rxchannel(rx), 1);
 
   // Don't free - let automatic cleanup handle it
+}
+
+/**
+ * @brief Test unlicensed receiver channel limit
+ */
+TEST_F(ReceiverTest, UnlicensedChannelLimit) {
+  valid_receiver =
+      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw);
+  ASSERT_NE(valid_receiver, nullptr);
+
+  // First channel should succeed
+  int result =
+      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
+                    theta, theta_ptn, theta_length, antenna_gain, valid_receiver);
+  EXPECT_EQ(result, 0);
+
+  // Second channel should fail (unlicensed limit: 1 channel)
+  result =
+      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
+                    theta, theta_ptn, theta_length, antenna_gain, valid_receiver);
+  EXPECT_NE(result, 0);
+  EXPECT_EQ(Get_Num_Rxchannel(valid_receiver), 1);
 }

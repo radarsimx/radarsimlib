@@ -350,3 +350,30 @@ TEST_F(TransmitterTest, AutomaticCleanupControl) {
 
   // Don't free - let automatic cleanup handle it
 }
+
+/**
+ * @brief Test unlicensed transmitter channel limit
+ */
+TEST_F(TransmitterTest, UnlicensedChannelLimit) {
+  valid_transmitter = Create_Transmitter(
+      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power);
+  ASSERT_NE(valid_transmitter, nullptr);
+
+  // First channel should succeed
+  int result = Add_Txchannel(
+      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
+      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
+      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
+      pulse_mod_imag.data(), delay, grid, valid_transmitter);
+  EXPECT_EQ(result, 0);
+
+  // Second channel should fail (unlicensed limit: 1 channel)
+  result = Add_Txchannel(
+      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
+      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
+      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
+      pulse_mod_imag.data(), delay, grid, valid_transmitter);
+  EXPECT_NE(result, 0);
+  EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 1);
+}

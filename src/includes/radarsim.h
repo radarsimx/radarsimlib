@@ -14,7 +14,7 @@
  * - Exception-safe resource handling
  *
  * @note Automatic cleanup provides safety net; manual Free_* calls recommended.
- * @warning Free tier has channel, target, and mesh complexity limits.
+ * @warning Unlicensed usage has channel, target, and mesh complexity limits.
  *
  *    ----------
  *
@@ -62,6 +62,49 @@ extern "C" {
  * elements
  */
 EXPORTED void Get_Version(int version[3]);
+
+/*********************************************
+ *
+ *  License Management
+ *
+ *********************************************/
+/**
+ * @brief Set license from a single license file
+ *
+ * @param[in] license_file_path Path to the license file (NULL or empty for
+ * default)
+ * @param[in] product Expected product name for validation (NULL or empty to
+ * skip product check)
+ */
+EXPORTED void Set_License(const char *license_file_path, const char *product);
+
+/**
+ * @brief Set license from multiple license files
+ *
+ * @param[in] license_file_paths Array of paths to license files
+ * @param[in] num_files Number of license file paths
+ * @param[in] product Expected product name for validation (NULL or empty to
+ * skip product check)
+ */
+EXPORTED void Set_License_Files(const char **license_file_paths, int num_files,
+                                const char *product);
+
+/**
+ * @brief Check if a valid license is active
+ *
+ * @return int 1 if licensed, 0 if not licensed
+ */
+EXPORTED int Is_Licensed();
+
+/**
+ * @brief Get license information string
+ *
+ * @param[out] buffer Pre-allocated buffer to store the license info string
+ * @param[in] buffer_size Size of the buffer in bytes
+ * @return int Actual length of the license info string (excluding null
+ * terminator). If greater than buffer_size-1, the output was truncated.
+ */
+EXPORTED int Get_License_Info(char *buffer, int buffer_size);
 
 /*********************************************
  *
@@ -122,6 +165,32 @@ EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                            int num_pulses, float tx_power);
 
 /**
+ * @brief Create a Transmitter object with waveform parameters and phase noise
+ *
+ * @param[in] freq Frequency vector (Hz)
+ * @param[in] freq_time Timestamp vector for frequency samples (s)
+ * @param[in] waveform_size Length of freq and freq_time arrays
+ * @param[in] freq_offset Frequency offset per pulse (Hz)
+ *            The length of this array must be equal to `num_pulses`.
+ * @param[in] pulse_start_time Pulse start time vector (s)
+ *            The length of this array must be equal to `num_pulses`.
+ * @param[in] num_pulses Number of pulses
+ * @param[in] tx_power Transmitter power (dBm)
+ * @param[in] phase_noise_real Real part of phase noise vector
+ * @param[in] phase_noise_imag Imaginary part of phase noise vector
+ * @param[in] phase_noise_size Length of phase noise arrays
+ *
+ * @return t_Transmitter* Pointer to Transmitter object, NULL on failure
+ *
+ * @note Automatically registered for cleanup. Use Free_Transmitter() for manual
+ * cleanup.
+ */
+EXPORTED t_Transmitter *Create_Transmitter_PhaseNoise(
+    double *freq, double *freq_time, int waveform_size, double *freq_offset,
+    double *pulse_start_time, int num_pulses, float tx_power,
+    double *phase_noise_real, double *phase_noise_imag, int phase_noise_size);
+
+/**
  * @brief Add a transmitter channel with antenna pattern and modulation
  *
  * @param[in] location Channel location {x, y, z} (m)
@@ -146,7 +215,7 @@ EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
  *
  * @return int 0 for success, 1 for failure
  *
- * @note Free tier limited to 1 transmitter channel.
+ * @note Unlicensed usage limited to 1 transmitter channel.
  */
 EXPORTED int Add_Txchannel(float *location, float *polar_real,
                            float *polar_imag, float *phi, float *phi_ptn,
@@ -222,7 +291,7 @@ EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
  *
  * @return int 0 for success, 1 for failure
  *
- * @note Free tier limited to 1 receiver channel.
+ * @note Unlicensed usage limited to 1 receiver channel.
  */
 EXPORTED int Add_Rxchannel(float *location, float *polar_real,
                            float *polar_imag, float *phi, float *phi_ptn,
@@ -285,6 +354,34 @@ EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
                                float *rotation_rate);
 
 /**
+ * @brief Create a Radar system with time-varying platform motion
+ *
+ * @param[in] ptr_tx_c Pointer to configured Transmitter object
+ * @param[in] ptr_rx_c Pointer to configured Receiver object
+ * @param[in] frame_start_time Frame start time vector (s)
+ * @param[in] num_frames Number of radar frames
+ * @param[in] location_array Platform positions over time [x₁,y₁,z₁, ...]
+ * @param[in] num_locations Number of location entries
+ * @param[in] speed Radar platform velocity {x, y, z} (m/s)
+ * @param[in] rotation_array Platform orientations over time [rx₁,ry₁,rz₁, ...]
+ * (rad)
+ * @param[in] num_rotations Number of rotation entries
+ * @param[in] rotation_rate Radar platform angular velocity {x, y, z} (rad/s)
+ *
+ * @return t_Radar* Pointer to Radar system object, NULL on failure
+ *
+ * @note Automatically registered for cleanup. Use Free_Radar() for manual
+ * cleanup.
+ * @warning TX/RX objects must remain valid for radar system's lifetime.
+ */
+EXPORTED t_Radar *Create_Radar_Array(t_Transmitter *ptr_tx_c,
+                                     t_Receiver *ptr_rx_c,
+                                     double *frame_start_time, int num_frames,
+                                     float *location_array, int num_locations,
+                                     float *speed, float *rotation_array,
+                                     int num_rotations, float *rotation_rate);
+
+/**
  * @brief Get the required baseband buffer size for the given radar
  *
  * @details Returns the total number of samples required for baseband buffers
@@ -342,10 +439,31 @@ EXPORTED t_Targets *Init_Targets();
  *
  * @return int 0 for success, 1 for failure
  *
- * @note Free tier limited to 2 point targets.
+ * @note Unlicensed usage limited to 2 point targets.
  */
 EXPORTED int Add_Point_Target(float *location, float *speed, float rcs,
                               float phs, t_Targets *ptr_targets_c);
+
+/**
+ * @brief Add a time-varying ideal point scatterer to the simulation
+ *
+ * @param[in] location_array Target's locations over time [x₁,y₁,z₁, x₂,y₂,z₂,
+ * ...] (m)
+ * @param[in] num_locations Number of location entries
+ * @param[in] speed Target's velocity vector {x, y, z} (m/s)
+ * @param[in] rcs_array Target's RCS values over time (dBsm)
+ * @param[in] phase_array Target's phase values over time (rad)
+ * @param[in] num_rcs Number of RCS/phase entries
+ * @param[in] ptr_targets_c Pointer to the target management system
+ *
+ * @return int 0 for success, 1 for failure
+ *
+ * @note Unlicensed usage limited to 2 point targets.
+ */
+EXPORTED int Add_Point_Target_Array(float *location_array, int num_locations,
+                                    float *speed, float *rcs_array,
+                                    float *phase_array, int num_rcs,
+                                    t_Targets *ptr_targets_c);
 
 /**
  * @brief Add a complex 3D mesh target to the simulation
@@ -362,19 +480,54 @@ EXPORTED int Add_Point_Target(float *location, float *speed, float rcs,
  * @param[in] ep_imag Imaginary part of relative permittivity εᵣ
  * @param[in] mu_real Real part of relative permeability μᵣ
  * @param[in] mu_imag Imaginary part of relative permeability μᵣ
- * @param[in] is_ground Flag for ground surface (affects ray tracing)
+ * @param[in] skip_diffusion Flag to skip diffusion calculations
+ * @param[in] density Ray density for this target (0.0 uses global density)
+ * @param[in] environment Environment flag for target
  * @param[in] ptr_targets_c Pointer to the target management system
  *
  * @return int 0 for success, 1 for failure
  *
- * @note Free tier limits: 2 mesh targets max, 8 triangles per mesh max.
+ * @note Unlicensed usage limits: 2 mesh targets max, 8 triangles per mesh max.
  */
 EXPORTED int Add_Mesh_Target(float *points, int *cells, int cell_size,
                              float *origin, float *location, float *speed,
                              float *rotation, float *rotation_rate,
                              float ep_real, float ep_imag, float mu_real,
-                             float mu_imag, bool is_ground,
-                             t_Targets *ptr_targets_c);
+                             float mu_imag, bool skip_diffusion, float density,
+                             bool environment, t_Targets *ptr_targets_c);
+
+/**
+ * @brief Add a 3D mesh target with time-varying motion arrays
+ *
+ * @param[in] points Mesh vertex coordinates [x₁,y₁,z₁, x₂,y₂,z₂, ...]
+ * @param[in] cells Triangle connectivity array [v₁,v₂,v₃, ...] (0-indexed)
+ * @param[in] cell_size Number of triangular mesh faces
+ * @param[in] origin Target's local coordinate origin (m)
+ * @param[in] location_array Target's locations over time [x₁,y₁,z₁, ...]
+ * @param[in] speed_array Target's velocities over time [vx₁,vy₁,vz₁, ...]
+ * @param[in] rotation_array Target's orientations over time [rx₁,ry₁,rz₁, ...]
+ * (rad)
+ * @param[in] rotation_rate_array Target's angular velocities over time (rad/s)
+ * @param[in] num_motions Number of motion entries in each array
+ * @param[in] ep_real Real part of relative permittivity εᵣ
+ * @param[in] ep_imag Imaginary part of relative permittivity εᵣ
+ * @param[in] mu_real Real part of relative permeability μᵣ
+ * @param[in] mu_imag Imaginary part of relative permeability μᵣ
+ * @param[in] skip_diffusion Flag to skip diffusion calculations
+ * @param[in] density Ray density for this target (0.0 uses global density)
+ * @param[in] environment Environment flag for target
+ * @param[in] ptr_targets_c Pointer to the target management system
+ *
+ * @return int 0 for success, 1 for failure
+ *
+ * @note Unlicensed usage limits: 2 mesh targets max, 8 triangles per mesh max.
+ */
+EXPORTED int Add_Mesh_Target_Array(
+    float *points, int *cells, int cell_size, float *origin,
+    float *location_array, float *speed_array, float *rotation_array,
+    float *rotation_rate_array, int num_motions, float ep_real, float ep_imag,
+    float mu_real, float mu_imag, bool skip_diffusion, float density,
+    bool environment, t_Targets *ptr_targets_c);
 
 /**
  * @brief Safely release target management system resources
@@ -405,10 +558,12 @@ EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
  *
  * @note Buffer size: [num_pulses × num_rx_channels × samples_per_pulse]
  * @warning Buffers must be pre-allocated to correct size.
+ *
+ * @return int 0 for success, non-zero RadarSimErrorCode on failure
  */
-EXPORTED void Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
-                                 int level, float density, int *ray_filter,
-                                 double *ptr_bb_real, double *ptr_bb_imag);
+EXPORTED int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
+                                int level, float density, int *ray_filter,
+                                double *ptr_bb_real, double *ptr_bb_imag);
 
 /**
  * @brief Execute radar-to-radar interference simulation

@@ -92,7 +92,9 @@ class TargetsTest : public ::testing::Test {
     ep_imag = 0.0f;  // Permittivity
     mu_real = 1.0f;
     mu_imag = 0.0f;  // Permeability
-    is_ground = false;
+    skip_diffusion = false;
+    mesh_density = 0.0f;
+    environment = false;
   }
 
   void setupSimpleMesh() {
@@ -117,7 +119,9 @@ class TargetsTest : public ::testing::Test {
   float mesh_origin[3], mesh_location[3], mesh_speed[3];
   float mesh_rotation[3], mesh_rotation_rate[3];
   float ep_real, ep_imag, mu_real, mu_imag;
-  bool is_ground;
+  bool skip_diffusion;
+  float mesh_density;
+  bool environment;
 
   t_Targets* valid_targets = nullptr;
 };
@@ -180,7 +184,8 @@ TEST_F(TargetsTest, AddMeshTarget) {
   int result = Add_Mesh_Target(
       mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
       mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
-      ep_imag, mu_real, mu_imag, is_ground, valid_targets);
+      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
+      valid_targets);
 
   EXPECT_EQ(result, 0);  // 0 for success according to API
 }
@@ -196,21 +201,23 @@ TEST_F(TargetsTest, AddMeshTargetNullParams) {
   int result = Add_Mesh_Target(
       nullptr, mesh_cells.data(), cell_size, mesh_origin, mesh_location,
       mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real, ep_imag, mu_real,
-      mu_imag, is_ground, valid_targets);
+      mu_imag, skip_diffusion, mesh_density, environment, valid_targets);
   EXPECT_NE(result, 0);  // Non-zero for failure
 
   // Test with null cells
   result = Add_Mesh_Target(mesh_points.data(), nullptr, cell_size, mesh_origin,
                            mesh_location, mesh_speed, mesh_rotation,
                            mesh_rotation_rate, ep_real, ep_imag, mu_real,
-                           mu_imag, is_ground, valid_targets);
+                           mu_imag, skip_diffusion, mesh_density, environment,
+                           valid_targets);
   EXPECT_NE(result, 0);  // Non-zero for failure
 
   // Test with null targets
   result = Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size,
                            mesh_origin, mesh_location, mesh_speed,
                            mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
-                           mu_real, mu_imag, is_ground, nullptr);
+                           mu_real, mu_imag, skip_diffusion, mesh_density,
+                           environment, nullptr);
   EXPECT_NE(result, 0);  // Non-zero for failure
 }
 
@@ -225,14 +232,15 @@ TEST_F(TargetsTest, AddMeshTargetInvalidParams) {
   int result = Add_Mesh_Target(
       mesh_points.data(), mesh_cells.data(), 0, mesh_origin, mesh_location,
       mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real, ep_imag, mu_real,
-      mu_imag, is_ground, valid_targets);
+      mu_imag, skip_diffusion, mesh_density, environment, valid_targets);
   EXPECT_NE(result, 0);  // Non-zero for failure
 
   // Test with negative cell size
   result = Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), -1,
                            mesh_origin, mesh_location, mesh_speed,
                            mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
-                           mu_real, mu_imag, is_ground, valid_targets);
+                           mu_real, mu_imag, skip_diffusion, mesh_density,
+                           environment, valid_targets);
   EXPECT_NE(result, 0);  // Non-zero for failure
 }
 
@@ -252,7 +260,8 @@ TEST_F(TargetsTest, MultipleTargets) {
   int result2 = Add_Mesh_Target(
       mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
       mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
-      ep_imag, mu_real, mu_imag, is_ground, valid_targets);
+      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
+      valid_targets);
   EXPECT_EQ(result2, 0);  // 0 for success according to API
 }
 
@@ -275,7 +284,8 @@ TEST_F(TargetsTest, AutomaticMemoryManagement) {
   int result2 = Add_Mesh_Target(
       mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
       mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
-      ep_imag, mu_real, mu_imag, is_ground, targets2);
+      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
+      targets2);
   EXPECT_EQ(result2, 0);
 
   // Don't call Free_Targets - test automatic cleanup
@@ -319,7 +329,8 @@ TEST_F(TargetsTest, FreeTargets) {
                    test_targets);
   Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
                   mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate,
-                  ep_real, ep_imag, mu_real, mu_imag, is_ground, test_targets);
+                  ep_real, ep_imag, mu_real, mu_imag, skip_diffusion,
+                  mesh_density, environment, test_targets);
 
   // Should not crash when freeing a valid target list
   Free_Targets(test_targets);
@@ -347,8 +358,91 @@ TEST_F(TargetsTest, AutomaticCleanupControl) {
   int result2 = Add_Mesh_Target(
       mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
       mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
-      ep_imag, mu_real, mu_imag, is_ground, targets);
+      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
+      targets);
   EXPECT_EQ(result2, 0);
 
   // Don't free - let automatic cleanup handle it
+}
+
+/**
+ * @brief Test unlicensed point target limit
+ */
+TEST_F(TargetsTest, UnlicensedPointTargetLimit) {
+  valid_targets = Init_Targets();
+  ASSERT_NE(valid_targets, nullptr);
+
+  // Add 2 point targets (unlicensed limit)
+  EXPECT_EQ(Add_Point_Target(point_location, point_speed, point_rcs,
+                             point_phase, valid_targets),
+            0);
+  EXPECT_EQ(Add_Point_Target(point_location, point_speed, point_rcs,
+                             point_phase, valid_targets),
+            0);
+
+  // Third point target should fail (exceeds unlicensed limit of 2)
+  EXPECT_NE(Add_Point_Target(point_location, point_speed, point_rcs,
+                             point_phase, valid_targets),
+            0);
+}
+
+/**
+ * @brief Test unlicensed mesh target limit
+ */
+TEST_F(TargetsTest, UnlicensedMeshTargetLimit) {
+  valid_targets = Init_Targets();
+  ASSERT_NE(valid_targets, nullptr);
+
+  // Add 2 mesh targets (unlicensed limit)
+  EXPECT_EQ(Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size,
+                            mesh_origin, mesh_location, mesh_speed,
+                            mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
+                            mu_real, mu_imag, skip_diffusion, mesh_density,
+                            environment, valid_targets),
+            0);
+  EXPECT_EQ(Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size,
+                            mesh_origin, mesh_location, mesh_speed,
+                            mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
+                            mu_real, mu_imag, skip_diffusion, mesh_density,
+                            environment, valid_targets),
+            0);
+
+  // Third mesh target should fail (exceeds unlicensed limit of 2)
+  EXPECT_NE(Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size,
+                            mesh_origin, mesh_location, mesh_speed,
+                            mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
+                            mu_real, mu_imag, skip_diffusion, mesh_density,
+                            environment, valid_targets),
+            0);
+}
+
+/**
+ * @brief Test unlicensed mesh triangle limit
+ */
+TEST_F(TargetsTest, UnlicensedMeshTriangleLimit) {
+  valid_targets = Init_Targets();
+  ASSERT_NE(valid_targets, nullptr);
+
+  // Create a mesh with more than 8 triangles (exceeds unlicensed limit)
+  std::vector<float> large_mesh_points;
+  std::vector<int> large_mesh_cells;
+  // 10 vertices arranged in a strip
+  for (int i = 0; i < 10; i++) {
+    large_mesh_points.push_back(static_cast<float>(i));
+    large_mesh_points.push_back(0.0f);
+    large_mesh_points.push_back(0.0f);
+  }
+  // 9 triangles
+  for (int i = 0; i < 9; i++) {
+    large_mesh_cells.push_back(i);
+    large_mesh_cells.push_back(i + 1);
+    large_mesh_cells.push_back(0);
+  }
+
+  int result = Add_Mesh_Target(
+      large_mesh_points.data(), large_mesh_cells.data(), 9, mesh_origin,
+      mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
+      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
+      valid_targets);
+  EXPECT_NE(result, 0);  // Should fail: 9 triangles > 8 limit
 }

@@ -21,29 +21,29 @@ REM   build_win.bat [OPTIONS]
 REM
 REM OPTIONS:
 REM   --help              Show help message
-REM   --tier=TIER         Build tier: 'standard' or 'free' (default: standard)
-REM   --arch=ARCH         Build architecture: 'cpu' or 'gpu' (default: cpu)
-REM   --test=TEST         Enable unit tests: 'on' or 'off' (default: on)
+REM   --license=[on/off]  Enable license verification: 'on' or 'off' (default: off)
+REM   --arch=[cpu/gpu]    Build architecture: 'cpu' or 'gpu' (default: cpu)
+REM   --test=[on/off]     Enable unit tests: 'on' or 'off' (default: on)
 REM   --jobs=N            Number of parallel build jobs (default: auto-detect)
 REM
 REM EXAMPLES:
 REM   build_win.bat                                    REM Default build
-REM   build_win.bat --tier=free --arch=gpu           REM GPU build with free tier
+REM   build_win.bat --license=on --arch=gpu          REM GPU build with license verification
 REM   build_win.bat --jobs=8 --test=off              REM 8-core parallel build, no tests
-REM   build_win.bat --arch=cpu --tier=standard       REM CPU build with standard tier
+REM   build_win.bat --arch=cpu --license=on          REM CPU build with license verification
 REM
 REM EXIT CODES:
 REM   0  - Success
 REM   1  - General error (missing dependencies, validation failure, etc.)
 REM
 REM FILES CREATED:
-REM   - .\radarsimlib_win_x86_64_{arch}[_free]\       REM Output directory with built libraries
+REM   - .\radarsimlib_win_x86_64_{arch}\              REM Output directory with built libraries
 REM   - .\build_logs\windows_batch_build_log_YYYYMMDD_HHMMSS.log  REM Timestamped build log
 REM
 REM ==============================================================================
 
 REM Default build configuration
-set TIER=standard
+set LICENSE=off
 set ARCH=cpu
 set TEST=on
 set BUILD_TYPE=Release
@@ -71,16 +71,16 @@ REM Help section - displays command line parameter usage
     echo.
     echo OPTIONS:
     echo   --help              Show this help message
-    echo   --tier=TIER         Build tier: 'standard' or 'free' (default: standard)
+    echo   --license=LICENSE   Enable license verification: 'on' or 'off' (default: off)
     echo   --arch=ARCH         Build architecture: 'cpu' or 'gpu' (default: cpu)
     echo   --test=TEST         Enable unit tests: 'on' or 'off' (default: on)
     echo   --jobs=N            Number of parallel build jobs (default: auto-detect)
     echo.
     echo EXAMPLES:
     echo   %~nx0                                    # Default build
-    echo   %~nx0 --tier=free --arch=gpu           # GPU build with free tier
+    echo   %~nx0 --license=on --arch=gpu          # GPU build with license verification
     echo   %~nx0 --jobs=8 --test=off              # 8-core parallel build, no tests
-    echo   %~nx0 --arch=cpu --tier=standard       # CPU build with standard tier
+    echo   %~nx0 --arch=cpu --license=on          # CPU build with license verification
     echo.
     echo WINDOWS-SPECIFIC NOTES:
     echo   - Uses MSVC compiler, creates .dll files
@@ -94,7 +94,7 @@ REM Help section - displays command line parameter usage
     echo   1  - General error (missing dependencies, validation failure, etc.)
     echo.
     echo FILES CREATED:
-    echo   - .\radarsimlib_win_x86_64_{arch}[_free]\    # Output directory with built libraries
+    echo   - .\radarsimlib_win_x86_64_{arch}\           # Output directory with built libraries
     echo   - .\build_logs\windows_batch_build_log_YYYYMMDD_HHMMSS.log  # Timestamped build log
     echo.
     goto EOF
@@ -109,13 +109,13 @@ REM   assignment. Also handles special cases like --help and automatic CPU detec
 REM Arguments:
 REM   %1, %2, ... - Command line arguments passed to the script
 REM Global Variables Set:
-REM   TIER - Build tier (standard/free)
+REM   LICENSE - License verification (on/off)
 REM   ARCH - Build architecture (cpu/gpu)
 REM   TEST - Unit test flag (on/off)
 REM   JOBS - Number of parallel build jobs
 REM Supported Options:
 REM   --help: Shows help and exits
-REM   --tier=VALUE: Sets build tier
+REM   --license=VALUE: Enables/disables license verification
 REM   --arch=VALUE: Sets architecture
 REM   --test=VALUE: Enables/disables tests
 REM   --jobs=VALUE: Sets parallel job count
@@ -126,8 +126,8 @@ REM   Exits with code 1 on unknown options or validation errors
     REM Parse command line arguments
     if /I "%1" == "--help" goto Help
     if /I "%1" == "-h" goto Help
-    if /I "%1" == "--tier" (
-        set TIER=%2
+    if /I "%1" == "--license" (
+        set LICENSE=%2
         shift
         shift
         goto GETOPTS
@@ -156,10 +156,10 @@ REM   Exits with code 1 on unknown options or validation errors
         goto ERROR_EXIT
     )
 
-    REM Validate tier parameter
-    if /I NOT "%TIER%" == "free" (
-        if /I NOT "%TIER%" == "standard" (
-            echo ERROR: Invalid --tier parameter '%TIER%'. Please choose 'free' or 'standard'
+    REM Validate license parameter
+    if /I NOT "%LICENSE%" == "on" (
+        if /I NOT "%LICENSE%" == "off" (
+            echo ERROR: Invalid --license parameter '%LICENSE%'. Please choose 'on' or 'off'
             goto ERROR_EXIT
         )
     )
@@ -285,7 +285,7 @@ REM Display banner and copyright information
     echo.
     echo Build Configuration (Windows):
     echo   - Platform: Windows
-    echo   - Tier: %TIER%
+    echo   - License Verification: %LICENSE%
     echo   - Architecture: %ARCH%
     echo   - Tests: %TEST%
     echo   - Build Type: %BUILD_TYPE%
@@ -344,7 +344,7 @@ REM Arguments:
 REM   None
 REM Global Variables Used:
 REM   ARCH - Determines GPU_BUILD CMake option
-REM   TIER - Determines FREETIER CMake option
+REM   LICENSE - Determines ENABLE_LICENSE CMake option
 REM   TEST - Determines GTEST CMake option
 REM   BUILD_TYPE - CMake build configuration (Release/Debug)
 REM   JOBS - Number of parallel build jobs
@@ -368,9 +368,13 @@ REM   Sets CMAKE_FAILED=1 and exits on any CMake failures
     REM Change to build directory
     pushd ".\build"
     
-    REM Configure CMake build based on architecture, tier and test settings
-    echo INFO: Configuring CMake build - Architecture: %ARCH%, Tier: %TIER%, Tests: %TEST%...
+    REM Configure CMake build based on architecture, license, and test settings
+    echo INFO: Configuring CMake build - Architecture: %ARCH%, License: %LICENSE%, Tests: %TEST%...
     
+    REM Set license flag
+    set LICENSE_FLAG=OFF
+    if /I "%LICENSE%" == "on" set LICENSE_FLAG=ON
+
     REM Set CMake options based on configuration
     set CMAKE_OPTIONS=
     if /I "%ARCH%" == "gpu" (
@@ -379,12 +383,8 @@ REM   Sets CMAKE_FAILED=1 and exits on any CMake failures
         set CMAKE_OPTIONS=%CMAKE_OPTIONS% -DGPU_BUILD=OFF
     )
     
-    if /I "%TIER%" == "free" (
-        set CMAKE_OPTIONS=%CMAKE_OPTIONS% -DFREETIER=ON
-    ) else (
-        set CMAKE_OPTIONS=%CMAKE_OPTIONS% -DFREETIER=OFF
-    )
-    
+    set CMAKE_OPTIONS=%CMAKE_OPTIONS% -DENABLE_LICENSE=%LICENSE_FLAG%
+
     if /I "%TEST%" == "on" (
         set CMAKE_OPTIONS=%CMAKE_OPTIONS% -DGTEST=ON
     ) else (
@@ -420,17 +420,9 @@ REM Copy built artifacts
     
     REM Determine output directory based on configuration
     if /I "%ARCH%" == "gpu" (
-        if /I "%TIER%" == "standard" (
-            set RELEASE_PATH=.\radarsimlib_win_x86_64_gpu
-        ) else (
-            set RELEASE_PATH=.\radarsimlib_win_x86_64_gpu_free
-        )
+        set RELEASE_PATH=.\radarsimlib_win_x86_64_gpu
     ) else (
-        if /I "%TIER%" == "standard" (
-            set RELEASE_PATH=.\radarsimlib_win_x86_64_cpu
-        ) else (
-            set RELEASE_PATH=.\radarsimlib_win_x86_64_cpu_free
-        )
+        set RELEASE_PATH=.\radarsimlib_win_x86_64_cpu
     )
     
     REM Clean old release directory if it exists
@@ -575,7 +567,7 @@ REM   Continues with warnings if test tools are not available
     echo.
     echo Build Summary (Windows):
     echo   - Platform: Windows
-    echo   - Tier: %TIER%
+    echo   - License Verification: %LICENSE%
     echo   - Architecture: %ARCH%
     echo   - Tests: %TEST%
     echo   - Build Type: %BUILD_TYPE%
@@ -611,7 +603,7 @@ REM Error handling
     echo.
     echo Build Configuration (Windows):
     echo   - Platform: Windows
-    echo   - Tier: %TIER%
+    echo   - License Verification: %LICENSE%
     echo   - Architecture: %ARCH%
     echo   - Tests: %TEST%
     echo   - Build Type: %BUILD_TYPE%
