@@ -2,15 +2,15 @@ name: Build Ubuntu Libraries
 
 # GitHub Actions workflow for building and packaging RadarSimLib on Ubuntu Linux.
 #
-# This workflow builds RadarSimLib across different build tiers (standard/free)
+# This workflow builds RadarSimLib across different license configurations (on/off)
 # and architectures (CPU/GPU). It provides comprehensive Linux coverage with
 # both CPU-only and CUDA GPU-accelerated builds.
 #
 # Build Matrix:
-# - Ubuntu Latest: GCC compiler, 4 builds (2 architectures × 2 tiers)
+# - Ubuntu 22.04 & 24.04: GCC compiler, 8 builds (2 versions × 2 architectures × 2 license configs)
 # - Architectures: CPU (x86_64), GPU (CUDA)
-# - Build tiers: standard (full features), free (limited features)
-# - Total builds: 4
+# - License configs: on (with verification), off (open source)
+# - Total builds: 8
 #
 # Features:
 # - Comprehensive caching (apt, ccache)
@@ -23,7 +23,7 @@ name: Build Ubuntu Libraries
 #
 # Outputs:
 # - Individual artifacts for each build configuration
-# - Packed archive containing all builds organized by architecture and tier
+# - Packed archive containing all builds organized by architecture and license
 # - Build summaries and statistics
 #
 # Triggers:
@@ -55,70 +55,70 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Ubuntu 22.04 CPU Standard build
+          # Ubuntu 22.04 CPU with license verification
           - os: ubuntu-22.04
-            tier: standard
+            license: on
+            arch: cpu
+            c_compiler: gcc-11
+            cxx_compiler: g++-11
+            ubuntu_version: "22"
+            artifact_name: radarsimlib_ubuntu22_x86_64_cpu_licensed
+          # Ubuntu 22.04 CPU open source
+          - os: ubuntu-22.04
+            license: off
             arch: cpu
             c_compiler: gcc-11
             cxx_compiler: g++-11
             ubuntu_version: "22"
             artifact_name: radarsimlib_ubuntu22_x86_64_cpu
-          # Ubuntu 22.04 CPU Free Tier build
+          # Ubuntu 22.04 GPU with license verification
           - os: ubuntu-22.04
-            tier: free
-            arch: cpu
-            c_compiler: gcc-11
-            cxx_compiler: g++-11
-            ubuntu_version: "22"
-            artifact_name: radarsimlib_ubuntu22_x86_64_cpu_free
-          # Ubuntu 22.04 GPU Standard build
-          - os: ubuntu-22.04
-            tier: standard
+            license: on
             arch: gpu
             c_compiler: gcc-11
             cxx_compiler: g++-11
             ubuntu_version: "22"
-            artifact_name: radarsimlib_ubuntu22_x86_64_gpu
-          # Ubuntu 22.04 GPU Free Tier build
+            artifact_name: radarsimlib_ubuntu22_x86_64_gpu_licensed
+          # Ubuntu 22.04 GPU open source
           - os: ubuntu-22.04
-            tier: free
+            license: off
             arch: gpu
             c_compiler: gcc-11
             cxx_compiler: g++-11
             ubuntu_version: "22"
             artifact_name: radarsimlib_ubuntu22_x86_64_gpu_free
-          # Ubuntu 24.04 CPU Standard build
+          # Ubuntu 24.04 CPU with license verification
           - os: ubuntu-24.04
-            tier: standard
+            license: on
+            arch: cpu
+            c_compiler: gcc-13
+            cxx_compiler: g++-13
+            ubuntu_version: "24"
+            artifact_name: radarsimlib_ubuntu24_x86_64_cpu_licensed
+          # Ubuntu 24.04 CPU open source
+          - os: ubuntu-24.04
+            license: off
             arch: cpu
             c_compiler: gcc-13
             cxx_compiler: g++-13
             ubuntu_version: "24"
             artifact_name: radarsimlib_ubuntu24_x86_64_cpu
-          # Ubuntu 24.04 CPU Free Tier build
+          # Ubuntu 24.04 GPU with license verification
           - os: ubuntu-24.04
-            tier: free
-            arch: cpu
+            license: on
+            arch: gpu
             c_compiler: gcc-13
             cxx_compiler: g++-13
             ubuntu_version: "24"
-            artifact_name: radarsimlib_ubuntu24_x86_64_cpu_free
-          # Ubuntu 24.04 GPU Standard build
+            artifact_name: radarsimlib_ubuntu24_x86_64_gpu_licensed
+          # Ubuntu 24.04 GPU open source
           - os: ubuntu-24.04
-            tier: standard
+            license: off
             arch: gpu
             c_compiler: gcc-13
             cxx_compiler: g++-13
             ubuntu_version: "24"
             artifact_name: radarsimlib_ubuntu24_x86_64_gpu
-          # Ubuntu 24.04 GPU Free Tier build
-          - os: ubuntu-24.04
-            tier: free
-            arch: gpu
-            c_compiler: gcc-13
-            cxx_compiler: g++-13
-            ubuntu_version: "24"
-            artifact_name: radarsimlib_ubuntu24_x86_64_gpu_free
 
     steps:
       - name: Checkout repository
@@ -143,10 +143,10 @@ jobs:
           path: |
             ~/.cache/apt
             ~/.ccache
-          key: ${{ runner.os }}-${{ matrix.tier }}-${{ matrix.arch }}-${{ hashFiles('build.sh', 'CMakeLists.txt') }}
+          key: ${{ runner.os }}-${{ matrix.license }}-${{ matrix.arch }}-${{ hashFiles('build.sh', 'CMakeLists.txt') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.tier }}-${{ matrix.arch }}-
-            ${{ runner.os }}-${{ matrix.tier }}-
+            ${{ runner.os }}-${{ matrix.license }}-${{ matrix.arch }}-
+            ${{ runner.os }}-${{ matrix.license }}-
             ${{ runner.os }}-
 
       - name: Install build dependencies
@@ -197,7 +197,7 @@ jobs:
           echo "::group::Build Information"
           echo "OS: ${{ matrix.os }}"
           echo "Ubuntu Version: ${{ matrix.ubuntu_version }}"
-          echo "Tier: ${{ matrix.tier }}"
+          echo "License: ${{ matrix.license }}"
           echo "Architecture: ${{ matrix.arch }}"
           echo "C Compiler: ${{ matrix.c_compiler }}"
           echo "C++ Compiler: ${{ matrix.cxx_compiler }}"
@@ -230,7 +230,7 @@ jobs:
         run: |
           echo "::group::Build Process"
           chmod +x ./build.sh
-          ./build.sh --arch=${{ matrix.arch }} --tier=${{ matrix.tier }} --test=${{ matrix.tier == 'standard' && matrix.arch == 'cpu' && 'on' || 'off' }} --verbose
+          ./build.sh --arch=${{ matrix.arch }} --license=${{ matrix.license }} --test=${{ matrix.license == 'on' && matrix.arch == 'cpu' && 'on' || 'off' }} --verbose
           echo "::endgroup::"
 
       - name: Display build statistics
@@ -247,7 +247,7 @@ jobs:
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| OS | ${{ matrix.os }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Ubuntu Version | ${{ matrix.ubuntu_version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tier | ${{ matrix.tier }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License | ${{ matrix.license }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Architecture | ${{ matrix.arch }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Compiler | ${{ matrix.c_compiler }}/${{ matrix.cxx_compiler }} |" >> $GITHUB_STEP_SUMMARY
           if [ "${{ matrix.arch }}" == "gpu" ]; then
@@ -260,7 +260,7 @@ jobs:
         if: success()
         with:
           name: ${{ matrix.artifact_name }}
-          path: ./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.tier == 'free' && '_free' || '' }}
+          path: ./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}${{ matrix.license == 'off' && '' || '_licensed' }}
           retention-days: 1
           compression-level: 6
 
@@ -308,21 +308,21 @@ jobs:
         run: |
           mkdir -p packed/radarsimlib_ubuntu_all
 
-          # Create the directory structure for tier-based archives
-          mkdir -p packed/radarsimlib_ubuntu_all/trial
-          mkdir -p packed/radarsimlib_ubuntu_all/standard
+          # Create the directory structure for license-based archives
+          mkdir -p packed/radarsimlib_ubuntu_all/unlicensed
+          mkdir -p packed/radarsimlib_ubuntu_all/licensed
 
           # Create temporary directories for organizing files before zipping
-          mkdir -p temp/trial/Ubuntu22_x86_64_CPU
-          mkdir -p temp/trial/Ubuntu22_x86_64_GPU
-          mkdir -p temp/trial/Ubuntu24_x86_64_CPU
-          mkdir -p temp/trial/Ubuntu24_x86_64_GPU
-          mkdir -p temp/standard/Ubuntu22_x86_64_CPU
-          mkdir -p temp/standard/Ubuntu22_x86_64_GPU
-          mkdir -p temp/standard/Ubuntu24_x86_64_CPU
-          mkdir -p temp/standard/Ubuntu24_x86_64_GPU
+          mkdir -p temp/unlicensed/Ubuntu22_x86_64_CPU
+          mkdir -p temp/unlicensed/Ubuntu22_x86_64_GPU
+          mkdir -p temp/unlicensed/Ubuntu24_x86_64_CPU
+          mkdir -p temp/unlicensed/Ubuntu24_x86_64_GPU
+          mkdir -p temp/licensed/Ubuntu22_x86_64_CPU
+          mkdir -p temp/licensed/Ubuntu22_x86_64_GPU
+          mkdir -p temp/licensed/Ubuntu24_x86_64_CPU
+          mkdir -p temp/licensed/Ubuntu24_x86_64_GPU
 
-          # Copy each artifact to appropriate directory based on architecture and tier
+          # Copy each artifact to appropriate directory based on architecture and license
           for dir in artifacts/*/; do
             if [ -d "$dir" ]; then
               artifact_name=$(basename "$dir")
@@ -341,17 +341,17 @@ jobs:
               # Determine target directory based on artifact name
               if [[ "$artifact_name" == *"gpu"* ]]; then
                 # GPU builds
-                if [[ "$artifact_name" == *"_free"* ]]; then
-                  target_dir="temp/trial/${ubuntu_ver}_x86_64_GPU"
+                if [[ "$artifact_name" == *"_licensed"* ]]; then
+                  target_dir="temp/licensed/${ubuntu_ver}_x86_64_GPU"
                 else
-                  target_dir="temp/standard/${ubuntu_ver}_x86_64_GPU"
+                  target_dir="temp/unlicensed/${ubuntu_ver}_x86_64_GPU"
                 fi
               else
                 # CPU builds
-                if [[ "$artifact_name" == *"_free"* ]]; then
-                  target_dir="temp/trial/${ubuntu_ver}_x86_64_CPU"
+                if [[ "$artifact_name" == *"_licensed"* ]]; then
+                  target_dir="temp/licensed/${ubuntu_ver}_x86_64_CPU"
                 else
-                  target_dir="temp/standard/${ubuntu_ver}_x86_64_CPU"
+                  target_dir="temp/unlicensed/${ubuntu_ver}_x86_64_CPU"
                 fi
               fi
               
@@ -364,23 +364,23 @@ jobs:
             fi
           done
 
-          # Create zip files for each tier/architecture combination
+          # Create zip files for each license/architecture combination
           cd temp
           
-          # Create zip files in standard directory
-          cd standard
-          zip -r ../../packed/radarsimlib_ubuntu_all/standard/Ubuntu22_x86_64_CPU.zip Ubuntu22_x86_64_CPU/
-          zip -r ../../packed/radarsimlib_ubuntu_all/standard/Ubuntu22_x86_64_GPU.zip Ubuntu22_x86_64_GPU/
-          zip -r ../../packed/radarsimlib_ubuntu_all/standard/Ubuntu24_x86_64_CPU.zip Ubuntu24_x86_64_CPU/
-          zip -r ../../packed/radarsimlib_ubuntu_all/standard/Ubuntu24_x86_64_GPU.zip Ubuntu24_x86_64_GPU/
+          # Create zip files in licensed directory
+          cd licensed
+          zip -r ../../packed/radarsimlib_ubuntu_all/licensed/Ubuntu22_x86_64_CPU.zip Ubuntu22_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/licensed/Ubuntu22_x86_64_GPU.zip Ubuntu22_x86_64_GPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/licensed/Ubuntu24_x86_64_CPU.zip Ubuntu24_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/licensed/Ubuntu24_x86_64_GPU.zip Ubuntu24_x86_64_GPU/
           cd ..
           
-          # Create zip files in trial directory
-          cd trial
-          zip -r ../../packed/radarsimlib_ubuntu_all/trial/Ubuntu22_x86_64_CPU.zip Ubuntu22_x86_64_CPU/
-          zip -r ../../packed/radarsimlib_ubuntu_all/trial/Ubuntu22_x86_64_GPU.zip Ubuntu22_x86_64_GPU/
-          zip -r ../../packed/radarsimlib_ubuntu_all/trial/Ubuntu24_x86_64_CPU.zip Ubuntu24_x86_64_CPU/
-          zip -r ../../packed/radarsimlib_ubuntu_all/trial/Ubuntu24_x86_64_GPU.zip Ubuntu24_x86_64_GPU/
+          # Create zip files in unlicensed directory
+          cd unlicensed
+          zip -r ../../packed/radarsimlib_ubuntu_all/unlicensed/Ubuntu22_x86_64_CPU.zip Ubuntu22_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/unlicensed/Ubuntu22_x86_64_GPU.zip Ubuntu22_x86_64_GPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/unlicensed/Ubuntu24_x86_64_CPU.zip Ubuntu24_x86_64_CPU/
+          zip -r ../../packed/radarsimlib_ubuntu_all/unlicensed/Ubuntu24_x86_64_GPU.zip Ubuntu24_x86_64_GPU/
           cd ..
           
           cd ..
@@ -392,10 +392,10 @@ jobs:
           find packed/radarsimlib_ubuntu_all -type f | sort
           echo ""
           echo "Zip files created:"
-          ls -la packed/radarsimlib_ubuntu_all/standard/*.zip packed/radarsimlib_ubuntu_all/trial/*.zip
+          ls -la packed/radarsimlib_ubuntu_all/licensed/*.zip packed/radarsimlib_ubuntu_all/unlicensed/*.zip
           echo ""
           echo "Archive sizes:"
-          ls -lh packed/radarsimlib_ubuntu_all/standard/*.zip packed/radarsimlib_ubuntu_all/trial/*.zip
+          ls -lh packed/radarsimlib_ubuntu_all/licensed/*.zip packed/radarsimlib_ubuntu_all/unlicensed/*.zip
           echo "::endgroup::"
 
       - name: Create README for packed artifacts
@@ -403,20 +403,20 @@ jobs:
           cat > packed/radarsimlib_ubuntu_all/README.md << 'EOF'
           # RadarSimLib Ubuntu Build Artifacts
 
-          This archive contains all RadarSimLib builds for Ubuntu platforms organized by tier, version and architecture.
+          This archive contains all RadarSimLib builds for Ubuntu platforms organized by license configuration, version and architecture.
 
           ## Directory Structure
 
           The builds are organized in the following structure:
 
           ```
-          standard/
+          licensed/
           ├── Ubuntu22_x86_64_CPU.zip
           ├── Ubuntu22_x86_64_GPU.zip
           ├── Ubuntu24_x86_64_CPU.zip
           └── Ubuntu24_x86_64_GPU.zip
 
-          trial/
+          unlicensed/
           ├── Ubuntu22_x86_64_CPU.zip
           ├── Ubuntu22_x86_64_GPU.zip
           ├── Ubuntu24_x86_64_CPU.zip
@@ -429,36 +429,52 @@ jobs:
           - `libradarsimc.so` - Shared library
           - `radarsim.h` - Header file for C/C++ integration
 
-          ## Platform and Tier Information
+          ## Platform and License Information
 
-          ### Standard Tier
-          - **Ubuntu22_x86_64_CPU.zip**: Full-featured CPU-only build for Ubuntu 22.04 LTS
-          - **Ubuntu22_x86_64_GPU.zip**: Full-featured CUDA GPU-accelerated build for Ubuntu 22.04 LTS
-          - **Ubuntu24_x86_64_CPU.zip**: Full-featured CPU-only build for Ubuntu 24.04 LTS
-          - **Ubuntu24_x86_64_GPU.zip**: Full-featured CUDA GPU-accelerated build for Ubuntu 24.04 LTS
+          ### Licensed Builds
+          - **Ubuntu22_x86_64_CPU.zip**: License-enabled CPU-only build for Ubuntu 22.04 LTS
+          - **Ubuntu22_x86_64_GPU.zip**: License-enabled CUDA GPU-accelerated build for Ubuntu 22.04 LTS
+          - **Ubuntu24_x86_64_CPU.zip**: License-enabled CPU-only build for Ubuntu 24.04 LTS
+          - **Ubuntu24_x86_64_GPU.zip**: License-enabled CUDA GPU-accelerated build for Ubuntu 24.04 LTS
+          - Requires valid license file for full feature access
+          - License activation via `Set_License()` or `Set_License_Files()` API
+          - Verification via `Is_Licensed()` call
 
-          ### Trial Tier
-          - **Ubuntu22_x86_64_CPU.zip**: Limited-feature CPU-only build for Ubuntu 22.04 LTS
-          - **Ubuntu22_x86_64_GPU.zip**: Limited-feature CUDA GPU-accelerated build for Ubuntu 22.04 LTS
-          - **Ubuntu24_x86_64_CPU.zip**: Limited-feature CPU-only build for Ubuntu 24.04 LTS
-          - **Ubuntu24_x86_64_GPU.zip**: Limited-feature CUDA GPU-accelerated build for Ubuntu 24.04 LTS
+          ### Unlicensed Builds (Open Source)
+          - **Ubuntu22_x86_64_CPU.zip**: Open source CPU-only build for Ubuntu 22.04 LTS
+          - **Ubuntu22_x86_64_GPU.zip**: Open source CUDA GPU-accelerated build for Ubuntu 22.04 LTS
+          - **Ubuntu24_x86_64_CPU.zip**: Open source CPU-only build for Ubuntu 24.04 LTS
+          - **Ubuntu24_x86_64_GPU.zip**: Open source CUDA GPU-accelerated build for Ubuntu 24.04 LTS
+          - No license verification required
+          - All features enabled by default
+          - Suitable for development, testing, and non-commercial use
 
           ## Build Information
 
-          - **Total Builds**: 8 zip files (2 Ubuntu versions × 2 architectures × 2 tiers)
+          - **Total Builds**: 8 zip files (2 Ubuntu versions × 2 architectures × 2 license configs)
           - **Ubuntu Versions**: 22.04 LTS (GCC 11), 24.04 LTS (GCC 13)
           - **Architectures**: x86_64 CPU, x86_64 GPU (CUDA)
-          - **Tiers**: Standard (full features), Trial (limited features)
+          - **License Configs**: Licensed (with verification), Unlicensed (open source)
           - **Library Type**: Shared library (.so)
           - **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
           ## Usage
 
-          1. Choose the appropriate tier (standard or trial) based on your license
+          1. Choose the appropriate license configuration based on your needs:
+             - **Licensed**: For commercial use with valid license
+             - **Unlicensed**: For development, testing, and evaluation
           2. Choose the appropriate Ubuntu version for your system
           3. Choose the appropriate architecture (CPU or GPU) for your system
           4. Extract the corresponding zip file
           5. Link against libradarsimc.so and include radarsim.h in your project
+
+          ## License Activation (Licensed Builds Only)
+
+          For licensed builds, place your license file (`license_radarsimc_*.lic`) in:
+          - Your application's working directory, or
+          - Use `Set_License()` API to activate programmatically
+
+          Verify activation status with `Is_Licensed()` API call.
 
           ## Requirements
 
@@ -506,31 +522,31 @@ jobs:
           echo "# Ubuntu RadarSimLib Build Summary 📊" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Build Matrix Results" >> $GITHUB_STEP_SUMMARY
-          echo "Total builds: 8 (2 Ubuntu versions × 2 architectures × 2 tiers)" >> $GITHUB_STEP_SUMMARY
+          echo "Total builds: 8 (2 Ubuntu versions × 2 architectures × 2 license configs)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Ubuntu Version Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **Ubuntu 22.04**: 4 builds (2 architectures × 2 tiers)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Ubuntu 24.04**: 4 builds (2 architectures × 2 tiers)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Ubuntu 22.04**: 4 builds (2 architectures × 2 license configs)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Ubuntu 24.04**: 4 builds (2 architectures × 2 license configs)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Architecture Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **CPU (x86_64)**: 4 builds (2 Ubuntu versions × 2 tiers)" >> $GITHUB_STEP_SUMMARY
-          echo "- **GPU (CUDA)**: 4 builds (2 Ubuntu versions × 2 tiers)" >> $GITHUB_STEP_SUMMARY
+          echo "- **CPU (x86_64)**: 4 builds (2 Ubuntu versions × 2 license configs)" >> $GITHUB_STEP_SUMMARY
+          echo "- **GPU (CUDA)**: 4 builds (2 Ubuntu versions × 2 license configs)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Tier Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **Standard**: 4 builds (2 Ubuntu versions × 2 architectures)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Free**: 4 builds (2 Ubuntu versions × 2 architectures)" >> $GITHUB_STEP_SUMMARY
+          echo "### License Configuration Distribution" >> $GITHUB_STEP_SUMMARY
+          echo "- **Licensed**: 4 builds (2 Ubuntu versions × 2 architectures)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Unlicensed**: 4 builds (2 Ubuntu versions × 2 architectures)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts Generated" >> $GITHUB_STEP_SUMMARY
           echo "#### Ubuntu 22.04" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu22_x86_64_cpu\` (Standard CPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu22_x86_64_cpu_free\` (Free CPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu22_x86_64_gpu\` (Standard GPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu22_x86_64_gpu_free\` (Free GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu22_x86_64_cpu\` (Unlicensed CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu22_x86_64_cpu_licensed\` (Licensed CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu22_x86_64_gpu_free\` (Unlicensed GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu22_x86_64_gpu_licensed\` (Licensed GPU)" >> $GITHUB_STEP_SUMMARY
           echo "#### Ubuntu 24.04" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu24_x86_64_cpu\` (Standard CPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu24_x86_64_cpu_free\` (Free CPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu24_x86_64_gpu\` (Standard GPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu24_x86_64_gpu_free\` (Free GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu24_x86_64_cpu\` (Unlicensed CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu24_x86_64_cpu_licensed\` (Licensed CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu24_x86_64_gpu\` (Unlicensed GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_ubuntu24_x86_64_gpu_licensed\` (Licensed GPU)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Packed Artifacts" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.pack-artifacts.result }}" == "success" ]; then
