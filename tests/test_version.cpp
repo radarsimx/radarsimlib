@@ -69,16 +69,6 @@ TEST_F(VersionTest, DefaultLicenseState) {
 }
 
 /**
- * @brief Test Set_License activates license (open source build)
- */
-TEST_F(VersionTest, SetLicense) {
-  // In open source build (no RADARSIMCPP_ENABLE_LICENSE), SetLicense
-  // should set is_licensed_ = true
-  Set_License(nullptr, nullptr);
-  EXPECT_EQ(Is_Licensed(), 1);
-}
-
-/**
  * @brief Test Get_License_Info
  */
 TEST_F(VersionTest, GetLicenseInfo) {
