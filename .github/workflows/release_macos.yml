@@ -2,15 +2,13 @@ name: Build macOS Libraries
 
 # GitHub Actions workflow for building and packaging RadarSimLib on macOS platforms.
 #
-# This workflow builds RadarSimLib across multiple macOS versions and license configurations
-# (on/off). It supports both Intel x64 and Apple Silicon ARM64 architectures
-# to provide comprehensive macOS coverage.
+# This workflow builds RadarSimLib across macOS 13 (Intel) and macOS 15 (Apple Silicon)
+# with license verification enabled.
 #
 # Build Matrix:
-# - macOS 13 (Intel x64): GCC-14 compiler, 2 builds (licensed + unlicensed)
-# - macOS 14 (Apple Silicon ARM64): Clang compiler, 2 builds (licensed + unlicensed)
-# - License configs: on (with verification), off (open source)
-# - Total builds: 4
+# - macOS 13 (Intel x64): GCC-14 compiler with license verification
+# - macOS 15 (Apple Silicon ARM64): Clang compiler with license verification
+# - Total builds: 2 (all with license enabled)
 #
 # Features:
 # - Comprehensive caching (Homebrew, ccache)
@@ -22,8 +20,8 @@ name: Build macOS Libraries
 # - Error handling with build log uploads
 #
 # Outputs:
-# - Individual artifacts for each build configuration
-# - Packed archive containing all builds organized by architecture and license
+# - Individual artifacts for each build
+# - Packed archive containing all builds
 # - Build summaries and statistics
 #
 # Triggers:
@@ -57,15 +55,6 @@ jobs:
         include:
           # macOS x64 with license verification
           - os: macos-13
-            license: on
-            arch: x86_64
-            c_compiler: gcc-14
-            cxx_compiler: g++-14
-            xcode_version: "15.2"
-            artifact_name: radarsimlib_macos_x86_64_cpu_licensed
-          # macOS x64 open source
-          - os: macos-13
-            license: off
             arch: x86_64
             c_compiler: gcc-14
             cxx_compiler: g++-14
@@ -73,15 +62,6 @@ jobs:
             artifact_name: radarsimlib_macos_x86_64_cpu
           # macOS ARM64 (Apple Silicon) with license verification
           - os: macos-15
-            license: on
-            arch: arm64
-            c_compiler: clang
-            cxx_compiler: clang++
-            xcode_version: "16.4"
-            artifact_name: radarsimlib_macos_arm64_cpu_licensed
-          # macOS ARM64 (Apple Silicon) open source
-          - os: macos-15
-            license: off
             arch: arm64
             c_compiler: clang
             cxx_compiler: clang++
@@ -107,10 +87,9 @@ jobs:
           path: |
             ~/Library/Caches/Homebrew
             ~/.ccache
-          key: ${{ runner.os }}-${{ matrix.os }}-${{ matrix.license }}-${{ matrix.arch }}-${{ hashFiles('build.sh', 'CMakeLists.txt') }}
+          key: ${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('build.sh', 'CMakeLists.txt') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.os }}-${{ matrix.license }}-${{ matrix.arch }}-
-            ${{ runner.os }}-${{ matrix.os }}-${{ matrix.license }}-
+            ${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-
             ${{ runner.os }}-${{ matrix.os }}-
 
       - name: Install system dependencies
@@ -127,7 +106,7 @@ jobs:
         run: |
           echo "::group::Build Information"
           echo "OS: ${{ matrix.os }}"
-          echo "License: ${{ matrix.license }}"
+          echo "License: on"
           echo "Architecture: ${{ matrix.arch }}"
           echo "C Compiler: ${{ matrix.c_compiler }}"
           echo "C++ Compiler: ${{ matrix.cxx_compiler }}"
@@ -152,7 +131,7 @@ jobs:
         run: |
           echo "::group::Build Process"
           chmod +x ./build.sh
-          ./build.sh --arch=cpu --license=${{ matrix.license }} --test=${{ matrix.license == 'on' && matrix.arch == 'x86_64' && 'on' || 'off' }} --verbose
+          ./build.sh --arch=cpu --license=on --test=${{ matrix.arch == 'x86_64' && 'on' || 'off' }} --verbose
           echo "::endgroup::"
 
       - name: Display build statistics
@@ -168,7 +147,7 @@ jobs:
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| OS | ${{ matrix.os }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| License | ${{ matrix.license }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License | on |" >> $GITHUB_STEP_SUMMARY
           echo "| Architecture | ${{ matrix.arch }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Compiler | ${{ matrix.c_compiler }}/${{ matrix.cxx_compiler }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Xcode Version | ${{ matrix.xcode_version }} |" >> $GITHUB_STEP_SUMMARY
@@ -179,7 +158,7 @@ jobs:
         if: success()
         with:
           name: ${{ matrix.artifact_name }}
-          path: ./radarsimlib_macos_${{ matrix.arch }}_cpu${{ matrix.license == 'off' && '' || '_licensed' }}
+          path: ./radarsimlib_macos_${{ matrix.arch }}_cpu
           retention-days: 1
           compression-level: 6
 
@@ -224,42 +203,21 @@ jobs:
       - name: Create artifact structure
         run: |
           mkdir -p packed/radarsimlib_macos_all
+          mkdir -p temp/MacOS_x86_64_CPU
+          mkdir -p temp/MacOS_ARM64_CPU
 
-          # Create the directory structure for license-based archives
-          mkdir -p packed/radarsimlib_macos_all/unlicensed
-          mkdir -p packed/radarsimlib_macos_all/licensed
-
-          # Create temporary directories for organizing files before zipping
-          mkdir -p temp/unlicensed/MacOS_x86_64_CPU
-          mkdir -p temp/unlicensed/MacOS_ARM64_CPU
-          mkdir -p temp/licensed/MacOS_x86_64_CPU
-          mkdir -p temp/licensed/MacOS_ARM64_CPU
-
-          # Copy each artifact to appropriate directory based on architecture and license
+          # Copy each artifact to appropriate directory based on architecture
           for dir in artifacts/*/; do
             if [ -d "$dir" ]; then
               artifact_name=$(basename "$dir")
               echo "Processing artifact: $artifact_name"
               
-              # Determine target directory based on artifact name
+              # Determine target directory based on architecture
               if [[ "$artifact_name" == *"arm64"* ]]; then
-                # ARM64 builds
-                if [[ "$artifact_name" == *"_licensed"* ]]; then
-                  target_dir="temp/licensed/MacOS_ARM64_CPU"
-                else
-                  target_dir="temp/unlicensed/MacOS_ARM64_CPU"
-                fi
+                target_dir="temp/MacOS_ARM64_CPU"
               else
-                # x64 builds
-                if [[ "$artifact_name" == *"_licensed"* ]]; then
-                  target_dir="temp/licensed/MacOS_x86_64_CPU"
-                else
-                  target_dir="temp/unlicensed/MacOS_x86_64_CPU"
-                fi
+                target_dir="temp/MacOS_x86_64_CPU"
               fi
-              
-              # Ensure target directory exists
-              mkdir -p "$target_dir"
               
               # Copy the library contents
               echo "Copying library from $dir to $target_dir/"
@@ -267,21 +225,10 @@ jobs:
             fi
           done
 
-          # Create zip files for each license/architecture combination
+          # Create zip files directly in the packed directory
           cd temp
-          
-          # Create zip files in licensed directory
-          cd licensed
-          zip -r ../../packed/radarsimlib_macos_all/licensed/MacOS_x86_64_CPU.zip MacOS_x86_64_CPU/
-          zip -r ../../packed/radarsimlib_macos_all/licensed/MacOS_ARM64_CPU.zip MacOS_ARM64_CPU/
-          cd ..
-          
-          # Create zip files in unlicensed directory
-          cd unlicensed
-          zip -r ../../packed/radarsimlib_macos_all/unlicensed/MacOS_x86_64_CPU.zip MacOS_x86_64_CPU/
-          zip -r ../../packed/radarsimlib_macos_all/unlicensed/MacOS_ARM64_CPU.zip MacOS_ARM64_CPU/
-          cd ..
-          
+          zip -r ../packed/radarsimlib_macos_all/MacOS_x86_64_CPU.zip MacOS_x86_64_CPU/
+          zip -r ../packed/radarsimlib_macos_all/MacOS_ARM64_CPU.zip MacOS_ARM64_CPU/
           cd ..
 
       - name: Verify artifact structure
@@ -291,10 +238,10 @@ jobs:
           find packed/radarsimlib_macos_all -type f | sort
           echo ""
           echo "Zip files created:"
-          ls -la packed/radarsimlib_macos_all/licensed/*.zip packed/radarsimlib_macos_all/unlicensed/*.zip
+          ls -la packed/radarsimlib_macos_all/*.zip
           echo ""
           echo "Archive sizes:"
-          ls -lh packed/radarsimlib_macos_all/licensed/*.zip packed/radarsimlib_macos_all/unlicensed/*.zip
+          ls -lh packed/radarsimlib_macos_all/*.zip
           echo "::endgroup::"
 
       - name: Create README for packed artifacts
@@ -302,18 +249,14 @@ jobs:
           cat > packed/radarsimlib_macos_all/README.md << 'EOF'
           # RadarSimLib macOS Build Artifacts
 
-          This archive contains all RadarSimLib builds for macOS platforms organized by license configuration and architecture.
+          This archive contains all RadarSimLib builds for macOS platforms with license features enabled.
 
           ## Directory Structure
 
           The builds are organized in the following structure:
 
           ```
-          licensed/
-          ├── MacOS_x86_64_CPU.zip
-          └── MacOS_ARM64_CPU.zip
-
-          unlicensed/
+          radarsimlib_macos_all/
           ├── MacOS_x86_64_CPU.zip
           └── MacOS_ARM64_CPU.zip
           ```
@@ -324,27 +267,20 @@ jobs:
           - `libradarsimc.dylib` - Dynamic library
           - `radarsim.h` - Header file for C/C++ integration
 
-          ## Architecture and License Information
+          ## Platform Information
 
-          ### Licensed Builds
-          - **MacOS_x86_64_CPU.zip**: License-enabled build for Intel-based Macs
-          - **MacOS_ARM64_CPU.zip**: License-enabled build for Apple Silicon Macs
+          ### All Builds (License-Enabled)
+          - **MacOS_x86_64_CPU.zip**: Build for Intel-based Macs with license verification
+          - **MacOS_ARM64_CPU.zip**: Build for Apple Silicon Macs with license verification
           - Requires valid license file for full feature access
           - License activation via `Set_License()` or `Set_License_Files()` API
           - Verification via `Is_Licensed()` call
 
-          ### Unlicensed Builds (Open Source)
-          - **MacOS_x86_64_CPU.zip**: Open source build for Intel-based Macs
-          - **MacOS_ARM64_CPU.zip**: Open source build for Apple Silicon Macs
-          - No license verification required
-          - All features enabled by default
-          - Suitable for development, testing, and non-commercial use
-
           ## Build Information
 
-          - **Total Builds**: 4 zip files (2 architectures × 2 license configs)
+          - **Total Builds**: 2 zip files (Intel x86_64 and Apple Silicon ARM64)
           - **Architectures**: x86_64 (Intel), ARM64 (Apple Silicon)
-          - **License Configs**: Licensed (with verification), Unlicensed (open source)
+          - **License**: All builds have license verification enabled
           - **Library Type**: Dynamic library (.dylib)
           - **Intel Builds**: Built on macOS 13 with GCC 14 compiler
           - **Apple Silicon Builds**: Built on macOS 15 with Clang compiler
@@ -352,18 +288,16 @@ jobs:
 
           ## Usage
 
-          1. Choose the appropriate license configuration based on your needs:
-             - **Licensed**: For commercial use with valid license
-             - **Unlicensed**: For development, testing, and evaluation
-          2. Choose the appropriate architecture for your Mac:
+          1. Choose the appropriate architecture for your Mac:
              - Intel Macs: MacOS_x86_64_CPU.zip
              - Apple Silicon Macs: MacOS_ARM64_CPU.zip
-          3. Extract the corresponding zip file
-          4. Link against libradarsimc.dylib and include radarsim.h in your project
+          2. Extract the corresponding zip file
+          3. Link against libradarsimc.dylib and include radarsim.h in your project
+          4. Activate your license (see below)
 
-          ## License Activation (Licensed Builds Only)
+          ## License Activation
 
-          For licensed builds, place your license file (`license_radarsimc_*.lic`) in:
+          Place your license file (`license_radarsimc_*.lic`) in:
           - Your application's working directory, or
           - Use `Set_License()` API to activate programmatically
 
@@ -374,10 +308,12 @@ jobs:
           ### Intel Macs (MacOS_x86_64_CPU.zip)
           - Intel-based Mac with x86_64 architecture
           - macOS 13 or newer recommended
+          - Valid RadarSimLib license file
 
           ### Apple Silicon Macs (MacOS_ARM64_CPU.zip)  
           - Apple Silicon Mac with ARM64 architecture
           - macOS 15 or newer recommended
+          - Valid RadarSimLib license file
           EOF
 
       - name: Create compressed archive
@@ -413,28 +349,25 @@ jobs:
           echo "# macOS RadarSimLib Build Summary 📊" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Build Matrix Results" >> $GITHUB_STEP_SUMMARY
-          echo "Total builds: 4 (2 architectures × 2 license configs)" >> $GITHUB_STEP_SUMMARY
+          echo "Total builds: 2 (Intel x86_64 and Apple Silicon ARM64 with license enabled)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Architecture Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **x86_64 (Intel)**: 2 builds on macos-13" >> $GITHUB_STEP_SUMMARY
-          echo "- **ARM64 (Apple Silicon)**: 2 builds on macos-14" >> $GITHUB_STEP_SUMMARY
+          echo "- **x86_64 (Intel)**: 1 build on macos-13" >> $GITHUB_STEP_SUMMARY
+          echo "- **ARM64 (Apple Silicon)**: 1 build on macos-15" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Tier Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **Standard**: 2 builds (x86_64 + ARM64)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Free**: 2 builds (x86_64 + ARM64)" >> $GITHUB_STEP_SUMMARY
+          echo "### License Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- All builds: License verification enabled" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts Generated" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_macos_x86_64_cpu\` (Standard x86_64)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_macos_x86_64_cpu_free\` (Free x86_64)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_macos_arm64_cpu\` (Standard ARM64)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_macos_arm64_cpu_free\` (Free ARM64)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_macos_x86_64_cpu\` (Intel build with license)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`radarsimlib_macos_arm64_cpu\` (Apple Silicon build with license)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Packed Artifacts" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.pack-artifacts.result }}" == "success" ]; then
             echo "✅ **All artifacts successfully packed into single archive**" >> $GITHUB_STEP_SUMMARY
             echo "- Archive: \`radarsimlib_macos_all_builds\`" >> $GITHUB_STEP_SUMMARY
             echo "- Formats: tar.gz, zip" >> $GITHUB_STEP_SUMMARY
-            echo "- Contains: All 4 build variants organized by configuration" >> $GITHUB_STEP_SUMMARY
+            echo "- Contains: All 2 build variants with license verification" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ **Artifact packing failed or was skipped**" >> $GITHUB_STEP_SUMMARY
           fi
