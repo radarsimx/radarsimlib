@@ -278,7 +278,7 @@ REM Display banner and copyright information
     echo.
     echo ====================================================================
     echo RadarSimLib - A Radar Simulator Built with C++
-    echo Copyright (C) 2023 - PRESENT  radarsimx.com
+    echo Copyright (C) 2023 - PRESENT  RadarSimX LLC
     echo E-mail: info@radarsimx.com
     echo Website: https://radarsimx.com
     echo ====================================================================
