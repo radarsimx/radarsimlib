@@ -1,6 +1,6 @@
 # RadarSimLib
 
-<img src="./assets/radarsimlib.svg" alt="logo" width="200"/>
+<img src="https://raw.githubusercontent.com/radarsimx/.github/refs/heads/main/profile/radarsimlib.svg" alt="logo" width="200"/>
 
 This library serves as the C wrapper for RadarSimCpp, offering a C interface to access its core functions, including GPU parallelization. For instructions on how to use this library, please refer to RadarSimM.
 
