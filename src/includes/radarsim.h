@@ -47,8 +47,28 @@ extern "C" {
 // #define RADARSIM_SIMPLE_CLEANUP
 
 #define VERSION_MAJOR 15
-#define VERSION_MINOR 1
+#define VERSION_MINOR 2
 #define VERSION_PATCH 0
+
+/*********************************************
+ *
+ *  Error Codes
+ *
+ *********************************************/
+/** @brief Operation completed successfully */
+#define RADARSIM_SUCCESS 0
+/** @brief Null pointer encountered */
+#define RADARSIM_ERROR_NULL_POINTER 1
+/** @brief Invalid parameter provided */
+#define RADARSIM_ERROR_INVALID_PARAMETER 2
+/** @brief Memory allocation failed */
+#define RADARSIM_ERROR_MEMORY_ALLOCATION 3
+/** @brief Free tier usage limit exceeded */
+#define RADARSIM_ERROR_FREE_TIER_LIMIT 4
+/** @brief Unhandled exception occurred */
+#define RADARSIM_ERROR_EXCEPTION 5
+/** @brief Ray count exceeds grid capacity */
+#define RADARSIM_ERROR_TOO_MANY_RAYS_PER_GRID 6
 
 /*********************************************
  *
@@ -76,7 +96,7 @@ EXPORTED void Get_Version(int version[3]);
  * @param[in] product Expected product name for validation (NULL or empty to
  * skip product check)
  */
-EXPORTED void Set_License(const char *license_file_path, const char *product);
+EXPORTED void Set_License(const char* license_file_path, const char* product);
 
 /**
  * @brief Set license from multiple license files
@@ -86,8 +106,8 @@ EXPORTED void Set_License(const char *license_file_path, const char *product);
  * @param[in] product Expected product name for validation (NULL or empty to
  * skip product check)
  */
-EXPORTED void Set_License_Files(const char **license_file_paths, int num_files,
-                                const char *product);
+EXPORTED void Set_License_Files(const char** license_file_paths, int num_files,
+                                const char* product);
 
 /**
  * @brief Check if a valid license is active
@@ -104,7 +124,7 @@ EXPORTED int Is_Licensed();
  * @return int Actual length of the license info string (excluding null
  * terminator). If greater than buffer_size-1, the output was truncated.
  */
-EXPORTED int Get_License_Info(char *buffer, int buffer_size);
+EXPORTED int Get_License_Info(char* buffer, int buffer_size);
 
 /*********************************************
  *
@@ -158,10 +178,10 @@ typedef struct s_Transmitter t_Transmitter;
  * @note Automatically registered for cleanup. Use Free_Transmitter() for manual
  * cleanup.
  */
-EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
+EXPORTED t_Transmitter* Create_Transmitter(double* freq, double* freq_time,
                                            int waveform_size,
-                                           double *freq_offset,
-                                           double *pulse_start_time,
+                                           double* freq_offset,
+                                           double* pulse_start_time,
                                            int num_pulses, float tx_power);
 
 /**
@@ -185,10 +205,10 @@ EXPORTED t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
  * @note Automatically registered for cleanup. Use Free_Transmitter() for manual
  * cleanup.
  */
-EXPORTED t_Transmitter *Create_Transmitter_PhaseNoise(
-    double *freq, double *freq_time, int waveform_size, double *freq_offset,
-    double *pulse_start_time, int num_pulses, float tx_power,
-    double *phase_noise_real, double *phase_noise_imag, int phase_noise_size);
+EXPORTED t_Transmitter* Create_Transmitter_PhaseNoise(
+    double* freq, double* freq_time, int waveform_size, double* freq_offset,
+    double* pulse_start_time, int num_pulses, float tx_power,
+    double* phase_noise_real, double* phase_noise_imag, int phase_noise_size);
 
 /**
  * @brief Add a transmitter channel with antenna pattern and modulation
@@ -213,18 +233,20 @@ EXPORTED t_Transmitter *Create_Transmitter_PhaseNoise(
  * @param[in] grid Ray occupancy grid resolution (rad)
  * @param[in] ptr_tx_c Pointer to the Transmitter object
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: ptr_tx_c is NULL
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: channel limit exceeded (unlicensed)
  *
  * @note Unlicensed usage limited to 1 transmitter channel.
  */
-EXPORTED int Add_Txchannel(float *location, float *polar_real,
-                           float *polar_imag, float *phi, float *phi_ptn,
-                           int phi_length, float *theta, float *theta_ptn,
-                           int theta_length, float antenna_gain, float *mod_t,
-                           float *mod_var_real, float *mod_var_imag,
-                           int mod_length, float *pulse_mod_real,
-                           float *pulse_mod_imag, float delay, float grid,
-                           t_Transmitter *ptr_tx_c);
+EXPORTED int Add_Txchannel(float* location, float* polar_real,
+                           float* polar_imag, float* phi, float* phi_ptn,
+                           int phi_length, float* theta, float* theta_ptn,
+                           int theta_length, float antenna_gain, float* mod_t,
+                           float* mod_var_real, float* mod_var_imag,
+                           int mod_length, float* pulse_mod_real,
+                           float* pulse_mod_imag, float delay, float grid,
+                           t_Transmitter* ptr_tx_c);
 
 /**
  * @brief Get the number of configured transmitter channels
@@ -233,7 +255,7 @@ EXPORTED int Add_Txchannel(float *location, float *polar_real,
  *
  * @return int Number of configured transmitter channels
  */
-EXPORTED int Get_Num_Txchannel(t_Transmitter *ptr_tx_c);
+EXPORTED int Get_Num_Txchannel(t_Transmitter* ptr_tx_c);
 
 /**
  * @brief Safely release transmitter resources
@@ -242,7 +264,7 @@ EXPORTED int Get_Num_Txchannel(t_Transmitter *ptr_tx_c);
  *
  * @note Automatically unregisters from cleanup system. Safe with NULL pointer.
  */
-EXPORTED void Free_Transmitter(t_Transmitter *ptr_tx_c);
+EXPORTED void Free_Transmitter(t_Transmitter* ptr_tx_c);
 
 /*********************************************
  *
@@ -271,7 +293,7 @@ typedef struct s_Receiver t_Receiver;
  * @note Automatically registered for cleanup. Use Free_Receiver() for manual
  * cleanup.
  */
-EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
+EXPORTED t_Receiver* Create_Receiver(float fs, float rf_gain, float resistor,
                                      float baseband_gain, float baseband_bw);
 
 /**
@@ -289,15 +311,17 @@ EXPORTED t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
  * @param[in] antenna_gain Maximum antenna gain (dB)
  * @param[in] ptr_rx_c Pointer to the Receiver object
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: ptr_rx_c is NULL
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: channel limit exceeded (unlicensed)
  *
  * @note Unlicensed usage limited to 1 receiver channel.
  */
-EXPORTED int Add_Rxchannel(float *location, float *polar_real,
-                           float *polar_imag, float *phi, float *phi_ptn,
-                           int phi_length, float *theta, float *theta_ptn,
+EXPORTED int Add_Rxchannel(float* location, float* polar_real,
+                           float* polar_imag, float* phi, float* phi_ptn,
+                           int phi_length, float* theta, float* theta_ptn,
                            int theta_length, float antenna_gain,
-                           t_Receiver *ptr_rx_c);
+                           t_Receiver* ptr_rx_c);
 
 /**
  * @brief Get the number of configured receiver channels
@@ -306,7 +330,7 @@ EXPORTED int Add_Rxchannel(float *location, float *polar_real,
  *
  * @return int Number of configured receiver channels
  */
-EXPORTED int Get_Num_Rxchannel(t_Receiver *ptr_rx_c);
+EXPORTED int Get_Num_Rxchannel(t_Receiver* ptr_rx_c);
 
 /**
  * @brief Safely release receiver resources
@@ -315,7 +339,7 @@ EXPORTED int Get_Num_Rxchannel(t_Receiver *ptr_rx_c);
  *
  * @note Automatically unregisters from cleanup system. Safe with NULL pointer.
  */
-EXPORTED void Free_Receiver(t_Receiver *ptr_rx_c);
+EXPORTED void Free_Receiver(t_Receiver* ptr_rx_c);
 
 /*********************************************
  *
@@ -348,10 +372,10 @@ typedef struct s_Radar t_Radar;
  * cleanup.
  * @warning TX/RX objects must remain valid for radar system's lifetime.
  */
-EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
-                               double *frame_start_time, int num_frames,
-                               float *location, float *speed, float *rotation,
-                               float *rotation_rate);
+EXPORTED t_Radar* Create_Radar(t_Transmitter* ptr_tx_c, t_Receiver* ptr_rx_c,
+                               double* frame_start_time, int num_frames,
+                               float* location, float* speed, float* rotation,
+                               float* rotation_rate);
 
 /**
  * @brief Create a Radar system with time-varying platform motion
@@ -374,12 +398,12 @@ EXPORTED t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
  * cleanup.
  * @warning TX/RX objects must remain valid for radar system's lifetime.
  */
-EXPORTED t_Radar *Create_Radar_Array(t_Transmitter *ptr_tx_c,
-                                     t_Receiver *ptr_rx_c,
-                                     double *frame_start_time, int num_frames,
-                                     float *location_array, int num_locations,
-                                     float *speed, float *rotation_array,
-                                     int num_rotations, float *rotation_rate);
+EXPORTED t_Radar* Create_Radar_Array(t_Transmitter* ptr_tx_c,
+                                     t_Receiver* ptr_rx_c,
+                                     double* frame_start_time, int num_frames,
+                                     float* location_array, int num_locations,
+                                     float* speed, float* rotation_array,
+                                     int num_rotations, float* rotation_rate);
 
 /**
  * @brief Get the required baseband buffer size for the given radar
@@ -391,7 +415,7 @@ EXPORTED t_Radar *Create_Radar_Array(t_Transmitter *ptr_tx_c,
  * @param[in] ptr_radar_c Pointer to the radar system object
  * @return int Total baseband buffer size in samples, or 0 on invalid input
  */
-EXPORTED int Get_BB_Size(t_Radar *ptr_radar_c);
+EXPORTED int Get_BB_Size(t_Radar* ptr_radar_c);
 
 /**
  * @brief Safely release radar system resources
@@ -402,7 +426,7 @@ EXPORTED int Get_BB_Size(t_Radar *ptr_radar_c);
  * @note TX/RX objects are NOT freed - manage separately. Auto-unregisters from
  * cleanup.
  */
-EXPORTED void Free_Radar(t_Radar *ptr_radar_c);
+EXPORTED void Free_Radar(t_Radar* ptr_radar_c);
 
 /*********************************************
  *
@@ -426,7 +450,7 @@ typedef struct s_Targets t_Targets;
  * cleanup.
  * @note Use Add_Point_Target() and Add_Mesh_Target() to populate targets.
  */
-EXPORTED t_Targets *Init_Targets();
+EXPORTED t_Targets* Init_Targets();
 
 /**
  * @brief Add an ideal point scatterer to the simulation
@@ -437,12 +461,15 @@ EXPORTED t_Targets *Init_Targets();
  * @param[in] phs Target's initial phase (rad)
  * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: point target limit exceeded
+ * (unlicensed)
  *
  * @note Unlicensed usage limited to 2 point targets.
  */
-EXPORTED int Add_Point_Target(float *location, float *speed, float rcs,
-                              float phs, t_Targets *ptr_targets_c);
+EXPORTED int Add_Point_Target(float* location, float* speed, float rcs,
+                              float phs, t_Targets* ptr_targets_c);
 
 /**
  * @brief Add a time-varying ideal point scatterer to the simulation
@@ -456,14 +483,18 @@ EXPORTED int Add_Point_Target(float *location, float *speed, float rcs,
  * @param[in] num_rcs Number of RCS/phase entries
  * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid array size
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: point target limit exceeded
+ * (unlicensed)
  *
  * @note Unlicensed usage limited to 2 point targets.
  */
-EXPORTED int Add_Point_Target_Array(float *location_array, int num_locations,
-                                    float *speed, float *rcs_array,
-                                    float *phase_array, int num_rcs,
-                                    t_Targets *ptr_targets_c);
+EXPORTED int Add_Point_Target_Array(float* location_array, int num_locations,
+                                    float* speed, float* rcs_array,
+                                    float* phase_array, int num_rcs,
+                                    t_Targets* ptr_targets_c);
 
 /**
  * @brief Add a complex 3D mesh target to the simulation
@@ -485,16 +516,20 @@ EXPORTED int Add_Point_Target_Array(float *location_array, int num_locations,
  * @param[in] environment Environment flag for target
  * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid cell_size
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: mesh target or triangle limit
+ * exceeded (unlicensed)
  *
  * @note Unlicensed usage limits: 2 mesh targets max, 8 triangles per mesh max.
  */
-EXPORTED int Add_Mesh_Target(float *points, int *cells, int cell_size,
-                             float *origin, float *location, float *speed,
-                             float *rotation, float *rotation_rate,
+EXPORTED int Add_Mesh_Target(float* points, int* cells, int cell_size,
+                             float* origin, float* location, float* speed,
+                             float* rotation, float* rotation_rate,
                              float ep_real, float ep_imag, float mu_real,
                              float mu_imag, bool skip_diffusion, float density,
-                             bool environment, t_Targets *ptr_targets_c);
+                             bool environment, t_Targets* ptr_targets_c);
 
 /**
  * @brief Add a 3D mesh target with time-varying motion arrays
@@ -518,16 +553,22 @@ EXPORTED int Add_Mesh_Target(float *points, int *cells, int cell_size,
  * @param[in] environment Environment flag for target
  * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid array size or cell_size
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: mesh target or triangle limit
+ * exceeded (unlicensed)
  *
  * @note Unlicensed usage limits: 2 mesh targets max, 8 triangles per mesh max.
  */
-EXPORTED int Add_Mesh_Target_Array(
-    float *points, int *cells, int cell_size, float *origin,
-    float *location_array, float *speed_array, float *rotation_array,
-    float *rotation_rate_array, int num_motions, float ep_real, float ep_imag,
-    float mu_real, float mu_imag, bool skip_diffusion, float density,
-    bool environment, t_Targets *ptr_targets_c);
+EXPORTED int Add_Mesh_Target_Array(float* points, int* cells, int cell_size,
+                                   float* origin, float* location_array,
+                                   float* speed_array, float* rotation_array,
+                                   float* rotation_rate_array, int num_motions,
+                                   float ep_real, float ep_imag, float mu_real,
+                                   float mu_imag, bool skip_diffusion,
+                                   float density, bool environment,
+                                   t_Targets* ptr_targets_c);
 
 /**
  * @brief Safely release target management system resources
@@ -537,7 +578,7 @@ EXPORTED int Add_Mesh_Target_Array(
  *
  * @note Auto-unregisters from cleanup system. Safe with NULL pointer.
  */
-EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
+EXPORTED void Free_Targets(t_Targets* ptr_targets_c);
 
 /*********************************************
  *
@@ -561,9 +602,9 @@ EXPORTED void Free_Targets(t_Targets *ptr_targets_c);
  *
  * @return int 0 for success, non-zero RadarSimErrorCode on failure
  */
-EXPORTED int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
-                                int level, float density, int *ray_filter,
-                                double *ptr_bb_real, double *ptr_bb_imag);
+EXPORTED int Run_RadarSimulator(t_Radar* ptr_radar_c, t_Targets* ptr_targets_c,
+                                int level, float density, int* ray_filter,
+                                double* ptr_bb_real, double* ptr_bb_imag);
 
 /**
  * @brief Execute radar-to-radar interference simulation
@@ -578,10 +619,10 @@ EXPORTED int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
  * @note Buffer size: [num_pulses × num_rx_channels × samples_per_pulse]
  * @warning Buffers must match victim radar's baseband dimensions.
  */
-EXPORTED void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
-                                        t_Radar *ptr_interf_radar_c,
-                                        double *ptr_interf_real,
-                                        double *ptr_interf_imag);
+EXPORTED void Run_InterferenceSimulator(t_Radar* ptr_radar_c,
+                                        t_Radar* ptr_interf_radar_c,
+                                        double* ptr_interf_real,
+                                        double* ptr_interf_imag);
 
 /**
  * @brief Execute Radar Cross Section (RCS) simulation using Physical Optics
@@ -603,16 +644,21 @@ EXPORTED void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
  * @param[in] density Ray density for Physical Optics (rays per wavelength²)
  * @param[out] rcs_result Output array for RCS values (m²) - pre-allocated
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid frequency, density, or
+ * direction count
+ *         - RADARSIM_ERROR_MEMORY_ALLOCATION: memory allocation failed
+ *         - RADARSIM_ERROR_EXCEPTION: unexpected error
  *
  * @note Higher density = more accurate but slower computation.
  */
-EXPORTED int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
-                              double *obs_dir_array, int num_directions,
-                              double *inc_polar_real, double *inc_polar_imag,
-                              double *obs_polar_real, double *obs_polar_imag,
+EXPORTED int Run_RcsSimulator(t_Targets* ptr_targets_c, double* inc_dir_array,
+                              double* obs_dir_array, int num_directions,
+                              double* inc_polar_real, double* inc_polar_imag,
+                              double* obs_polar_real, double* obs_polar_imag,
                               double frequency, double density,
-                              double *rcs_result);
+                              double* rcs_result);
 
 /**
  * @brief Execute LiDAR point cloud simulation using ray tracing
@@ -630,18 +676,22 @@ EXPORTED int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
  * @param[in] max_points Maximum number of points to return
  * @param[out] actual_points Actual number of points found and returned
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid num_rays or max_points
+ *         - RADARSIM_ERROR_MEMORY_ALLOCATION: memory allocation failed
+ *         - RADARSIM_ERROR_EXCEPTION: unexpected error
  *
  * @note φ=0 is +X axis, θ=0 is +Z axis. Only first-surface intersections
  * recorded.
  * @warning Output arrays must be allocated for at least max_points elements.
  */
-EXPORTED int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
-                                double *theta_array, int num_rays,
-                                double *sensor_location, double *cloud_points,
-                                double *cloud_distances,
-                                double *cloud_intensities, int max_points,
-                                int *actual_points);
+EXPORTED int Run_LidarSimulator(t_Targets* ptr_targets_c, double* phi_array,
+                                double* theta_array, int num_rays,
+                                double* sensor_location, double* cloud_points,
+                                double* cloud_distances,
+                                double* cloud_intensities, int max_points,
+                                int* actual_points);
 
 #ifdef __cplusplus
 }

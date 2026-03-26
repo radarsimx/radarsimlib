@@ -109,8 +109,8 @@ struct s_Receiver {
  * @details Contains pointers to transmitter, receiver, and radar objects.
  */
 struct s_Radar {
-  t_Transmitter *_ptr_tx;
-  t_Receiver *_ptr_rx;
+  t_Transmitter* _ptr_tx;
+  t_Receiver* _ptr_rx;
   std::shared_ptr<Radar<double, float>> _ptr_radar;
 
   /**
@@ -166,8 +166,8 @@ struct s_Targets {
 class AutoCleanupRegistry {
  private:
   struct RegisteredObject {
-    void *ptr;
-    void (*cleanup_func)(void *);
+    void* ptr;
+    void (*cleanup_func)(void*);
   };
 
   static const int MAX_OBJECTS = 1000;  // Adjust as needed
@@ -179,7 +179,7 @@ class AutoCleanupRegistry {
   /**
    * @brief Register an object for automatic cleanup
    */
-  static void register_object(void *ptr, void (*cleanup_func)(void *)) {
+  static void register_object(void* ptr, void (*cleanup_func)(void*)) {
     if (!ptr || cleanup_in_progress || object_count >= MAX_OBJECTS) return;
 
     registered_objects[object_count].ptr = ptr;
@@ -190,7 +190,7 @@ class AutoCleanupRegistry {
   /**
    * @brief Unregister an object from automatic cleanup
    */
-  static void unregister_object(void *ptr) {
+  static void unregister_object(void* ptr) {
     if (!ptr || cleanup_in_progress) return;
 
     for (int i = 0; i < object_count; i++) {
@@ -236,14 +236,14 @@ bool AutoCleanupRegistry::cleanup_in_progress = false;
 
 // Helper functions for simple cleanup
 extern "C" {
-static void cleanup_transmitter(void *ptr) {
-  delete static_cast<t_Transmitter *>(ptr);
+static void cleanup_transmitter(void* ptr) {
+  delete static_cast<t_Transmitter*>(ptr);
 }
-static void cleanup_receiver(void *ptr) {
-  delete static_cast<t_Receiver *>(ptr);
+static void cleanup_receiver(void* ptr) {
+  delete static_cast<t_Receiver*>(ptr);
 }
-static void cleanup_radar(void *ptr) { delete static_cast<t_Radar *>(ptr); }
-static void cleanup_targets(void *ptr) { delete static_cast<t_Targets *>(ptr); }
+static void cleanup_radar(void* ptr) { delete static_cast<t_Radar*>(ptr); }
+static void cleanup_targets(void* ptr) { delete static_cast<t_Targets*>(ptr); }
 }
 
 #else
@@ -260,10 +260,10 @@ static void cleanup_targets(void *ptr) { delete static_cast<t_Targets *>(ptr); }
 class AutoCleanupRegistry {
  private:
   struct RegisteredObject {
-    void *ptr;
+    void* ptr;
     std::function<void()> cleanup_func;
 
-    RegisteredObject(void *p, std::function<void()> func)
+    RegisteredObject(void* p, std::function<void()> func)
         : ptr(p), cleanup_func(func) {}
   };
 
@@ -279,7 +279,7 @@ class AutoCleanupRegistry {
    * @param ptr Pointer to the object to be cleaned up
    * @param cleanup_func Function to call for cleanup
    */
-  static void register_object(void *ptr, std::function<void()> cleanup_func) {
+  static void register_object(void* ptr, std::function<void()> cleanup_func) {
     if (!ptr || cleanup_in_progress) return;
 
 #ifdef RADARSIM_THREAD_SAFE
@@ -292,7 +292,7 @@ class AutoCleanupRegistry {
    * @brief Unregister an object from automatic cleanup
    * @param ptr Pointer to the object to unregister
    */
-  static void unregister_object(void *ptr) {
+  static void unregister_object(void* ptr) {
     if (!ptr || cleanup_in_progress) return;
 
 #ifdef RADARSIM_THREAD_SAFE
@@ -301,7 +301,7 @@ class AutoCleanupRegistry {
     registered_objects.erase(
         std::remove_if(
             registered_objects.begin(), registered_objects.end(),
-            [ptr](const RegisteredObject &obj) { return obj.ptr == ptr; }),
+            [ptr](const RegisteredObject& obj) { return obj.ptr == ptr; }),
         registered_objects.end());
   }
 
@@ -425,7 +425,7 @@ void Get_Version(int version[3]) {
  * @param[in] product Expected product name for validation (NULL or empty to
  * skip product check)
  */
-void Set_License(const char *license_file_path, const char *product) {
+void Set_License(const char* license_file_path, const char* product) {
   std::string path = (license_file_path != nullptr) ? license_file_path : "";
   std::string prod = (product != nullptr) ? product : "";
   LicenseManager::GetInstance().SetLicense(path, prod);
@@ -439,8 +439,8 @@ void Set_License(const char *license_file_path, const char *product) {
  * @param[in] product Expected product name for validation (NULL or empty to
  * skip product check)
  */
-void Set_License_Files(const char **license_file_paths, int num_files,
-                       const char *product) {
+void Set_License_Files(const char** license_file_paths, int num_files,
+                       const char* product) {
   std::vector<std::string> paths;
   if (license_file_paths != nullptr && num_files > 0) {
     paths.reserve(num_files);
@@ -467,7 +467,7 @@ int Is_Licensed() { return LicenseManager::GetInstance().IsLicensed() ? 1 : 0; }
  * @param[in] buffer_size Size of the buffer in bytes
  * @return int Actual length of the license info string
  */
-int Get_License_Info(char *buffer, int buffer_size) {
+int Get_License_Info(char* buffer, int buffer_size) {
   std::string info = LicenseManager::GetInstance().GetLicenseInfo();
   int len = static_cast<int>(info.length());
   if (buffer != nullptr && buffer_size > 0) {
@@ -527,9 +527,9 @@ int Is_Cleanup_In_Progress() {
  * @note Automatically registered for cleanup. Use Free_Transmitter() for manual
  * cleanup.
  */
-t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
-                                  int waveform_size, double *freq_offset,
-                                  double *pulse_start_time, int num_pulses,
+t_Transmitter* Create_Transmitter(double* freq, double* freq_time,
+                                  int waveform_size, double* freq_offset,
+                                  double* pulse_start_time, int num_pulses,
                                   float tx_power) {
   // Input validation
   if (freq == nullptr || freq_time == nullptr || waveform_size <= 0) {
@@ -555,7 +555,7 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
   }
 
   // Allocate memory for the wrapper struct
-  t_Transmitter *ptr_tx_c = nullptr;
+  t_Transmitter* ptr_tx_c = nullptr;
 
   try {
     // Use new instead of malloc for proper C++ object construction
@@ -595,19 +595,19 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
                                          [ptr_tx_c]() { delete ptr_tx_c; });
 #endif
 
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::bad_alloc& e) {
     // Memory allocation failed
     std::cerr << "Create_Transmitter: Memory allocation failed: " << e.what()
               << std::endl;
     delete ptr_tx_c;
     return nullptr;
-  } catch (const std::invalid_argument &e) {
+  } catch (const std::invalid_argument& e) {
     // Invalid parameters passed to constructor
     std::cerr << "Create_Transmitter: Invalid argument: " << e.what()
               << std::endl;
     delete ptr_tx_c;
     return nullptr;
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     // Any other standard exception
     std::cerr << "Create_Transmitter: Unexpected error: " << e.what()
               << std::endl;
@@ -634,17 +634,18 @@ t_Transmitter *Create_Transmitter(double *freq, double *freq_time,
  * @param[in] pulse_start_time Pulse start time vector (s) - must not be NULL
  * @param[in] num_pulses Number of pulses - must be > 0
  * @param[in] tx_power Transmitter power (dBm)
- * @param[in] phase_noise_real Real part of phase noise vector - must not be NULL
+ * @param[in] phase_noise_real Real part of phase noise vector - must not be
+ * NULL
  * @param[in] phase_noise_imag Imaginary part of phase noise vector - must not
  * be NULL
  * @param[in] phase_noise_size Length of phase noise arrays - must be > 0
  *
  * @return t_Transmitter* Pointer to Transmitter object, NULL on failure
  */
-t_Transmitter *Create_Transmitter_PhaseNoise(
-    double *freq, double *freq_time, int waveform_size, double *freq_offset,
-    double *pulse_start_time, int num_pulses, float tx_power,
-    double *phase_noise_real, double *phase_noise_imag, int phase_noise_size) {
+t_Transmitter* Create_Transmitter_PhaseNoise(
+    double* freq, double* freq_time, int waveform_size, double* freq_offset,
+    double* pulse_start_time, int num_pulses, float tx_power,
+    double* phase_noise_real, double* phase_noise_imag, int phase_noise_size) {
   // Input validation
   if (freq == nullptr || freq_time == nullptr || waveform_size <= 0) {
     return nullptr;
@@ -658,7 +659,7 @@ t_Transmitter *Create_Transmitter_PhaseNoise(
     return nullptr;
   }
 
-  t_Transmitter *ptr_tx_c = nullptr;
+  t_Transmitter* ptr_tx_c = nullptr;
 
   try {
     ptr_tx_c = new t_Transmitter();
@@ -694,19 +695,19 @@ t_Transmitter *Create_Transmitter_PhaseNoise(
                                          [ptr_tx_c]() { delete ptr_tx_c; });
 #endif
 
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::bad_alloc& e) {
     std::cerr << "Create_Transmitter_PhaseNoise: Memory allocation failed: "
               << e.what() << std::endl;
     delete ptr_tx_c;
     return nullptr;
-  } catch (const std::invalid_argument &e) {
-    std::cerr << "Create_Transmitter_PhaseNoise: Invalid argument: "
-              << e.what() << std::endl;
+  } catch (const std::invalid_argument& e) {
+    std::cerr << "Create_Transmitter_PhaseNoise: Invalid argument: " << e.what()
+              << std::endl;
     delete ptr_tx_c;
     return nullptr;
-  } catch (const std::exception &e) {
-    std::cerr << "Create_Transmitter_PhaseNoise: Unexpected error: "
-              << e.what() << std::endl;
+  } catch (const std::exception& e) {
+    std::cerr << "Create_Transmitter_PhaseNoise: Unexpected error: " << e.what()
+              << std::endl;
     delete ptr_tx_c;
     return nullptr;
   } catch (...) {
@@ -742,25 +743,27 @@ t_Transmitter *Create_Transmitter_PhaseNoise(
  * @param[in] grid Ray occupancy grid resolution (rad)
  * @param[in] ptr_tx_c Pointer to the Transmitter object
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: ptr_tx_c is NULL
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: channel limit exceeded (unlicensed)
  *
  * @note Unlicensed usage limited to 1 transmitter channel.
  */
-int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
-                  float *phi, float *phi_ptn, int phi_length, float *theta,
-                  float *theta_ptn, int theta_length, float antenna_gain,
-                  float *mod_t, float *mod_var_real, float *mod_var_imag,
-                  int mod_length, float *pulse_mod_real, float *pulse_mod_imag,
-                  float delay, float grid, t_Transmitter *ptr_tx_c) {
+int Add_Txchannel(float* location, float* polar_real, float* polar_imag,
+                  float* phi, float* phi_ptn, int phi_length, float* theta,
+                  float* theta_ptn, int theta_length, float antenna_gain,
+                  float* mod_t, float* mod_var_real, float* mod_var_imag,
+                  int mod_length, float* pulse_mod_real, float* pulse_mod_imag,
+                  float delay, float grid, t_Transmitter* ptr_tx_c) {
   // Input validation - check for null transmitter pointer
   if (ptr_tx_c == nullptr) {
-    return 1;
+    return RADARSIMCPP_ERROR_NULL_POINTER;
   }
 
   // License check: limit to 1 transmitter channel
   if (!LicenseManager::GetInstance().IsLicensed()) {
     if (ptr_tx_c->_ptr_transmitter->channel_size_ >= 1) {
-      return 1;
+      return RADARSIMCPP_ERROR_FREE_TIER_LIMIT;
     }
   }
 
@@ -816,7 +819,7 @@ int Add_Txchannel(float *location, float *polar_real, float *polar_imag,
  *
  * @return int Number of configured transmitter channels
  */
-int Get_Num_Txchannel(t_Transmitter *ptr_tx_c) {
+int Get_Num_Txchannel(t_Transmitter* ptr_tx_c) {
   return ptr_tx_c->_ptr_transmitter->channel_size_;
 }
 
@@ -827,7 +830,7 @@ int Get_Num_Txchannel(t_Transmitter *ptr_tx_c) {
  *
  * @note Automatically unregisters from cleanup system. Safe with NULL pointer.
  */
-void Free_Transmitter(t_Transmitter *ptr_tx_c) {
+void Free_Transmitter(t_Transmitter* ptr_tx_c) {
   if (ptr_tx_c == nullptr) {
     return;
   }
@@ -858,14 +861,14 @@ void Free_Transmitter(t_Transmitter *ptr_tx_c) {
  * @note Automatically registered for cleanup. Use Free_Receiver() for manual
  * cleanup.
  */
-t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
+t_Receiver* Create_Receiver(float fs, float rf_gain, float resistor,
                             float baseband_gain, float baseband_bw) {
   // Input validation
   if (fs <= 0 || resistor <= 0 || baseband_bw <= 0) {
     return nullptr;
   }
 
-  t_Receiver *ptr_rx_c = nullptr;
+  t_Receiver* ptr_rx_c = nullptr;
 
   try {
     // Use new instead of malloc for proper C++ object construction
@@ -885,18 +888,18 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
 
     return ptr_rx_c;
 
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::bad_alloc& e) {
     // Memory allocation failed
     std::cerr << "Create_Receiver: Memory allocation failed: " << e.what()
               << std::endl;
     delete ptr_rx_c;
     return nullptr;
-  } catch (const std::invalid_argument &e) {
+  } catch (const std::invalid_argument& e) {
     // Invalid parameters passed to constructor
     std::cerr << "Create_Receiver: Invalid argument: " << e.what() << std::endl;
     delete ptr_rx_c;
     return nullptr;
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     // Any other standard exception
     std::cerr << "Create_Receiver: Unexpected error: " << e.what() << std::endl;
     delete ptr_rx_c;
@@ -924,23 +927,25 @@ t_Receiver *Create_Receiver(float fs, float rf_gain, float resistor,
  * @param[in] antenna_gain Maximum antenna gain (dB)
  * @param[in] ptr_rx_c Pointer to the Receiver object
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: ptr_rx_c is NULL
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: channel limit exceeded (unlicensed)
  *
  * @note Unlicensed usage limited to 1 receiver channel.
  */
-int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
-                  float *phi, float *phi_ptn, int phi_length, float *theta,
-                  float *theta_ptn, int theta_length, float antenna_gain,
-                  t_Receiver *ptr_rx_c) {
+int Add_Rxchannel(float* location, float* polar_real, float* polar_imag,
+                  float* phi, float* phi_ptn, int phi_length, float* theta,
+                  float* theta_ptn, int theta_length, float antenna_gain,
+                  t_Receiver* ptr_rx_c) {
   // Input validation - check for null receiver pointer
   if (ptr_rx_c == nullptr) {
-    return 1;
+    return RADARSIMCPP_ERROR_NULL_POINTER;
   }
 
   // License check: limit to 1 receiver channel
   if (!LicenseManager::GetInstance().IsLicensed()) {
     if (ptr_rx_c->_ptr_receiver->channel_size_ >= 1) {
-      return 1;
+      return RADARSIMCPP_ERROR_FREE_TIER_LIMIT;
     }
   }
 
@@ -978,7 +983,7 @@ int Add_Rxchannel(float *location, float *polar_real, float *polar_imag,
  *
  * @return int Number of configured receiver channels
  */
-int Get_Num_Rxchannel(t_Receiver *ptr_rx_c) {
+int Get_Num_Rxchannel(t_Receiver* ptr_rx_c) {
   return ptr_rx_c->_ptr_receiver->channel_size_;
 }
 
@@ -989,7 +994,7 @@ int Get_Num_Rxchannel(t_Receiver *ptr_rx_c) {
  *
  * @note Automatically unregisters from cleanup system. Safe with NULL pointer.
  */
-void Free_Receiver(t_Receiver *ptr_rx_c) {
+void Free_Receiver(t_Receiver* ptr_rx_c) {
   if (ptr_rx_c == nullptr) {
     return;
   }
@@ -1024,9 +1029,9 @@ void Free_Receiver(t_Receiver *ptr_rx_c) {
  * cleanup.
  * @warning TX/RX objects must remain valid for radar system's lifetime.
  */
-t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
-                      double *frame_start_time, int num_frames, float *location,
-                      float *speed, float *rotation, float *rotation_rate) {
+t_Radar* Create_Radar(t_Transmitter* ptr_tx_c, t_Receiver* ptr_rx_c,
+                      double* frame_start_time, int num_frames, float* location,
+                      float* speed, float* rotation, float* rotation_rate) {
   // Input validation
   if (ptr_tx_c == nullptr || ptr_rx_c == nullptr ||
       frame_start_time == nullptr || num_frames <= 0 || location == nullptr ||
@@ -1035,7 +1040,7 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
   }
 
   // Allocate memory for the wrapper struct
-  t_Radar *ptr_radar_c = nullptr;
+  t_Radar* ptr_radar_c = nullptr;
 
   try {
     // Use new instead of malloc for proper C++ object construction
@@ -1073,18 +1078,18 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
         ptr_radar_c, [ptr_radar_c]() { delete ptr_radar_c; });
 #endif
 
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::bad_alloc& e) {
     // Memory allocation failed
     std::cerr << "Create_Radar: Memory allocation failed: " << e.what()
               << std::endl;
     delete ptr_radar_c;
     return nullptr;
-  } catch (const std::invalid_argument &e) {
+  } catch (const std::invalid_argument& e) {
     // Invalid parameters passed to constructor
     std::cerr << "Create_Radar: Invalid argument: " << e.what() << std::endl;
     delete ptr_radar_c;
     return nullptr;
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     // Any other standard exception
     std::cerr << "Create_Radar: Unexpected error: " << e.what() << std::endl;
     delete ptr_radar_c;
@@ -1115,11 +1120,11 @@ t_Radar *Create_Radar(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
  *
  * @return t_Radar* Pointer to Radar system object, NULL on failure
  */
-t_Radar *Create_Radar_Array(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
-                            double *frame_start_time, int num_frames,
-                            float *location_array, int num_locations,
-                            float *speed, float *rotation_array,
-                            int num_rotations, float *rotation_rate) {
+t_Radar* Create_Radar_Array(t_Transmitter* ptr_tx_c, t_Receiver* ptr_rx_c,
+                            double* frame_start_time, int num_frames,
+                            float* location_array, int num_locations,
+                            float* speed, float* rotation_array,
+                            int num_rotations, float* rotation_rate) {
   // Input validation
   if (ptr_tx_c == nullptr || ptr_rx_c == nullptr ||
       frame_start_time == nullptr || num_frames <= 0 ||
@@ -1129,7 +1134,7 @@ t_Radar *Create_Radar_Array(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
     return nullptr;
   }
 
-  t_Radar *ptr_radar_c = nullptr;
+  t_Radar* ptr_radar_c = nullptr;
 
   try {
     ptr_radar_c = new t_Radar();
@@ -1165,8 +1170,7 @@ t_Radar *Create_Radar_Array(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
         ptr_tx_c->_ptr_transmitter, ptr_rx_c->_ptr_receiver,
         frame_start_time_vt, loc_vt,
         rsv::Vec3<float>(speed[0], speed[1], speed[2]), rot_vt,
-        rsv::Vec3<float>(rotation_rate[0], rotation_rate[1],
-                         rotation_rate[2]));
+        rsv::Vec3<float>(rotation_rate[0], rotation_rate[1], rotation_rate[2]));
 
     // Register for automatic cleanup
 #ifdef RADARSIM_SIMPLE_CLEANUP
@@ -1176,17 +1180,17 @@ t_Radar *Create_Radar_Array(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
         ptr_radar_c, [ptr_radar_c]() { delete ptr_radar_c; });
 #endif
 
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::bad_alloc& e) {
     std::cerr << "Create_Radar_Array: Memory allocation failed: " << e.what()
               << std::endl;
     delete ptr_radar_c;
     return nullptr;
-  } catch (const std::invalid_argument &e) {
+  } catch (const std::invalid_argument& e) {
     std::cerr << "Create_Radar_Array: Invalid argument: " << e.what()
               << std::endl;
     delete ptr_radar_c;
     return nullptr;
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     std::cerr << "Create_Radar_Array: Unexpected error: " << e.what()
               << std::endl;
     delete ptr_radar_c;
@@ -1210,7 +1214,7 @@ t_Radar *Create_Radar_Array(t_Transmitter *ptr_tx_c, t_Receiver *ptr_rx_c,
  * @param[in] ptr_radar_c Pointer to the radar system object
  * @return int Total baseband buffer size in samples, or 0 on invalid input
  */
-int Get_BB_Size(t_Radar *ptr_radar_c) {
+int Get_BB_Size(t_Radar* ptr_radar_c) {
   if (ptr_radar_c == nullptr || ptr_radar_c->_ptr_radar == nullptr) {
     return 0;
   }
@@ -1226,7 +1230,7 @@ int Get_BB_Size(t_Radar *ptr_radar_c) {
  * @note TX/RX objects are NOT freed - manage separately. Auto-unregisters from
  * cleanup.
  */
-void Free_Radar(t_Radar *ptr_radar_c) {
+void Free_Radar(t_Radar* ptr_radar_c) {
   if (ptr_radar_c == nullptr) {
     return;
   }
@@ -1252,8 +1256,8 @@ void Free_Radar(t_Radar *ptr_radar_c) {
  * cleanup.
  * @note Use Add_Point_Target() and Add_Mesh_Target() to populate targets.
  */
-t_Targets *Init_Targets() {
-  t_Targets *ptr_targets_c = nullptr;
+t_Targets* Init_Targets() {
+  t_Targets* ptr_targets_c = nullptr;
 
   try {
     // Use new instead of malloc for proper C++ object construction
@@ -1276,18 +1280,18 @@ t_Targets *Init_Targets() {
 
     return ptr_targets_c;
 
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::bad_alloc& e) {
     // Memory allocation failed
     std::cerr << "Init_Targets: Memory allocation failed: " << e.what()
               << std::endl;
     delete ptr_targets_c;
     return nullptr;
-  } catch (const std::invalid_argument &e) {
+  } catch (const std::invalid_argument& e) {
     // Invalid parameters passed to constructor
     std::cerr << "Init_Targets: Invalid argument: " << e.what() << std::endl;
     delete ptr_targets_c;
     return nullptr;
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     // Any other standard exception
     std::cerr << "Init_Targets: Unexpected error: " << e.what() << std::endl;
     delete ptr_targets_c;
@@ -1311,21 +1315,24 @@ t_Targets *Init_Targets() {
  * @param[in] phs Target's initial phase (rad)
  * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: point target limit exceeded
+ * (unlicensed)
  *
  * @note Unlicensed usage limited to 2 point targets.
  */
-int Add_Point_Target(float *location, float *speed, float rcs, float phs,
-                     t_Targets *ptr_targets_c) {
+int Add_Point_Target(float* location, float* speed, float rcs, float phs,
+                     t_Targets* ptr_targets_c) {
   // Input validation - check for null pointers
   if (ptr_targets_c == nullptr || location == nullptr || speed == nullptr) {
-    return 1;
+    return RADARSIMCPP_ERROR_NULL_POINTER;
   }
 
   // License check: limit to 2 point targets
   if (!LicenseManager::GetInstance().IsLicensed()) {
     if (ptr_targets_c->_ptr_points->vect_points_.size() >= 2) {
-      return 1;
+      return RADARSIMCPP_ERROR_FREE_TIER_LIMIT;
     }
   }
 
@@ -1347,24 +1354,30 @@ int Add_Point_Target(float *location, float *speed, float rcs, float phs,
  * @param[in] num_rcs Number of RCS/phase entries
  * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid array size
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: point target limit exceeded
+ * (unlicensed)
  *
  * @note Unlicensed usage limited to 2 point targets.
  */
-int Add_Point_Target_Array(float *location_array, int num_locations,
-                           float *speed, float *rcs_array, float *phase_array,
-                           int num_rcs, t_Targets *ptr_targets_c) {
+int Add_Point_Target_Array(float* location_array, int num_locations,
+                           float* speed, float* rcs_array, float* phase_array,
+                           int num_rcs, t_Targets* ptr_targets_c) {
   // Input validation
   if (ptr_targets_c == nullptr || location_array == nullptr ||
-      speed == nullptr || rcs_array == nullptr || phase_array == nullptr ||
-      num_locations <= 0 || num_rcs <= 0) {
-    return 1;
+      speed == nullptr || rcs_array == nullptr || phase_array == nullptr) {
+    return RADARSIMCPP_ERROR_NULL_POINTER;
+  }
+  if (num_locations <= 0 || num_rcs <= 0) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
   }
 
   // License check: limit to 2 point targets
   if (!LicenseManager::GetInstance().IsLicensed()) {
     if (ptr_targets_c->_ptr_points->vect_points_.size() >= 2) {
-      return 1;
+      return RADARSIMCPP_ERROR_FREE_TIER_LIMIT;
     }
   }
 
@@ -1406,30 +1419,37 @@ int Add_Point_Target_Array(float *location_array, int num_locations,
  * @param[in] environment Environment flag for target
  * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid cell_size
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: mesh target or triangle limit
+ * exceeded (unlicensed)
  *
  * @note Unlicensed usage limits: 2 mesh targets max, 8 triangles per mesh max.
  */
-int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
-                    float *location, float *speed, float *rotation,
-                    float *rotation_rate, float ep_real, float ep_imag,
+int Add_Mesh_Target(float* points, int* cells, int cell_size, float* origin,
+                    float* location, float* speed, float* rotation,
+                    float* rotation_rate, float ep_real, float ep_imag,
                     float mu_real, float mu_imag, bool skip_diffusion,
-                    float density, bool environment,
-                    t_Targets *ptr_targets_c) {
-  // Input validation - check for null pointers and invalid parameters
+                    float density, bool environment, t_Targets* ptr_targets_c) {
+  // Input validation - check for null pointers
   if (ptr_targets_c == nullptr || points == nullptr || cells == nullptr ||
-      cell_size <= 0 || origin == nullptr || location == nullptr ||
-      speed == nullptr || rotation == nullptr || rotation_rate == nullptr) {
-    return 1;
+      origin == nullptr || location == nullptr || speed == nullptr ||
+      rotation == nullptr || rotation_rate == nullptr) {
+    return RADARSIMCPP_ERROR_NULL_POINTER;
+  }
+  // Validate parameters
+  if (cell_size <= 0) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
   }
 
   // License check: limit to 2 mesh targets, 8 triangles per mesh
   if (!LicenseManager::GetInstance().IsLicensed()) {
     if (ptr_targets_c->_ptr_targets->vect_targets_.size() >= 2) {
-      return 1;
+      return RADARSIMCPP_ERROR_FREE_TIER_LIMIT;
     }
     if (cell_size > 8) {
-      return 1;
+      return RADARSIMCPP_ERROR_FREE_TIER_LIMIT;
     }
   }
 
@@ -1481,32 +1501,39 @@ int Add_Mesh_Target(float *points, int *cells, int cell_size, float *origin,
  * @param[in] environment Environment flag for target
  * @param[in] ptr_targets_c Pointer to the target management system
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid array size or cell_size
+ *         - RADARSIM_ERROR_FREE_TIER_LIMIT: mesh target or triangle limit
+ * exceeded (unlicensed)
  *
  * @note Unlicensed usage limits: 2 mesh targets max, 8 triangles per mesh max.
  */
-int Add_Mesh_Target_Array(float *points, int *cells, int cell_size,
-                          float *origin, float *location_array,
-                          float *speed_array, float *rotation_array,
-                          float *rotation_rate_array, int num_motions,
+int Add_Mesh_Target_Array(float* points, int* cells, int cell_size,
+                          float* origin, float* location_array,
+                          float* speed_array, float* rotation_array,
+                          float* rotation_rate_array, int num_motions,
                           float ep_real, float ep_imag, float mu_real,
                           float mu_imag, bool skip_diffusion, float density,
-                          bool environment, t_Targets *ptr_targets_c) {
+                          bool environment, t_Targets* ptr_targets_c) {
   // Input validation
   if (ptr_targets_c == nullptr || points == nullptr || cells == nullptr ||
-      cell_size <= 0 || origin == nullptr || location_array == nullptr ||
+      origin == nullptr || location_array == nullptr ||
       speed_array == nullptr || rotation_array == nullptr ||
-      rotation_rate_array == nullptr || num_motions <= 0) {
-    return 1;
+      rotation_rate_array == nullptr) {
+    return RADARSIMCPP_ERROR_NULL_POINTER;
+  }
+  if (cell_size <= 0 || num_motions <= 0) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
   }
 
   // License check: limit to 2 mesh targets, 8 triangles per mesh
   if (!LicenseManager::GetInstance().IsLicensed()) {
     if (ptr_targets_c->_ptr_targets->vect_targets_.size() >= 2) {
-      return 1;
+      return RADARSIMCPP_ERROR_FREE_TIER_LIMIT;
     }
     if (cell_size > 8) {
-      return 1;
+      return RADARSIMCPP_ERROR_FREE_TIER_LIMIT;
     }
   }
 
@@ -1536,8 +1563,8 @@ int Add_Mesh_Target_Array(float *points, int *cells, int cell_size,
 
   ptr_targets_c->_ptr_targets->AddTarget(
       points, cells, cell_size,
-      rsv::Vec3<float>(origin[0], origin[1], origin[2]), loc_vt, spd_vt,
-      rot_vt, rotrate_vt, ep, mu, skip_diffusion, density, environment);
+      rsv::Vec3<float>(origin[0], origin[1], origin[2]), loc_vt, spd_vt, rot_vt,
+      rotrate_vt, ep, mu, skip_diffusion, density, environment);
   return 0;
 }
 
@@ -1549,7 +1576,7 @@ int Add_Mesh_Target_Array(float *points, int *cells, int cell_size,
  *
  * @note Auto-unregisters from cleanup system. Safe with NULL pointer.
  */
-void Free_Targets(t_Targets *ptr_targets_c) {
+void Free_Targets(t_Targets* ptr_targets_c) {
   if (ptr_targets_c == nullptr) {
     return;
   }
@@ -1583,9 +1610,9 @@ void Free_Targets(t_Targets *ptr_targets_c) {
  *
  * @return int 0 for success, non-zero RadarSimErrorCode on failure
  */
-int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
-                       int level, float density, int *ray_filter,
-                       double *ptr_bb_real, double *ptr_bb_imag) {
+int Run_RadarSimulator(t_Radar* ptr_radar_c, t_Targets* ptr_targets_c,
+                       int level, float density, int* ray_filter,
+                       double* ptr_bb_real, double* ptr_bb_imag) {
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_bb_real, ptr_bb_imag);
 
   // Finalize point and target initialization before simulation
@@ -1614,9 +1641,9 @@ int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
     rsv::Vec2<int> ray_filter_vec2 =
         rsv::Vec2<int>(ray_filter[0], ray_filter[1]);
 
-    RadarSimErrorCode error_code = scene_c.Run(
-        ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_targets, level, density,
-        ray_filter_vec2, false, "", false);
+    RadarSimErrorCode error_code =
+        scene_c.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_targets, level,
+                    density, ray_filter_vec2, false, "", false);
     if (error_code != SUCCESS) {
       return static_cast<int>(error_code);
     }
@@ -1638,10 +1665,10 @@ int Run_RadarSimulator(t_Radar *ptr_radar_c, t_Targets *ptr_targets_c,
  * @note Buffer size: [num_pulses × num_rx_channels × samples_per_pulse]
  * @warning Buffers must match victim radar's baseband dimensions.
  */
-void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
-                               t_Radar *ptr_interf_radar_c,
-                               double *ptr_interf_real,
-                               double *ptr_interf_imag) {
+void Run_InterferenceSimulator(t_Radar* ptr_radar_c,
+                               t_Radar* ptr_interf_radar_c,
+                               double* ptr_interf_real,
+                               double* ptr_interf_imag) {
   InterferenceSimulator<double, float> simc =
       InterferenceSimulator<double, float>();
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
@@ -1669,22 +1696,30 @@ void Run_InterferenceSimulator(t_Radar *ptr_radar_c,
  * @param[in] density Ray density for Physical Optics (rays per wavelength²)
  * @param[out] rcs_result Output array for RCS values (m²) - pre-allocated
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid frequency, density, or
+ * direction count
+ *         - RADARSIM_ERROR_MEMORY_ALLOCATION: memory allocation failed
+ *         - RADARSIM_ERROR_EXCEPTION: unexpected error
  *
  * @note Higher density = more accurate but slower computation.
  */
-int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
-                     double *obs_dir_array, int num_directions,
-                     double *inc_polar_real, double *inc_polar_imag,
-                     double *obs_polar_real, double *obs_polar_imag,
-                     double frequency, double density, double *rcs_result) {
-  // Input validation
+int Run_RcsSimulator(t_Targets* ptr_targets_c, double* inc_dir_array,
+                     double* obs_dir_array, int num_directions,
+                     double* inc_polar_real, double* inc_polar_imag,
+                     double* obs_polar_real, double* obs_polar_imag,
+                     double frequency, double density, double* rcs_result) {
+  // Input validation - null pointer checks
   if (ptr_targets_c == nullptr || inc_dir_array == nullptr ||
-      obs_dir_array == nullptr || num_directions <= 0 ||
-      inc_polar_real == nullptr || inc_polar_imag == nullptr ||
-      obs_polar_real == nullptr || obs_polar_imag == nullptr ||
-      frequency <= 0 || density <= 0 || rcs_result == nullptr) {
-    return 1;
+      obs_dir_array == nullptr || inc_polar_real == nullptr ||
+      inc_polar_imag == nullptr || obs_polar_real == nullptr ||
+      obs_polar_imag == nullptr || rcs_result == nullptr) {
+    return RADARSIMCPP_ERROR_NULL_POINTER;
+  }
+  // Parameter validation
+  if (num_directions <= 0 || frequency <= 0 || density <= 0) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
   }
 
   try {
@@ -1738,25 +1773,25 @@ int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
       rcs_result[i] = rcs_values[i];
     }
 
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::bad_alloc& e) {
     // Memory allocation failed
     std::cerr << "Run_RcsSimulator: Memory allocation failed: " << e.what()
               << std::endl;
-    return 1;
-  } catch (const std::invalid_argument &e) {
+    return RADARSIMCPP_ERROR_MEMORY_ALLOCATION;
+  } catch (const std::invalid_argument& e) {
     // Invalid parameters passed to simulator
     std::cerr << "Run_RcsSimulator: Invalid argument: " << e.what()
               << std::endl;
-    return 1;
-  } catch (const std::exception &e) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
+  } catch (const std::exception& e) {
     // Any other standard exception
     std::cerr << "Run_RcsSimulator: Unexpected error: " << e.what()
               << std::endl;
-    return 1;
+    return RADARSIMCPP_ERROR_EXCEPTION;
   } catch (...) {
     // Any non-standard exception
     std::cerr << "Run_RcsSimulator: Unknown error occurred" << std::endl;
-    return 1;
+    return RADARSIMCPP_ERROR_EXCEPTION;
   }
 
   return 0;
@@ -1778,24 +1813,31 @@ int Run_RcsSimulator(t_Targets *ptr_targets_c, double *inc_dir_array,
  * @param[in] max_points Maximum number of points to return
  * @param[out] actual_points Actual number of points found and returned
  *
- * @return int 0 for success, 1 for failure
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid num_rays or max_points
+ *         - RADARSIM_ERROR_MEMORY_ALLOCATION: memory allocation failed
+ *         - RADARSIM_ERROR_EXCEPTION: unexpected error
  *
  * @note φ=0 is +X axis, θ=0 is +Z axis. Only first-surface intersections
  * recorded.
  * @warning Output arrays must be allocated for at least max_points elements.
  */
-int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
-                       double *theta_array, int num_rays,
-                       double *sensor_location, double *cloud_points,
-                       double *cloud_distances, double *cloud_intensities,
-                       int max_points, int *actual_points) {
-  // Input validation
+int Run_LidarSimulator(t_Targets* ptr_targets_c, double* phi_array,
+                       double* theta_array, int num_rays,
+                       double* sensor_location, double* cloud_points,
+                       double* cloud_distances, double* cloud_intensities,
+                       int max_points, int* actual_points) {
+  // Input validation - null pointer checks
   if (ptr_targets_c == nullptr || phi_array == nullptr ||
-      theta_array == nullptr || num_rays <= 0 || sensor_location == nullptr ||
+      theta_array == nullptr || sensor_location == nullptr ||
       cloud_points == nullptr || cloud_distances == nullptr ||
-      cloud_intensities == nullptr || max_points <= 0 ||
-      actual_points == nullptr) {
-    return 1;
+      cloud_intensities == nullptr || actual_points == nullptr) {
+    return RADARSIMCPP_ERROR_NULL_POINTER;
+  }
+  // Parameter validation
+  if (num_rays <= 0 || max_points <= 0) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
   }
 
   try {
@@ -1831,7 +1873,7 @@ int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
     int point_count = 0;
     for (size_t i = 0; i < lidar_sim.cloud_.size() && point_count < max_points;
          i++) {
-      const auto &ray = lidar_sim.cloud_[i];
+      const auto& ray = lidar_sim.cloud_[i];
 
       // Calculate hit point coordinates using the final location from the ray
       // arrays The final hit point is at location_[reflections_] and uses array
@@ -1856,25 +1898,25 @@ int Run_LidarSimulator(t_Targets *ptr_targets_c, double *phi_array,
     // Return actual number of points found
     *actual_points = point_count;
 
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::bad_alloc& e) {
     // Memory allocation failed
     std::cerr << "Run_LidarSimulator: Memory allocation failed: " << e.what()
               << std::endl;
-    return 1;
-  } catch (const std::invalid_argument &e) {
+    return RADARSIMCPP_ERROR_MEMORY_ALLOCATION;
+  } catch (const std::invalid_argument& e) {
     // Invalid parameters passed to simulator
     std::cerr << "Run_LidarSimulator: Invalid argument: " << e.what()
               << std::endl;
-    return 1;
-  } catch (const std::exception &e) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
+  } catch (const std::exception& e) {
     // Any other standard exception
     std::cerr << "Run_LidarSimulator: Unexpected error: " << e.what()
               << std::endl;
-    return 1;
+    return RADARSIMCPP_ERROR_EXCEPTION;
   } catch (...) {
     // Any non-standard exception
     std::cerr << "Run_LidarSimulator: Unknown error occurred" << std::endl;
-    return 1;
+    return RADARSIMCPP_ERROR_EXCEPTION;
   }
 
   return 0;
