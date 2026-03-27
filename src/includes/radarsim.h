@@ -95,8 +95,10 @@ EXPORTED void Get_Version(int version[3]);
  * default)
  * @param[in] product Expected product name for validation (NULL or empty to
  * skip product check)
+ * @return int 1 if licensed (either already licensed or newly set), 0 if not
+ * licensed
  */
-EXPORTED void Set_License(const char* license_file_path, const char* product);
+EXPORTED int Set_License(const char* license_file_path, const char* product);
 
 /**
  * @brief Set license from multiple license files
@@ -105,9 +107,11 @@ EXPORTED void Set_License(const char* license_file_path, const char* product);
  * @param[in] num_files Number of license file paths
  * @param[in] product Expected product name for validation (NULL or empty to
  * skip product check)
+ * @return int 1 if licensed (either already licensed or newly set), 0 if not
+ * licensed
  */
-EXPORTED void Set_License_Files(const char** license_file_paths, int num_files,
-                                const char* product);
+EXPORTED int Set_License_Files(const char** license_file_paths, int num_files,
+                               const char* product);
 
 /**
  * @brief Check if a valid license is active

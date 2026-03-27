@@ -424,11 +424,17 @@ void Get_Version(int version[3]) {
  * default)
  * @param[in] product Expected product name for validation (NULL or empty to
  * skip product check)
+ * @return int 1 if licensed (either already licensed or newly set), 0 if not
+ * licensed
  */
-void Set_License(const char* license_file_path, const char* product) {
+int Set_License(const char* license_file_path, const char* product) {
+  if (LicenseManager::GetInstance().IsLicensed()) {
+    return 1;
+  }
   std::string path = (license_file_path != nullptr) ? license_file_path : "";
   std::string prod = (product != nullptr) ? product : "";
   LicenseManager::GetInstance().SetLicense(path, prod);
+  return LicenseManager::GetInstance().IsLicensed() ? 1 : 0;
 }
 
 /**
@@ -438,9 +444,14 @@ void Set_License(const char* license_file_path, const char* product) {
  * @param[in] num_files Number of license file paths
  * @param[in] product Expected product name for validation (NULL or empty to
  * skip product check)
+ * @return int 1 if licensed (either already licensed or newly set), 0 if not
+ * licensed
  */
-void Set_License_Files(const char** license_file_paths, int num_files,
-                       const char* product) {
+int Set_License_Files(const char** license_file_paths, int num_files,
+                      const char* product) {
+  if (LicenseManager::GetInstance().IsLicensed()) {
+    return 1;
+  }
   std::vector<std::string> paths;
   if (license_file_paths != nullptr && num_files > 0) {
     paths.reserve(num_files);
@@ -451,6 +462,7 @@ void Set_License_Files(const char** license_file_paths, int num_files,
   }
   std::string prod = (product != nullptr) ? product : "";
   LicenseManager::GetInstance().SetLicense(paths, prod);
+  return LicenseManager::GetInstance().IsLicensed() ? 1 : 0;
 }
 
 /**
