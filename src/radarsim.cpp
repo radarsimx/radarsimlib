@@ -59,6 +59,7 @@
 #include "simulator_interference.hpp"
 #include "simulator_lidar.hpp"
 #include "simulator_mesh.hpp"
+#include "simulator_noise.hpp"
 #include "simulator_point.hpp"
 #include "simulator_rcs.hpp"
 #include "snapshot.hpp"
@@ -724,6 +725,107 @@ t_Transmitter* Create_Transmitter_PhaseNoise(
     return nullptr;
   } catch (...) {
     std::cerr << "Create_Transmitter_PhaseNoise: Unknown error occurred"
+              << std::endl;
+    delete ptr_tx_c;
+    return nullptr;
+  }
+
+  return ptr_tx_c;
+}
+
+/**
+ * @brief Create a Transmitter object with SSB phase noise specification
+ *
+ * @param[in] freq Frequency vector (Hz) - must not be NULL
+ * @param[in] freq_time Timestamp vector for frequency samples (s) - must not be
+ * NULL
+ * @param[in] waveform_size Length of freq and freq_time arrays - must be > 0
+ * @param[in] freq_offset Frequency offset per pulse (Hz) - must not be NULL
+ * @param[in] pulse_start_time Pulse start time vector (s) - must not be NULL
+ * @param[in] num_pulses Number of pulses - must be > 0
+ * @param[in] tx_power Transmitter power (dBm)
+ * @param[in] pn_freq Phase noise frequency offset vector (Hz) - must not be
+ * NULL
+ * @param[in] pn_power Phase noise power density vector (dBc/Hz) - must not be
+ * NULL
+ * @param[in] pn_size Length of pn_freq and pn_power arrays - must be > 0
+ * @param[in] pn_fs Phase noise sampling rate (Hz)
+ * @param[in] pn_num_samples Number of phase noise samples to generate
+ * @param[in] pn_seed Random seed for phase noise generation (0 for random)
+ * @param[in] pn_validation Enable phase noise validation mode
+ *
+ * @return t_Transmitter* Pointer to Transmitter object, NULL on failure
+ */
+t_Transmitter* Create_Transmitter_SSBPhaseNoise(
+    double* freq, double* freq_time, int waveform_size, double* freq_offset,
+    double* pulse_start_time, int num_pulses, float tx_power, double* pn_freq,
+    double* pn_power, int pn_size, double pn_fs, int pn_num_samples,
+    unsigned long long pn_seed, bool pn_validation) {
+  // Input validation
+  if (freq == nullptr || freq_time == nullptr || waveform_size <= 0) {
+    return nullptr;
+  }
+  if (freq_offset == nullptr || pulse_start_time == nullptr ||
+      num_pulses <= 0) {
+    return nullptr;
+  }
+  if (pn_freq == nullptr || pn_power == nullptr || pn_size <= 0) {
+    return nullptr;
+  }
+  if (pn_fs <= 0 || pn_num_samples <= 0) {
+    return nullptr;
+  }
+
+  t_Transmitter* ptr_tx_c = nullptr;
+
+  try {
+    ptr_tx_c = new t_Transmitter();
+
+    if (ptr_tx_c == nullptr) {
+      return nullptr;
+    }
+
+    // Convert C arrays to C++ vectors
+    std::vector<double> freq_vt(freq, freq + waveform_size);
+    std::vector<double> freq_time_vt(freq_time, freq_time + waveform_size);
+    std::vector<double> freq_offset_vt(freq_offset, freq_offset + num_pulses);
+    std::vector<double> pulse_start_time_vt(pulse_start_time,
+                                            pulse_start_time + num_pulses);
+    std::vector<double> pn_freq_vt(pn_freq, pn_freq + pn_size);
+    std::vector<double> pn_power_vt(pn_power, pn_power + pn_size);
+
+    // Create the Transmitter object with SSB phase noise specification
+    ptr_tx_c->_ptr_transmitter = std::make_shared<Transmitter<double, float>>(
+        tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt,
+        pn_freq_vt, pn_power_vt, pn_fs, pn_num_samples, pn_seed,
+        pn_validation);
+
+    // Register for automatic cleanup
+#ifdef RADARSIM_SIMPLE_CLEANUP
+    AutoCleanupRegistry::register_object(ptr_tx_c, cleanup_transmitter);
+#else
+    AutoCleanupRegistry::register_object(ptr_tx_c,
+                                         [ptr_tx_c]() { delete ptr_tx_c; });
+#endif
+
+  } catch (const std::bad_alloc& e) {
+    std::cerr
+        << "Create_Transmitter_SSBPhaseNoise: Memory allocation failed: "
+        << e.what() << std::endl;
+    delete ptr_tx_c;
+    return nullptr;
+  } catch (const std::invalid_argument& e) {
+    std::cerr << "Create_Transmitter_SSBPhaseNoise: Invalid argument: "
+              << e.what() << std::endl;
+    delete ptr_tx_c;
+    return nullptr;
+  } catch (const std::exception& e) {
+    std::cerr << "Create_Transmitter_SSBPhaseNoise: Unexpected error: "
+              << e.what() << std::endl;
+    delete ptr_tx_c;
+    return nullptr;
+  } catch (...) {
+    std::cerr << "Create_Transmitter_SSBPhaseNoise: Unknown error occurred"
               << std::endl;
     delete ptr_tx_c;
     return nullptr;
@@ -1676,16 +1778,20 @@ int Run_RadarSimulator(t_Radar* ptr_radar_c, t_Targets* ptr_targets_c,
  *
  * @note Buffer size: [num_pulses × num_rx_channels × samples_per_pulse]
  * @warning Buffers must match victim radar's baseband dimensions.
+ *
+ * @return int 0 for success, non-zero RadarSimErrorCode on failure
  */
-void Run_InterferenceSimulator(t_Radar* ptr_radar_c,
-                               t_Radar* ptr_interf_radar_c,
-                               double* ptr_interf_real,
-                               double* ptr_interf_imag) {
+int Run_InterferenceSimulator(t_Radar* ptr_radar_c,
+                              t_Radar* ptr_interf_radar_c,
+                              double* ptr_interf_real,
+                              double* ptr_interf_imag) {
   InterferenceSimulator<double, float> simc =
       InterferenceSimulator<double, float>();
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
-  simc.Run(ptr_radar_c->_ptr_radar, ptr_interf_radar_c->_ptr_radar);
+  RadarSimErrorCode error_code =
+      simc.Run(ptr_radar_c->_ptr_radar, ptr_interf_radar_c->_ptr_radar);
   ptr_radar_c->_ptr_radar->SyncBaseband();
+  return static_cast<int>(error_code);
 }
 
 /**
@@ -1774,11 +1880,15 @@ int Run_RcsSimulator(t_Targets* ptr_targets_c, double* inc_dir_array,
         std::complex<double>(obs_polar_real[2], obs_polar_imag[2]));
 
     // Run RCS simulation
-    std::vector<double> rcs_values =
+    RadarSimErrorCode error_code =
         rcs_sim.Run(ptr_targets_c->_ptr_targets, inc_dir_vect, obs_dir_vect,
                     inc_polar, obs_polar, frequency, density);
+    if (error_code != SUCCESS) {
+      return static_cast<int>(error_code);
+    }
 
     // Copy results back to C array
+    const std::vector<double>& rcs_values = rcs_sim.GetRcs();
     for (size_t i = 0;
          i < rcs_values.size() && i < static_cast<size_t>(num_directions);
          i++) {
@@ -1932,6 +2042,60 @@ int Run_LidarSimulator(t_Targets* ptr_targets_c, double* phi_array,
   }
 
   return 0;
+}
+
+/**
+ * @brief Execute receiver noise simulation
+ *
+ * @param[in] ptr_radar_c Pointer to the radar system
+ * @param[in] noise_level Noise level (linear scale)
+ * @param[in] is_complex Whether the noise is complex (true) or real (false)
+ * @param[in] timestamps Timestamp array for noise generation
+ * @param[in] ts_channel_size Number of channels in timestamps
+ * @param[in] ts_pulse_size Number of pulses in timestamps
+ * @param[in] ts_sample_size Number of samples in timestamps
+ * @param[out] noise_real Real part of noise output buffer (pre-allocated)
+ * @param[out] noise_imag Imaginary part of noise output buffer (pre-allocated)
+ * @param[in] seed Random seed for noise generation (0 for random)
+ *
+ * @return int 0 for success, non-zero RadarSimErrorCode on failure
+ */
+int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
+                       bool is_complex, const double* timestamps,
+                       int ts_channel_size, int ts_pulse_size,
+                       int ts_sample_size, double* noise_real,
+                       double* noise_imag, unsigned long long seed) {
+  // Input validation
+  if (ptr_radar_c == nullptr || noise_real == nullptr ||
+      noise_imag == nullptr) {
+    return RADARSIMCPP_ERROR_NULL_POINTER;
+  }
+  if (noise_level < 0) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
+  }
+
+  try {
+    NoiseSimulator<double, float> noise_sim;
+
+    RadarSimErrorCode error_code = noise_sim.Run(
+        ptr_radar_c->_ptr_radar, noise_level, is_complex, timestamps,
+        ts_channel_size, ts_pulse_size, ts_sample_size, noise_real, noise_imag,
+        seed);
+
+    return static_cast<int>(error_code);
+
+  } catch (const std::bad_alloc& e) {
+    std::cerr << "Run_NoiseSimulator: Memory allocation failed: " << e.what()
+              << std::endl;
+    return RADARSIMCPP_ERROR_MEMORY_ALLOCATION;
+  } catch (const std::exception& e) {
+    std::cerr << "Run_NoiseSimulator: Unexpected error: " << e.what()
+              << std::endl;
+    return RADARSIMCPP_ERROR_EXCEPTION;
+  } catch (...) {
+    std::cerr << "Run_NoiseSimulator: Unknown error occurred" << std::endl;
+    return RADARSIMCPP_ERROR_EXCEPTION;
+  }
 }
 
 /*********************************************

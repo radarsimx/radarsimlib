@@ -377,3 +377,117 @@ TEST_F(TransmitterTest, UnlicensedChannelLimit) {
   EXPECT_NE(result, 0);
   EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 1);
 }
+
+/**
+ * @brief Test SSB phase noise transmitter creation with valid parameters
+ */
+TEST_F(TransmitterTest, CreateTransmitterSSBPhaseNoiseValid) {
+  // Setup SSB phase noise parameters
+  std::vector<double> pn_freq = {1e3, 10e3, 100e3, 1e6};
+  std::vector<double> pn_power = {-80.0, -90.0, -100.0, -110.0};
+  double pn_fs = 2e6;
+  int pn_num_samples = 1000;
+  unsigned long long pn_seed = 42;
+  bool pn_validation = false;
+
+  t_Transmitter* tx = Create_Transmitter_SSBPhaseNoise(
+      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
+      pn_power.data(), static_cast<int>(pn_freq.size()), pn_fs, pn_num_samples,
+      pn_seed, pn_validation);
+
+  EXPECT_NE(tx, nullptr);
+
+  if (tx != nullptr) {
+    Free_Transmitter(tx);
+  }
+}
+
+/**
+ * @brief Test SSB phase noise transmitter creation with null parameters
+ */
+TEST_F(TransmitterTest, CreateTransmitterSSBPhaseNoiseNullParams) {
+  std::vector<double> pn_freq = {1e3, 10e3};
+  std::vector<double> pn_power = {-80.0, -90.0};
+
+  // Test with null freq
+  t_Transmitter* tx = Create_Transmitter_SSBPhaseNoise(
+      nullptr, freq_time.data(), num_samples, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
+      pn_power.data(), 2, 2e6, 1000, 0, false);
+  EXPECT_EQ(tx, nullptr);
+
+  // Test with null pn_freq
+  tx = Create_Transmitter_SSBPhaseNoise(
+      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power, nullptr, pn_power.data(),
+      2, 2e6, 1000, 0, false);
+  EXPECT_EQ(tx, nullptr);
+
+  // Test with null pn_power
+  tx = Create_Transmitter_SSBPhaseNoise(
+      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(), nullptr, 2,
+      2e6, 1000, 0, false);
+  EXPECT_EQ(tx, nullptr);
+}
+
+/**
+ * @brief Test SSB phase noise transmitter creation with invalid parameters
+ */
+TEST_F(TransmitterTest, CreateTransmitterSSBPhaseNoiseInvalidParams) {
+  std::vector<double> pn_freq = {1e3, 10e3};
+  std::vector<double> pn_power = {-80.0, -90.0};
+
+  // Test with zero pn_size
+  t_Transmitter* tx = Create_Transmitter_SSBPhaseNoise(
+      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
+      pn_power.data(), 0, 2e6, 1000, 0, false);
+  EXPECT_EQ(tx, nullptr);
+
+  // Test with zero pn_fs
+  tx = Create_Transmitter_SSBPhaseNoise(
+      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
+      pn_power.data(), 2, 0.0, 1000, 0, false);
+  EXPECT_EQ(tx, nullptr);
+
+  // Test with zero pn_num_samples
+  tx = Create_Transmitter_SSBPhaseNoise(
+      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
+      pn_power.data(), 2, 2e6, 0, 0, false);
+  EXPECT_EQ(tx, nullptr);
+
+  // Test with zero waveform_size
+  tx = Create_Transmitter_SSBPhaseNoise(
+      freq.data(), freq_time.data(), 0, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
+      pn_power.data(), 2, 2e6, 1000, 0, false);
+  EXPECT_EQ(tx, nullptr);
+}
+
+/**
+ * @brief Test SSB phase noise transmitter with channel addition
+ */
+TEST_F(TransmitterTest, SSBPhaseNoiseAddChannel) {
+  std::vector<double> pn_freq = {1e3, 10e3, 100e3};
+  std::vector<double> pn_power = {-80.0, -90.0, -100.0};
+
+  valid_transmitter = Create_Transmitter_SSBPhaseNoise(
+      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
+      pn_power.data(), static_cast<int>(pn_freq.size()), 2e6, 1000, 42, false);
+  ASSERT_NE(valid_transmitter, nullptr);
+
+  // Add a channel to the SSB phase noise transmitter
+  int result = Add_Txchannel(
+      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
+      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
+      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
+      pulse_mod_imag.data(), delay, grid, valid_transmitter);
+
+  EXPECT_EQ(result, 0);
+  EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 1);
+}

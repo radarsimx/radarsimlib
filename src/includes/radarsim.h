@@ -69,6 +69,8 @@ extern "C" {
 #define RADARSIM_ERROR_EXCEPTION 5
 /** @brief Ray count exceeds grid capacity */
 #define RADARSIM_ERROR_TOO_MANY_RAYS_PER_GRID 6
+/** @brief CUDA device query failed */
+#define RADARSIM_ERROR_CUDA_DEVICE_QUERY 7
 
 /*********************************************
  *
@@ -213,6 +215,37 @@ EXPORTED t_Transmitter* Create_Transmitter_PhaseNoise(
     double* freq, double* freq_time, int waveform_size, double* freq_offset,
     double* pulse_start_time, int num_pulses, float tx_power,
     double* phase_noise_real, double* phase_noise_imag, int phase_noise_size);
+
+/**
+ * @brief Create a Transmitter object with SSB phase noise specification
+ *
+ * @param[in] freq Frequency vector (Hz)
+ * @param[in] freq_time Timestamp vector for frequency samples (s)
+ * @param[in] waveform_size Length of freq and freq_time arrays
+ * @param[in] freq_offset Frequency offset per pulse (Hz)
+ *            The length of this array must be equal to `num_pulses`.
+ * @param[in] pulse_start_time Pulse start time vector (s)
+ *            The length of this array must be equal to `num_pulses`.
+ * @param[in] num_pulses Number of pulses
+ * @param[in] tx_power Transmitter power (dBm)
+ * @param[in] pn_freq Phase noise frequency offset vector (Hz)
+ * @param[in] pn_power Phase noise power density vector (dBc/Hz)
+ * @param[in] pn_size Length of pn_freq and pn_power arrays
+ * @param[in] pn_fs Phase noise sampling rate (Hz)
+ * @param[in] pn_num_samples Number of phase noise samples to generate
+ * @param[in] pn_seed Random seed for phase noise generation (0 for random)
+ * @param[in] pn_validation Enable phase noise validation mode
+ *
+ * @return t_Transmitter* Pointer to Transmitter object, NULL on failure
+ *
+ * @note Automatically registered for cleanup. Use Free_Transmitter() for manual
+ * cleanup.
+ */
+EXPORTED t_Transmitter* Create_Transmitter_SSBPhaseNoise(
+    double* freq, double* freq_time, int waveform_size, double* freq_offset,
+    double* pulse_start_time, int num_pulses, float tx_power, double* pn_freq,
+    double* pn_power, int pn_size, double pn_fs, int pn_num_samples,
+    unsigned long long pn_seed, bool pn_validation);
 
 /**
  * @brief Add a transmitter channel with antenna pattern and modulation
@@ -622,11 +655,13 @@ EXPORTED int Run_RadarSimulator(t_Radar* ptr_radar_c, t_Targets* ptr_targets_c,
  *
  * @note Buffer size: [num_pulses × num_rx_channels × samples_per_pulse]
  * @warning Buffers must match victim radar's baseband dimensions.
+ *
+ * @return int 0 for success, non-zero RadarSimErrorCode on failure
  */
-EXPORTED void Run_InterferenceSimulator(t_Radar* ptr_radar_c,
-                                        t_Radar* ptr_interf_radar_c,
-                                        double* ptr_interf_real,
-                                        double* ptr_interf_imag);
+EXPORTED int Run_InterferenceSimulator(t_Radar* ptr_radar_c,
+                                       t_Radar* ptr_interf_radar_c,
+                                       double* ptr_interf_real,
+                                       double* ptr_interf_imag);
 
 /**
  * @brief Execute Radar Cross Section (RCS) simulation using Physical Optics
@@ -696,6 +731,28 @@ EXPORTED int Run_LidarSimulator(t_Targets* ptr_targets_c, double* phi_array,
                                 double* cloud_distances,
                                 double* cloud_intensities, int max_points,
                                 int* actual_points);
+
+/**
+ * @brief Execute receiver noise simulation
+ *
+ * @param[in] ptr_radar_c Pointer to the radar system
+ * @param[in] noise_level Noise level (linear scale)
+ * @param[in] is_complex Whether the noise is complex (true) or real (false)
+ * @param[in] timestamps Timestamp array for noise generation (pre-allocated)
+ * @param[in] ts_channel_size Number of channels in timestamps
+ * @param[in] ts_pulse_size Number of pulses in timestamps
+ * @param[in] ts_sample_size Number of samples in timestamps
+ * @param[out] noise_real Real part of noise output buffer (pre-allocated)
+ * @param[out] noise_imag Imaginary part of noise output buffer (pre-allocated)
+ * @param[in] seed Random seed for noise generation (0 for random)
+ *
+ * @return int 0 for success, non-zero RadarSimErrorCode on failure
+ */
+EXPORTED int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
+                                bool is_complex, const double* timestamps,
+                                int ts_channel_size, int ts_pulse_size,
+                                int ts_sample_size, double* noise_real,
+                                double* noise_imag, unsigned long long seed);
 
 #ifdef __cplusplus
 }
