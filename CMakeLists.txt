@@ -11,33 +11,6 @@ option(GTEST "Enable Google Test" OFF)
 option(CMAKE_CUDA_COMPILER_WORKS "Bypass CUDA compiler check" OFF)
 option(ENABLE_LICENSE "Enable license verification (requires mbedTLS)" OFF)
 
-# ==============================================================================
-# vcpkg Toolchain Detection (for Windows only - provides mbedTLS)
-# ==============================================================================
-# On Windows, vcpkg is used to provide mbedTLS for license verification
-if(WIN32 AND ENABLE_LICENSE AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    # Common vcpkg installation locations
-    set(VCPKG_SEARCH_PATHS
-        "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        "${CMAKE_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
-        "${CMAKE_SOURCE_DIR}/../vcpkg/scripts/buildsystems/vcpkg.cmake"
-        "${CMAKE_SOURCE_DIR}/../../vcpkg/scripts/buildsystems/vcpkg.cmake"
-    )
-
-    foreach(vcpkg_path ${VCPKG_SEARCH_PATHS})
-        if(EXISTS ${vcpkg_path})
-            set(CMAKE_TOOLCHAIN_FILE ${vcpkg_path} CACHE STRING "vcpkg toolchain file")
-            message(STATUS "Found vcpkg toolchain: ${vcpkg_path}")
-            break()
-        endif()
-    endforeach()
-
-    if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-        message(STATUS "vcpkg toolchain not found. Using system libraries.")
-        message(STATUS "To use vcpkg, set: -DCMAKE_TOOLCHAIN_FILE=path/to/vcpkg/scripts/buildsystems/vcpkg.cmake")
-    endif()
-endif()
-
 # Config for radarsimc
 project(radarsimc LANGUAGES CXX)
 
@@ -120,28 +93,38 @@ endfunction()
 setup_hdf5_for_platform()
 
 # Setup License Verification (optional)
+# mbedTLS is built from source via FetchContent to ensure static linking with
+# -fPIC on all platforms, avoiding runtime shared library dependencies.
 if(ENABLE_LICENSE)
-    message(STATUS "License verification enabled - searching for mbedTLS")
-    find_package(MbedTLS)
+    message(STATUS "License verification enabled - building mbedTLS from source")
 
-    if(MBEDTLS_FOUND)
-        message(STATUS "mbedTLS found - license verification will be available")
-        add_compile_definitions(RADARSIMCPP_ENABLE_LICENSE)
-    else()
-        message(FATAL_ERROR "mbedTLS not found but ENABLE_LICENSE is ON.\n"
-            "To install mbedTLS:\n"
-            "  Ubuntu/Debian: sudo apt-get install libmbedtls-dev\n"
-            "  macOS: brew install mbedtls\n"
-            "  Windows: vcpkg install mbedtls\n"
-            "Or disable license verification with -DENABLE_LICENSE=OFF")
-    endif()
+    include(FetchContent)
+
+    # Disable mbedTLS components we don't need
+    set(ENABLE_TESTING OFF CACHE BOOL "Disable mbedTLS tests" FORCE)
+    set(ENABLE_PROGRAMS OFF CACHE BOOL "Disable mbedTLS programs" FORCE)
+    set(GEN_FILES OFF CACHE BOOL "Disable mbedTLS file generation" FORCE)
+
+    # Build only static mbedTLS libraries
+    set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build static mbedTLS" FORCE)
+    set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Don't build shared mbedTLS" FORCE)
+
+    # Ensure PIC is enabled (required for linking static libs into shared lib)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+    FetchContent_Declare(
+        mbedtls
+        URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-4.1.0/mbedtls-4.1.0.tar.bz2
+    )
+    FetchContent_MakeAvailable(mbedtls)
+
+    add_compile_definitions(RADARSIMCPP_ENABLE_LICENSE)
+    message(STATUS "mbedTLS will be built from source with static linking")
 endif()
 
 # Collect source files
 if(GPU_BUILD)
-    enable_language(CUDA)
     file(GLOB SOURCES "./src/*.cu" "./src/*.cpp" "./src/radarsimcpp/src/*.cu" "./src/radarsimcpp/src/*.cpp")
-    set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE CUDA)
 else()
     file(GLOB SOURCES "./src/*.cpp" "./src/radarsimcpp/src/*.cpp")
 endif()
@@ -153,9 +136,8 @@ add_library(radarsimc SHARED ${SOURCES})
 target_include_directories(radarsimc PUBLIC ${HDF5_INCLUDE_DIR})
 
 # Link mbedTLS if license verification is enabled
-if(ENABLE_LICENSE AND MBEDTLS_FOUND)
-    target_include_directories(radarsimc PUBLIC ${MBEDTLS_INCLUDE_DIRS})
-    target_link_libraries(radarsimc PUBLIC ${MBEDTLS_LIBRARIES})
+if(ENABLE_LICENSE)
+    target_link_libraries(radarsimc PUBLIC mbedtls mbedx509 tfpsacrypto)
 
     # On Windows, mbedTLS entropy functions require bcrypt library
     if(WIN32)
@@ -164,7 +146,7 @@ if(ENABLE_LICENSE AND MBEDTLS_FOUND)
         target_link_options(radarsimc PUBLIC /NODEFAULTLIB:MSVCRTD)
     endif()
 
-    message(STATUS "License verification linked with mbedTLS")
+    message(STATUS "License verification linked with mbedTLS (static)")
 endif()
 
 # Link HDF5 libraries - use full paths for Linux, link directories for other platforms
@@ -189,16 +171,22 @@ endif()
 if(GPU_BUILD)
     message(STATUS "Building for GPU with CUDA support")
 
+    # Enable CUDA language
+    enable_language(CUDA)
+
     # Set CUDA properties
     set_target_properties(radarsimc PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES "75;80;86;87;89;90;100;103;110;120;121")
 
+    # Mark source files as CUDA
+    set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE CUDA)
+
     # Add CUDA includes path
     target_include_directories(radarsimc PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
     # Add CUDA-specific compile definitions
-    target_compile_definitions(radarsimc PRIVATE _CUDA_ _CUDATEST_)
+    target_compile_definitions(radarsimc PRIVATE _CUDA_)
 
     # Handle MSVC-specific linking
     if(MSVC)
