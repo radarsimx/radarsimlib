@@ -101,6 +101,11 @@ jobs:
           sub-packages: '["nvcc"]'
           linux-local-args: '["--toolkit", "--silent"]'
 
+      - name: Install CUDA cuRAND development headers
+        if: matrix.arch == 'gpu'
+        run: |
+          sudo apt-get install -y libcurand-dev-13-1
+
       - name: Cache build dependencies
         uses: actions/cache@v5
         with:
@@ -154,11 +159,6 @@ jobs:
             echo "CUDA lib directory not found"
           fi
           echo "::endgroup::"
-      
-      - name: Install mbedTLS
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libmbedtls-dev
 
       - name: Display build information
         run: |

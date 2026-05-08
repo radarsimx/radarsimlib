@@ -101,10 +101,6 @@ jobs:
           # Set up ccache
           ccache --set-config=max_size=2G
           ccache --set-config=cache_dir=~/.ccache
-      
-      - name: Install mbedTLS
-        run: |
-          brew install mbedtls
 
       - name: Display build information
         run: |
