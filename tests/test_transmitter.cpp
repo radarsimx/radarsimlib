@@ -331,7 +331,7 @@ TEST_F(TransmitterTest, FreeTransmitter) {
  */
 TEST_F(TransmitterTest, AutomaticCleanupControl) {
   // Test enabling automatic cleanup (should be enabled by default)
-//   Enable_Automatic_Cleanup(true);
+  //   Enable_Automatic_Cleanup(true);
 
   // Create a transmitter that will be automatically cleaned up
   t_Transmitter* tx = Create_Transmitter(
@@ -369,11 +369,11 @@ TEST_F(TransmitterTest, UnlicensedChannelLimit) {
   EXPECT_EQ(result, 0);
 
   // Second channel should fail (unlicensed limit: 1 channel)
-  result = Add_Txchannel(
-      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
-      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
-      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
-      pulse_mod_imag.data(), delay, grid, valid_transmitter);
+  result = Add_Txchannel(location, polar_real, polar_imag, phi, phi_ptn,
+                         phi_length, theta, theta_ptn, theta_length,
+                         antenna_gain, mod_t.data(), mod_var_real.data(),
+                         mod_var_imag.data(), mod_length, pulse_mod_real.data(),
+                         pulse_mod_imag.data(), delay, grid, valid_transmitter);
   EXPECT_NE(result, 0);
   EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 1);
 }

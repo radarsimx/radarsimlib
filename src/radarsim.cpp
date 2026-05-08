@@ -637,103 +637,6 @@ t_Transmitter* Create_Transmitter(double* freq, double* freq_time,
 }
 
 /**
- * @brief Create a Transmitter object with waveform parameters and phase noise
- *
- * @param[in] freq Frequency vector (Hz) - must not be NULL
- * @param[in] freq_time Timestamp vector for frequency samples (s) - must not be
- * NULL
- * @param[in] waveform_size Length of freq and freq_time arrays - must be > 0
- * @param[in] freq_offset Frequency offset per pulse (Hz) - must not be NULL
- * @param[in] pulse_start_time Pulse start time vector (s) - must not be NULL
- * @param[in] num_pulses Number of pulses - must be > 0
- * @param[in] tx_power Transmitter power (dBm)
- * @param[in] phase_noise_real Real part of phase noise vector - must not be
- * NULL
- * @param[in] phase_noise_imag Imaginary part of phase noise vector - must not
- * be NULL
- * @param[in] phase_noise_size Length of phase noise arrays - must be > 0
- *
- * @return t_Transmitter* Pointer to Transmitter object, NULL on failure
- */
-t_Transmitter* Create_Transmitter_PhaseNoise(
-    double* freq, double* freq_time, int waveform_size, double* freq_offset,
-    double* pulse_start_time, int num_pulses, float tx_power,
-    double* phase_noise_real, double* phase_noise_imag, int phase_noise_size) {
-  // Input validation
-  if (freq == nullptr || freq_time == nullptr || waveform_size <= 0) {
-    return nullptr;
-  }
-  if (freq_offset == nullptr || pulse_start_time == nullptr ||
-      num_pulses <= 0) {
-    return nullptr;
-  }
-  if (phase_noise_real == nullptr || phase_noise_imag == nullptr ||
-      phase_noise_size <= 0) {
-    return nullptr;
-  }
-
-  t_Transmitter* ptr_tx_c = nullptr;
-
-  try {
-    ptr_tx_c = new t_Transmitter();
-
-    if (ptr_tx_c == nullptr) {
-      return nullptr;
-    }
-
-    // Convert C arrays to C++ vectors
-    std::vector<double> freq_vt(freq, freq + waveform_size);
-    std::vector<double> freq_time_vt(freq_time, freq_time + waveform_size);
-    std::vector<double> freq_offset_vt(freq_offset, freq_offset + num_pulses);
-    std::vector<double> pulse_start_time_vt(pulse_start_time,
-                                            pulse_start_time + num_pulses);
-
-    std::vector<std::complex<double>> phase_noise_vt;
-    phase_noise_vt.reserve(phase_noise_size);
-    for (int idx = 0; idx < phase_noise_size; idx++) {
-      phase_noise_vt.push_back(
-          std::complex<double>(phase_noise_real[idx], phase_noise_imag[idx]));
-    }
-
-    // Create the Transmitter object with phase noise
-    ptr_tx_c->_ptr_transmitter = std::make_shared<Transmitter<double, float>>(
-        tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt,
-        phase_noise_vt);
-
-    // Register for automatic cleanup
-#ifdef RADARSIM_SIMPLE_CLEANUP
-    AutoCleanupRegistry::register_object(ptr_tx_c, cleanup_transmitter);
-#else
-    AutoCleanupRegistry::register_object(ptr_tx_c,
-                                         [ptr_tx_c]() { delete ptr_tx_c; });
-#endif
-
-  } catch (const std::bad_alloc& e) {
-    std::cerr << "Create_Transmitter_PhaseNoise: Memory allocation failed: "
-              << e.what() << std::endl;
-    delete ptr_tx_c;
-    return nullptr;
-  } catch (const std::invalid_argument& e) {
-    std::cerr << "Create_Transmitter_PhaseNoise: Invalid argument: " << e.what()
-              << std::endl;
-    delete ptr_tx_c;
-    return nullptr;
-  } catch (const std::exception& e) {
-    std::cerr << "Create_Transmitter_PhaseNoise: Unexpected error: " << e.what()
-              << std::endl;
-    delete ptr_tx_c;
-    return nullptr;
-  } catch (...) {
-    std::cerr << "Create_Transmitter_PhaseNoise: Unknown error occurred"
-              << std::endl;
-    delete ptr_tx_c;
-    return nullptr;
-  }
-
-  return ptr_tx_c;
-}
-
-/**
  * @brief Create a Transmitter object with SSB phase noise specification
  *
  * @param[in] freq Frequency vector (Hz) - must not be NULL
@@ -797,8 +700,7 @@ t_Transmitter* Create_Transmitter_SSBPhaseNoise(
     // Create the Transmitter object with SSB phase noise specification
     ptr_tx_c->_ptr_transmitter = std::make_shared<Transmitter<double, float>>(
         tx_power, freq_vt, freq_time_vt, freq_offset_vt, pulse_start_time_vt,
-        pn_freq_vt, pn_power_vt, pn_fs, pn_num_samples, pn_seed,
-        pn_validation);
+        pn_freq_vt, pn_power_vt, pn_fs, pn_num_samples, pn_seed, pn_validation);
 
     // Register for automatic cleanup
 #ifdef RADARSIM_SIMPLE_CLEANUP
@@ -809,9 +711,8 @@ t_Transmitter* Create_Transmitter_SSBPhaseNoise(
 #endif
 
   } catch (const std::bad_alloc& e) {
-    std::cerr
-        << "Create_Transmitter_SSBPhaseNoise: Memory allocation failed: "
-        << e.what() << std::endl;
+    std::cerr << "Create_Transmitter_SSBPhaseNoise: Memory allocation failed: "
+              << e.what() << std::endl;
     delete ptr_tx_c;
     return nullptr;
   } catch (const std::invalid_argument& e) {
@@ -1781,8 +1682,7 @@ int Run_RadarSimulator(t_Radar* ptr_radar_c, t_Targets* ptr_targets_c,
  *
  * @return int 0 for success, non-zero RadarSimErrorCode on failure
  */
-int Run_InterferenceSimulator(t_Radar* ptr_radar_c,
-                              t_Radar* ptr_interf_radar_c,
+int Run_InterferenceSimulator(t_Radar* ptr_radar_c, t_Radar* ptr_interf_radar_c,
                               double* ptr_interf_real,
                               double* ptr_interf_imag) {
   InterferenceSimulator<double, float> simc =
@@ -1989,7 +1889,11 @@ int Run_LidarSimulator(t_Targets* ptr_targets_c, double* phi_array,
                               static_cast<float>(sensor_location[2]));
 
     // Run LiDAR simulation
-    lidar_sim.Run(ptr_targets_c->_ptr_targets, phi_vect, theta_vect, location);
+    RadarSimErrorCode lidar_error = lidar_sim.Run(
+        ptr_targets_c->_ptr_targets, phi_vect, theta_vect, location);
+    if (lidar_error != SUCCESS) {
+      return static_cast<int>(lidar_error);
+    }
 
     // Extract results from point cloud
     int point_count = 0;
@@ -2077,10 +1981,10 @@ int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
   try {
     NoiseSimulator<double, float> noise_sim;
 
-    RadarSimErrorCode error_code = noise_sim.Run(
-        ptr_radar_c->_ptr_radar, noise_level, is_complex, timestamps,
-        ts_channel_size, ts_pulse_size, ts_sample_size, noise_real, noise_imag,
-        seed);
+    RadarSimErrorCode error_code =
+        noise_sim.Run(ptr_radar_c->_ptr_radar, noise_level, is_complex,
+                      timestamps, ts_channel_size, ts_pulse_size,
+                      ts_sample_size, noise_real, noise_imag, seed);
 
     return static_cast<int>(error_code);
 

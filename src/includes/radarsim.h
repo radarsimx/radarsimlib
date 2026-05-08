@@ -72,6 +72,46 @@ extern "C" {
 /** @brief CUDA device query failed */
 #define RADARSIM_ERROR_CUDA_DEVICE_QUERY 7
 
+/** @brief cudaDeviceSynchronize failed in PointSimulator (standard path) */
+#define RADARSIM_ERROR_POINT_SIM_CUDA_SYNC 100
+/** @brief CUDA kernel launch failed in PointSimulator (standard path) */
+#define RADARSIM_ERROR_POINT_SIM_CUDA_KERNEL 101
+/** @brief cudaDeviceSynchronize failed in PointSimulator (per-frame phase noise path) */
+#define RADARSIM_ERROR_POINT_SIM_FRAME_CUDA_SYNC 102
+/** @brief CUDA kernel launch failed in PointSimulator (per-frame phase noise path) */
+#define RADARSIM_ERROR_POINT_SIM_FRAME_CUDA_KERNEL 103
+
+/** @brief cudaDeviceSynchronize failed in MeshSimulator::ProcessBaseband */
+#define RADARSIM_ERROR_MESH_SIM_BASEBAND_CUDA_SYNC 200
+/** @brief CUDA kernel launch failed in MeshSimulator::ProcessBaseband */
+#define RADARSIM_ERROR_MESH_SIM_BASEBAND_CUDA_KERNEL 201
+/** @brief cudaDeviceSynchronize failed in MeshSimulator::ProcessBackTracingBaseband */
+#define RADARSIM_ERROR_MESH_SIM_BACKTRACING_CUDA_SYNC 202
+/** @brief CUDA kernel launch failed in MeshSimulator::ProcessBackTracingBaseband */
+#define RADARSIM_ERROR_MESH_SIM_BACKTRACING_CUDA_KERNEL 203
+
+/** @brief cudaDeviceSynchronize failed in InterferenceSimulator::Run */
+#define RADARSIM_ERROR_INTERF_SIM_CUDA_SYNC 300
+/** @brief CUDA kernel launch failed in InterferenceSimulator::Run */
+#define RADARSIM_ERROR_INTERF_SIM_CUDA_KERNEL 301
+
+/** @brief CUDA kernel launch failed in LidarSimulator::Run */
+#define RADARSIM_ERROR_LIDAR_SIM_CUDA_KERNEL 400
+/** @brief cudaDeviceSynchronize failed in LidarSimulator::Run */
+#define RADARSIM_ERROR_LIDAR_SIM_CUDA_SYNC 401
+
+/** @brief CUDA kernel launch failed in NoiseSimulator::Run */
+#define RADARSIM_ERROR_NOISE_SIM_CUDA_KERNEL 500
+/** @brief cudaDeviceSynchronize failed in NoiseSimulator::Run */
+#define RADARSIM_ERROR_NOISE_SIM_CUDA_SYNC 501
+
+/** @brief _Kernel_IsVisible launch failed in RcsSimulator::Run */
+#define RADARSIM_ERROR_RCS_SIM_CUDA_KERNEL_VISIBLE 600
+/** @brief _Kernel_RcsProcessing launch failed in RcsSimulator::Run */
+#define RADARSIM_ERROR_RCS_SIM_CUDA_KERNEL_RCS 601
+/** @brief cudaDeviceSynchronize failed in RcsSimulator::Run */
+#define RADARSIM_ERROR_RCS_SIM_CUDA_SYNC 602
+
 /*********************************************
  *
  *  Version Information
@@ -189,32 +229,6 @@ EXPORTED t_Transmitter* Create_Transmitter(double* freq, double* freq_time,
                                            double* freq_offset,
                                            double* pulse_start_time,
                                            int num_pulses, float tx_power);
-
-/**
- * @brief Create a Transmitter object with waveform parameters and phase noise
- *
- * @param[in] freq Frequency vector (Hz)
- * @param[in] freq_time Timestamp vector for frequency samples (s)
- * @param[in] waveform_size Length of freq and freq_time arrays
- * @param[in] freq_offset Frequency offset per pulse (Hz)
- *            The length of this array must be equal to `num_pulses`.
- * @param[in] pulse_start_time Pulse start time vector (s)
- *            The length of this array must be equal to `num_pulses`.
- * @param[in] num_pulses Number of pulses
- * @param[in] tx_power Transmitter power (dBm)
- * @param[in] phase_noise_real Real part of phase noise vector
- * @param[in] phase_noise_imag Imaginary part of phase noise vector
- * @param[in] phase_noise_size Length of phase noise arrays
- *
- * @return t_Transmitter* Pointer to Transmitter object, NULL on failure
- *
- * @note Automatically registered for cleanup. Use Free_Transmitter() for manual
- * cleanup.
- */
-EXPORTED t_Transmitter* Create_Transmitter_PhaseNoise(
-    double* freq, double* freq_time, int waveform_size, double* freq_offset,
-    double* pulse_start_time, int num_pulses, float tx_power,
-    double* phase_noise_real, double* phase_noise_imag, int phase_noise_size);
 
 /**
  * @brief Create a Transmitter object with SSB phase noise specification
