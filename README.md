@@ -13,33 +13,6 @@ This library serves as the C wrapper for RadarSimCpp, offering a C interface to 
 - **Thread-safe operations** with comprehensive error handling
 - **Cross-platform compatibility** (Windows, Linux)
 
-## Memory Management
-
-RadarSimLib includes **automatic memory management** with three compatibility modes:
-
-### Default Mode (Recommended)
-- Lock-free implementation using STL containers
-- Good balance of performance and compatibility
-- Suitable for most single-threaded and multi-threaded applications
-
-### Thread-Safe Mode
-- Adds mutex locking for complete thread safety
-- Use when multiple threads create/free objects simultaneously
-- Enable with: `cmake .. -DRADARSIM_THREAD_SAFE=ON`
-
-### Simple Mode (Maximum Compatibility)
-- C-style arrays, no STL dependencies, no mutex
-- Ideal for embedded systems or applications with strict requirements
-- Enable with: `cmake .. -DRADARSIM_SIMPLE_CLEANUP=ON`
-
-**Key Benefits:**
-- Objects created with `Create_*` functions are automatically registered for cleanup
-- Manual cleanup with `Free_*` functions is still recommended and will unregister objects
-- Automatic cleanup occurs when the DLL/shared library is unloaded
-- Same API works across all modes - only internal implementation changes
-
-See [COMPILATION_OPTIONS.md](COMPILATION_OPTIONS.md) for detailed configuration guide.
-
 ## Build
 
 **Building `RadarSimLib` requires to access the source code of `RadarSimCpp`.**
@@ -47,23 +20,35 @@ See [COMPILATION_OPTIONS.md](COMPILATION_OPTIONS.md) for detailed configuration 
 - Windows CPU
 
 ```batch
-build_win.bat --arch=cpu
+build.bat --arch=cpu
 ```
 
 - Windows GPU
 
 ```batch
-build_win.bat --arch=gpu
+build.bat --arch=gpu
 ```
 
-- Linux CPU
+- Windows CPU with license verification
 
-```bash
-./build_linux.sh --arch=cpu
+```batch
+build.bat --arch=cpu --license=on
 ```
 
-- Linux GPU
+- Linux / macOS CPU
 
 ```bash
-./build_linux.sh --arch=gpu
+./build.sh --arch=cpu
+```
+
+- Linux / macOS GPU
+
+```bash
+./build.sh --arch=gpu
+```
+
+- Linux / macOS CPU with license verification
+
+```bash
+./build.sh --arch=cpu --license=on
 ```
