@@ -275,7 +275,9 @@ int main() {
                              mesh_rotation_rate.data(), 1.0f,
                              0.0f,        // Relative permittivity (no loss)
                              1.0f, 0.0f,  // Relative permeability (no loss)
-                             false,       // Not ground
+                             false,       // skip_diffusion
+                             0.0f,        // density (use global)
+                             false,       // environment
                              targets);
     if (result != 0) {
       throw std::runtime_error("Failed to add mesh target");
