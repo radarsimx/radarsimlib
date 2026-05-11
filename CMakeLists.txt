@@ -143,7 +143,9 @@ if(ENABLE_LICENSE)
     if(WIN32)
         target_link_libraries(radarsimc PUBLIC bcrypt)
         # Suppress MSVCRTD conflict warning when mixing debug/release libs
-        target_link_options(radarsimc PUBLIC /NODEFAULTLIB:MSVCRTD)
+        # Use LINK_FLAGS property instead of target_link_options to ensure the flag
+        # is placed in the VS linker section only and not passed to cl.exe
+        set_target_properties(radarsimc PROPERTIES LINK_FLAGS "/NODEFAULTLIB:MSVCRTD")
     endif()
 
     message(STATUS "License verification linked with mbedTLS (static)")
