@@ -246,7 +246,7 @@ int main() {
         200.0f, 50.0f, 1.5f};  // 200m range, 50m cross-range
     std::vector<float> target2_speed = {0.0f, 0.0f, 0.0f};  // Moving laterally
     float target2_rcs = 5.0f;                               // 5 dBsm RCS
-    float target2_phase = M_PI / 4;
+    float target2_phase = (float)(M_PI / 4);
 
     result = Add_Point_Target(target2_location.data(), target2_speed.data(),
                               target2_rcs, target2_phase, targets);
