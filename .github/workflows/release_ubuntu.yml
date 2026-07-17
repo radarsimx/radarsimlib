@@ -104,7 +104,7 @@ jobs:
       - name: Install CUDA cuRAND development headers
         if: matrix.arch == 'gpu'
         run: |
-          sudo apt-get install -y libcurand-dev-13-1
+          sudo apt-get install -y libcurand-dev-13-3
 
       - name: Cache build dependencies
         uses: actions/cache@v5
