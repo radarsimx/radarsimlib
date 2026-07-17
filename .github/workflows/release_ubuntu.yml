@@ -96,7 +96,7 @@ jobs:
         if: matrix.arch == 'gpu'
         uses: MZWNET/cuda-toolkit@master
         with:
-          cuda: "13.3.1"
+          cuda: "13.3.0"
           method: "network"
           sub-packages: '["nvcc"]'
           linux-local-args: '["--toolkit", "--silent"]'
