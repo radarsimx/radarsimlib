@@ -83,6 +83,20 @@ jobs:
             cxx_compiler: g++-13
             ubuntu_version: "24"
             artifact_name: radarsimlib_ubuntu24_x86_64_gpu
+          # Ubuntu 26.04 CPU build with license
+          - os: ubuntu-26.04
+            arch: cpu
+            c_compiler: gcc-15
+            cxx_compiler: g++-15
+            ubuntu_version: "26"
+            artifact_name: radarsimlib_ubuntu26_x86_64_cpu
+          # Ubuntu 26.04 GPU build with license
+          - os: ubuntu-26.04
+            arch: gpu
+            c_compiler: gcc-15
+            cxx_compiler: g++-15
+            ubuntu_version: "26"
+            artifact_name: radarsimlib_ubuntu26_x86_64_gpu
 
     steps:
       - name: Checkout repository
