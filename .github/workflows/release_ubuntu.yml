@@ -7,10 +7,12 @@ name: Build Ubuntu Libraries
 # both CPU-only and CUDA GPU-accelerated builds.
 #
 # Build Matrix:
-# - Ubuntu 22.04 & 24.04: GCC compiler, 4 builds (2 versions × 2 architectures with license enabled)
+# - Defined once, as JSON, in the `setup` job's "Define build matrix" step.
+#   The `build`, `pack-artifacts`, and `build-summary` jobs all consume it via
+#   job outputs, so adding/removing an Ubuntu version or architecture only
+#   requires editing that one step — no other job needs to change.
 # - Architectures: CPU (x86_64), GPU (CUDA)
 # - All builds: License enabled (license=on)
-# - Total builds: 4
 #
 # Features:
 # - Comprehensive caching (apt, ccache)
@@ -29,8 +31,8 @@ name: Build Ubuntu Libraries
 # Triggers:
 # - Tag pushes (release events)
 # - Manual workflow dispatch
-# - Push to master branch
-# - Pull requests to master branch
+# - Push to main branch
+# - Pull requests to main branch
 
 on:
   push:
@@ -48,55 +50,36 @@ env:
   CCACHE_DIR: ~/.ccache
 
 jobs:
+  # Single source of truth for the build matrix. Every other job reads this
+  # instead of hardcoding Ubuntu versions/architectures.
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Define build matrix
+        id: set-matrix
+        run: |
+          cat > matrix.json << 'EOF'
+          [
+            { "os": "ubuntu-22.04", "arch": "cpu", "c_compiler": "gcc-11", "cxx_compiler": "g++-11", "ubuntu_version": "22", "artifact_name": "radarsimlib_ubuntu22_x86_64_cpu" },
+            { "os": "ubuntu-22.04", "arch": "gpu", "c_compiler": "gcc-11", "cxx_compiler": "g++-11", "ubuntu_version": "22", "artifact_name": "radarsimlib_ubuntu22_x86_64_gpu" },
+            { "os": "ubuntu-24.04", "arch": "cpu", "c_compiler": "gcc-13", "cxx_compiler": "g++-13", "ubuntu_version": "24", "artifact_name": "radarsimlib_ubuntu24_x86_64_cpu" },
+            { "os": "ubuntu-24.04", "arch": "gpu", "c_compiler": "gcc-13", "cxx_compiler": "g++-13", "ubuntu_version": "24", "artifact_name": "radarsimlib_ubuntu24_x86_64_gpu" },
+            { "os": "ubuntu-26.04", "arch": "cpu", "c_compiler": "gcc-15", "cxx_compiler": "g++-15", "ubuntu_version": "26", "artifact_name": "radarsimlib_ubuntu26_x86_64_cpu" },
+            { "os": "ubuntu-26.04", "arch": "gpu", "c_compiler": "gcc-15", "cxx_compiler": "g++-15", "ubuntu_version": "26", "artifact_name": "radarsimlib_ubuntu26_x86_64_gpu" }
+          ]
+          EOF
+          echo "matrix=$(jq -c . matrix.json)" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: setup
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Ubuntu 22.04 CPU build with license
-          - os: ubuntu-22.04
-            arch: cpu
-            c_compiler: gcc-11
-            cxx_compiler: g++-11
-            ubuntu_version: "22"
-            artifact_name: radarsimlib_ubuntu22_x86_64_cpu
-          # Ubuntu 22.04 GPU build with license
-          - os: ubuntu-22.04
-            arch: gpu
-            c_compiler: gcc-11
-            cxx_compiler: g++-11
-            ubuntu_version: "22"
-            artifact_name: radarsimlib_ubuntu22_x86_64_gpu
-          # Ubuntu 24.04 CPU build with license
-          - os: ubuntu-24.04
-            arch: cpu
-            c_compiler: gcc-13
-            cxx_compiler: g++-13
-            ubuntu_version: "24"
-            artifact_name: radarsimlib_ubuntu24_x86_64_cpu
-          # Ubuntu 24.04 GPU build with license
-          - os: ubuntu-24.04
-            arch: gpu
-            c_compiler: gcc-13
-            cxx_compiler: g++-13
-            ubuntu_version: "24"
-            artifact_name: radarsimlib_ubuntu24_x86_64_gpu
-          # Ubuntu 26.04 CPU build with license
-          - os: ubuntu-26.04
-            arch: cpu
-            c_compiler: gcc-15
-            cxx_compiler: g++-15
-            ubuntu_version: "26"
-            artifact_name: radarsimlib_ubuntu26_x86_64_cpu
-          # Ubuntu 26.04 GPU build with license
-          - os: ubuntu-26.04
-            arch: gpu
-            c_compiler: gcc-15
-            cxx_compiler: g++-15
-            ubuntu_version: "26"
-            artifact_name: radarsimlib_ubuntu26_x86_64_gpu
+        include: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -142,12 +125,12 @@ jobs:
             cmake \
             pkg-config \
             ccache
-          
+
           # Set up ccache
           ccache --set-config=max_size=2G
           ccache --set-config=cache_dir=~/.ccache
           echo "/usr/lib/ccache" >> $GITHUB_PATH
-          
+
           # Verify installations
           ${{ matrix.c_compiler }} --version
           ${{ matrix.cxx_compiler }} --version
@@ -258,7 +241,7 @@ jobs:
 
   # Pack all artifacts into a single file
   pack-artifacts:
-    needs: build
+    needs: [setup, build]
     runs-on: ubuntu-latest
     if: success()
     steps:
@@ -270,15 +253,22 @@ jobs:
         with:
           path: artifacts/
 
+      - name: Load build matrix
+        id: matrix-info
+        run: |
+          echo '${{ needs.setup.outputs.matrix }}' > matrix.json
+
+          # Names to purge from the run's artifact list once they're packed below
+          names=$(jq -r '.[].artifact_name | . + "*"' matrix.json)
+          echo "names<<MATRIX_EOF" >> "$GITHUB_OUTPUT"
+          echo "$names" >> "$GITHUB_OUTPUT"
+          echo "MATRIX_EOF" >> "$GITHUB_OUTPUT"
+
       - name: Delete downloaded artifacts
         uses: geekyeggo/delete-artifact@v5
         with:
           failOnError: false
-          name: |
-            radarsimlib_ubuntu22_x86_64_cpu*
-            radarsimlib_ubuntu22_x86_64_gpu*
-            radarsimlib_ubuntu24_x86_64_cpu*
-            radarsimlib_ubuntu24_x86_64_gpu*
+          name: ${{ steps.matrix-info.outputs.names }}
 
       - name: Display downloaded artifacts
         run: |
@@ -290,28 +280,20 @@ jobs:
         run: |
           mkdir -p packed/radarsimlib_ubuntu_all
 
-          # Create temporary directories for organizing files before zipping
-          mkdir -p temp/Ubuntu22_x86_64_CPU
-          mkdir -p temp/Ubuntu22_x86_64_GPU
-          mkdir -p temp/Ubuntu24_x86_64_CPU
-          mkdir -p temp/Ubuntu24_x86_64_GPU
-
           # Copy each artifact to appropriate directory based on Ubuntu version and architecture
           for dir in artifacts/*/; do
             if [ -d "$dir" ]; then
               artifact_name=$(basename "$dir")
               echo "Processing artifact: $artifact_name"
-              
-              # Determine Ubuntu version
-              if [[ "$artifact_name" == *"ubuntu22"* ]]; then
-                ubuntu_ver="Ubuntu22"
-              elif [[ "$artifact_name" == *"ubuntu24"* ]]; then
-                ubuntu_ver="Ubuntu24"
+
+              # Determine Ubuntu version from the artifact name (e.g. "ubuntu26" -> "Ubuntu26")
+              if [[ "$artifact_name" =~ ubuntu([0-9]+) ]]; then
+                ubuntu_ver="Ubuntu${BASH_REMATCH[1]}"
               else
                 echo "Unknown Ubuntu version for $artifact_name, skipping"
                 continue
               fi
-              
+
               # Determine target directory based on artifact name
               if [[ "$artifact_name" == *"gpu"* ]]; then
                 # GPU builds
@@ -320,22 +302,22 @@ jobs:
                 # CPU builds
                 target_dir="temp/${ubuntu_ver}_x86_64_CPU"
               fi
-              
+
               # Ensure target directory exists
               mkdir -p "$target_dir"
-              
+
               # Copy the library contents
               echo "Copying library from $dir to $target_dir/"
               cp -r "$dir"/* "$target_dir/" 2>/dev/null || true
             fi
           done
 
-          # Create zip files for each Ubuntu version/architecture combination
+          # Create one zip per Ubuntu version/architecture combination actually produced
           cd temp
-          zip -r ../packed/radarsimlib_ubuntu_all/Ubuntu22_x86_64_CPU.zip Ubuntu22_x86_64_CPU/
-          zip -r ../packed/radarsimlib_ubuntu_all/Ubuntu22_x86_64_GPU.zip Ubuntu22_x86_64_GPU/
-          zip -r ../packed/radarsimlib_ubuntu_all/Ubuntu24_x86_64_CPU.zip Ubuntu24_x86_64_CPU/
-          zip -r ../packed/radarsimlib_ubuntu_all/Ubuntu24_x86_64_GPU.zip Ubuntu24_x86_64_GPU/
+          for combo_dir in */; do
+            combo_dir="${combo_dir%/}"
+            zip -r "../packed/radarsimlib_ubuntu_all/${combo_dir}.zip" "$combo_dir/"
+          done
           cd ..
 
       - name: Verify artifact structure
@@ -353,79 +335,84 @@ jobs:
 
       - name: Create README for packed artifacts
         run: |
-          cat > packed/radarsimlib_ubuntu_all/README.md << 'EOF'
-          # RadarSimLib Ubuntu Build Artifacts
+          # ver/gcc pairs, one per unique Ubuntu version, sorted ascending
+          ubuntu_info=$(jq -r '
+            [.[] | {ver: .ubuntu_version, gcc: (.c_compiler | sub("gcc-";""))}]
+            | unique_by(.ver) | sort_by(.ver | tonumber) | .[] | "\(.ver) \(.gcc)"
+          ' matrix.json)
+          total_builds=$(jq 'length' matrix.json)
+          num_versions=$(echo "$ubuntu_info" | wc -l)
+          versions_str=$(echo "$ubuntu_info" | awk '{printf "%s.04 LTS (GCC %s), ", $1, $2}' | sed 's/, $//')
 
-          This archive contains all RadarSimLib builds for Ubuntu platforms with license features enabled.
-
-          ## Directory Structure
-
-          The builds are organized in the following structure:
-
-          ```
-          radarsimlib_ubuntu_all/
-          ├── Ubuntu22_x86_64_CPU.zip
-          ├── Ubuntu22_x86_64_GPU.zip
-          ├── Ubuntu24_x86_64_CPU.zip
-          └── Ubuntu24_x86_64_GPU.zip
-          ```
-
-          ## Zip File Contents
-
-          Each zip file contains the following:
-          - `libradarsimc.so` - Shared library
-          - `radarsim.h` - Header file for C/C++ integration
-
-          ## Platform Information
-
-          ### All Builds (License-Enabled)
-          - **Ubuntu22_x86_64_CPU.zip**: CPU-only build for Ubuntu 22.04 LTS with license verification
-          - **Ubuntu22_x86_64_GPU.zip**: CUDA GPU-accelerated build for Ubuntu 22.04 LTS with license verification
-          - **Ubuntu24_x86_64_CPU.zip**: CPU-only build for Ubuntu 24.04 LTS with license verification
-          - **Ubuntu24_x86_64_GPU.zip**: CUDA GPU-accelerated build for Ubuntu 24.04 LTS with license verification
-          - Requires valid license file for full feature access
-          - License activation via `Set_License()` or `Set_License_Files()` API
-          - Verification via `Is_Licensed()` call
-
-          ## Build Information
-
-          - **Total Builds**: 4 zip files (2 Ubuntu versions × 2 architectures)
-          - **Ubuntu Versions**: 22.04 LTS (GCC 11), 24.04 LTS (GCC 13)
-          - **Architectures**: x86_64 CPU, x86_64 GPU (CUDA)
-          - **License**: All builds have license verification enabled
-          - **Library Type**: Shared library (.so)
-          - **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-
-          ## Usage
-
-          1. Choose the appropriate Ubuntu version for your system
-          2. Choose the appropriate architecture (CPU or GPU) for your system
-          3. Extract the corresponding zip file
-          4. Link against libradarsimc.so and include radarsim.h in your project
-          5. Activate your license (see below)
-
-          ## License Activation
-
-          Place your license file (`license_radarsimc_*.lic`) in:
-          - Your application's working directory, or
-          - Use `Set_License()` API to activate programmatically
-
-          Verify activation status with `Is_Licensed()` API call.
-
-          ## Requirements
-
-          ### Ubuntu 22.04 Builds
-          - **CPU builds**: Ubuntu 22.04 LTS or newer x86_64 system
-          - **GPU builds**: Ubuntu 22.04 LTS or newer x86_64 system with NVIDIA GPU and CUDA support
-          - **Compiler**: Built with GCC 11
-          - Valid RadarSimLib license file
-
-          ### Ubuntu 24.04 Builds
-          - **CPU builds**: Ubuntu 24.04 LTS or newer x86_64 system
-          - **GPU builds**: Ubuntu 24.04 LTS or newer x86_64 system with NVIDIA GPU and CUDA support
-          - **Compiler**: Built with GCC 13
-          - Valid RadarSimLib license file
-          EOF
+          {
+            echo "# RadarSimLib Ubuntu Build Artifacts"
+            echo
+            echo "This archive contains all RadarSimLib builds for Ubuntu platforms with license features enabled."
+            echo
+            echo "## Directory Structure"
+            echo
+            echo "The builds are organized in the following structure:"
+            echo
+            echo '```'
+            echo "radarsimlib_ubuntu_all/"
+            while read -r ver gcc; do
+              echo "├── Ubuntu${ver}_x86_64_CPU.zip"
+              echo "├── Ubuntu${ver}_x86_64_GPU.zip"
+            done <<< "$ubuntu_info"
+            echo '```'
+            echo
+            echo "## Zip File Contents"
+            echo
+            echo "Each zip file contains the following:"
+            echo '- `libradarsimc.so` - Shared library'
+            echo '- `radarsim.h` - Header file for C/C++ integration'
+            echo
+            echo "## Platform Information"
+            echo
+            echo "### All Builds (License-Enabled)"
+            while read -r ver gcc; do
+              echo "- **Ubuntu${ver}_x86_64_CPU.zip**: CPU-only build for Ubuntu ${ver}.04 LTS with license verification"
+              echo "- **Ubuntu${ver}_x86_64_GPU.zip**: CUDA GPU-accelerated build for Ubuntu ${ver}.04 LTS with license verification"
+            done <<< "$ubuntu_info"
+            echo "- Requires valid license file for full feature access"
+            echo '- License activation via `Set_License()` or `Set_License_Files()` API'
+            echo '- Verification via `Is_Licensed()` call'
+            echo
+            echo "## Build Information"
+            echo
+            echo "- **Total Builds**: ${total_builds} zip files (${num_versions} Ubuntu versions × 2 architectures)"
+            echo "- **Ubuntu Versions**: ${versions_str}"
+            echo "- **Architectures**: x86_64 CPU, x86_64 GPU (CUDA)"
+            echo "- **License**: All builds have license verification enabled"
+            echo "- **Library Type**: Shared library (.so)"
+            echo "- **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            echo
+            echo "## Usage"
+            echo
+            echo "1. Choose the appropriate Ubuntu version for your system"
+            echo "2. Choose the appropriate architecture (CPU or GPU) for your system"
+            echo "3. Extract the corresponding zip file"
+            echo "4. Link against libradarsimc.so and include radarsim.h in your project"
+            echo "5. Activate your license (see below)"
+            echo
+            echo "## License Activation"
+            echo
+            echo 'Place your license file (`license_radarsimc_*.lic`) in:'
+            echo "- Your application's working directory, or"
+            echo '- Use `Set_License()` API to activate programmatically'
+            echo
+            echo 'Verify activation status with `Is_Licensed()` API call.'
+            echo
+            echo "## Requirements"
+            while read -r ver gcc; do
+              echo
+              echo "### Ubuntu ${ver}.04 Builds"
+              echo "- **CPU builds**: Ubuntu ${ver}.04 LTS or newer x86_64 system"
+              echo "- **GPU builds**: Ubuntu ${ver}.04 LTS or newer x86_64 system with NVIDIA GPU and CUDA support"
+              echo "- **Compiler**: Built with GCC ${gcc}"
+              echo "- Valid RadarSimLib license file"
+            done <<< "$ubuntu_info"
+          } > packed/radarsimlib_ubuntu_all/README.md
 
       - name: Create compressed archive
         run: |
@@ -451,42 +438,47 @@ jobs:
 
   # Summary job that runs after all builds complete
   build-summary:
-    needs: [build, pack-artifacts]
+    needs: [setup, build, pack-artifacts]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Generate build summary
         run: |
+          echo '${{ needs.setup.outputs.matrix }}' > matrix.json
+          total_builds=$(jq 'length' matrix.json)
+          ubuntu_versions=$(jq -r '[.[].ubuntu_version] | unique | .[]' matrix.json)
+          num_versions=$(echo "$ubuntu_versions" | wc -l)
+          versions_list=$(echo "$ubuntu_versions" | awk '{printf "%s.04, ", $1}' | sed 's/, $//')
+
           echo "# Ubuntu RadarSimLib Build Summary 📊" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Build Matrix Results" >> $GITHUB_STEP_SUMMARY
-          echo "Total builds: 4 (2 Ubuntu versions × 2 architectures with license enabled)" >> $GITHUB_STEP_SUMMARY
+          echo "Total builds: ${total_builds} (${num_versions} Ubuntu versions × 2 architectures with license enabled)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Ubuntu Version Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **Ubuntu 22.04**: 2 builds (CPU and GPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Ubuntu 24.04**: 2 builds (CPU and GPU)" >> $GITHUB_STEP_SUMMARY
+          while read -r ver; do
+            echo "- **Ubuntu ${ver}.04**: 2 builds (CPU and GPU)" >> $GITHUB_STEP_SUMMARY
+          done <<< "$ubuntu_versions"
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Architecture Distribution" >> $GITHUB_STEP_SUMMARY
-          echo "- **CPU (x86_64)**: 2 builds (Ubuntu 22.04 and 24.04)" >> $GITHUB_STEP_SUMMARY
-          echo "- **GPU (CUDA)**: 2 builds (Ubuntu 22.04 and 24.04)" >> $GITHUB_STEP_SUMMARY
+          echo "- **CPU (x86_64)**: ${num_versions} builds (Ubuntu ${versions_list})" >> $GITHUB_STEP_SUMMARY
+          echo "- **GPU (CUDA)**: ${num_versions} builds (Ubuntu ${versions_list})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### License Configuration" >> $GITHUB_STEP_SUMMARY
           echo "- All builds: License verification enabled" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts Generated" >> $GITHUB_STEP_SUMMARY
-          echo "#### Ubuntu 22.04" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu22_x86_64_cpu\` (CPU build with license)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu22_x86_64_gpu\` (GPU build with license)" >> $GITHUB_STEP_SUMMARY
-          echo "#### Ubuntu 24.04" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu24_x86_64_cpu\` (CPU build with license)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`radarsimlib_ubuntu24_x86_64_gpu\` (GPU build with license)" >> $GITHUB_STEP_SUMMARY
+          while read -r ver; do
+            echo "#### Ubuntu ${ver}.04" >> $GITHUB_STEP_SUMMARY
+            jq -r --arg v "$ver" '.[] | select(.ubuntu_version == $v) | "- `\(.artifact_name)` (\(.arch | ascii_upcase) build with license)"' matrix.json >> $GITHUB_STEP_SUMMARY
+          done <<< "$ubuntu_versions"
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Packed Artifacts" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.pack-artifacts.result }}" == "success" ]; then
             echo "✅ **All artifacts successfully packed into single archive**" >> $GITHUB_STEP_SUMMARY
             echo "- Archive: \`radarsimlib_ubuntu_all_builds\`" >> $GITHUB_STEP_SUMMARY
             echo "- Formats: tar.gz, zip" >> $GITHUB_STEP_SUMMARY
-            echo "- Contains: All 4 build variants with license verification" >> $GITHUB_STEP_SUMMARY
+            echo "- Contains: All ${total_builds} build variants with license verification" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ **Artifact packing failed or was skipped**" >> $GITHUB_STEP_SUMMARY
           fi

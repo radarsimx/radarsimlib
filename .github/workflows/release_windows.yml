@@ -7,15 +7,17 @@ name: Build Windows Libraries
 # both CPU-only and CUDA GPU-accelerated builds.
 #
 # Build Matrix:
-# - Windows 2025: MSVC compiler, 2 builds (2 architectures with license enabled)
+# - Defined once, as JSON, in the `setup` job's "Define build matrix" step.
+#   The `build`, `pack-artifacts`, and `build-summary` jobs all consume it via
+#   job outputs, so adding/removing an architecture (or the CUDA version) only
+#   requires editing that one step — no other job needs to change.
 # - Architectures: CPU (x86_64), GPU (CUDA)
 # - All builds: License enabled (license=on)
-# - Total builds: 2
 #
 # Features:
 # - CUDA toolkit setup for GPU builds
 # - Build optimization and caching
-# - Artifact verification and validation2
+# - Artifact verification and validation
 # - Multi-architecture artifact packing
 # - Detailed build reporting and summaries
 # - Error handling with build log uploads
@@ -28,8 +30,8 @@ name: Build Windows Libraries
 # Triggers:
 # - Tag pushes (release events)
 # - Manual workflow dispatch
-# - Push to master branch
-# - Pull requests to master branch
+# - Push to main branch
+# - Pull requests to main branch
 
 on:
   push:
@@ -42,19 +44,32 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Single source of truth for the build matrix. Every other job reads this
+  # instead of hardcoding architectures or the CUDA version.
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Define build matrix
+        id: set-matrix
+        run: |
+          cat > matrix.json << 'EOF'
+          [
+            { "arch": "cpu", "artifact_name": "radarsimlib_win_x86_64_cpu" },
+            { "arch": "gpu", "artifact_name": "radarsimlib_win_x86_64_gpu", "cuda_version": "13.3.1" }
+          ]
+          EOF
+          echo "matrix=$(jq -c . matrix.json)" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: setup
     runs-on: windows-2025
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Windows CPU build with license
-          - arch: cpu
-            artifact_name: radarsimlib_win_x86_64_cpu
-          # Windows GPU build with license
-          - arch: gpu
-            artifact_name: radarsimlib_win_x86_64_gpu
+        include: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -68,7 +83,7 @@ jobs:
         if: matrix.arch == 'gpu'
         uses: radarsimx/cuda-toolkit@master
         with:
-          cuda: '13.3.1'
+          cuda: ${{ matrix.cuda_version }}
           method: 'local'
           use-github-cache: false
 
@@ -155,7 +170,7 @@ jobs:
 
   # Pack all artifacts into a single file
   pack-artifacts:
-    needs: build
+    needs: [setup, build]
     runs-on: ubuntu-latest
     if: success()
     steps:
@@ -167,13 +182,22 @@ jobs:
         with:
           path: artifacts/
 
+      - name: Load build matrix
+        id: matrix-info
+        run: |
+          echo '${{ needs.setup.outputs.matrix }}' > matrix.json
+
+          # Names to purge from the run's artifact list once they're packed below
+          names=$(jq -r '.[].artifact_name | . + "*"' matrix.json)
+          echo "names<<MATRIX_EOF" >> "$GITHUB_OUTPUT"
+          echo "$names" >> "$GITHUB_OUTPUT"
+          echo "MATRIX_EOF" >> "$GITHUB_OUTPUT"
+
       - name: Delete downloaded artifacts
         uses: geekyeggo/delete-artifact@v5
         with:
           failOnError: false
-          name: |
-            radarsimlib_win_x86_64_cpu*
-            radarsimlib_win_x86_64_gpu*
+          name: ${{ steps.matrix-info.outputs.names }}
 
       - name: Display downloaded artifacts
         run: |
@@ -185,38 +209,37 @@ jobs:
         run: |
           mkdir -p packed/radarsimlib_windows_all
 
-          # Create temporary directories for organizing files before zipping
-          mkdir -p temp/Windows_x86_64_CPU
-          mkdir -p temp/Windows_x86_64_GPU
+          # Build artifact_name -> arch lookup table from the matrix
+          declare -A arch_for
+          while IFS=$'\t' read -r name arch; do
+            arch_for["$name"]="$arch"
+          done < <(jq -r '.[] | [.artifact_name, .arch] | @tsv' matrix.json)
 
-          # Copy each artifact to appropriate directory based on architecture
+          # Copy each artifact to its matrix-defined directory
           for dir in artifacts/*/; do
             if [ -d "$dir" ]; then
               artifact_name=$(basename "$dir")
               echo "Processing artifact: $artifact_name"
-              
-              # Determine target directory based on artifact name
-              if [[ "$artifact_name" == *"gpu"* ]]; then
-                # GPU builds
-                target_dir="temp/Windows_x86_64_GPU"
-              else
-                # CPU builds
-                target_dir="temp/Windows_x86_64_CPU"
+
+              arch="${arch_for[$artifact_name]}"
+              if [ -z "$arch" ]; then
+                echo "Unknown artifact $artifact_name, skipping"
+                continue
               fi
-              
-              # Ensure target directory exists
+              target_dir="temp/Windows_x86_64_$(echo "$arch" | tr '[:lower:]' '[:upper:]')"
+
               mkdir -p "$target_dir"
-              
-              # Copy the library contents
               echo "Copying library from $dir to $target_dir/"
               cp -r "$dir"/* "$target_dir/" 2>/dev/null || true
             fi
           done
 
-          # Create zip files for each architecture
+          # Create one zip per architecture actually produced
           cd temp
-          zip -r ../packed/radarsimlib_windows_all/Windows_x86_64_CPU.zip Windows_x86_64_CPU/
-          zip -r ../packed/radarsimlib_windows_all/Windows_x86_64_GPU.zip Windows_x86_64_GPU/
+          for combo_dir in */; do
+            combo_dir="${combo_dir%/}"
+            zip -r "../packed/radarsimlib_windows_all/${combo_dir}.zip" "$combo_dir/"
+          done
           cd ..
 
       - name: Verify artifact structure
@@ -234,75 +257,83 @@ jobs:
 
       - name: Create README for packed artifacts
         run: |
-          cat > packed/radarsimlib_windows_all/README.md << 'EOF'
-          # RadarSimLib Windows Build Artifacts
+          total_builds=$(jq 'length' matrix.json)
+          cuda_version=$(jq -r '[.[] | select(.arch=="gpu") | .cuda_version] | first // "N/A"' matrix.json)
+          arch_list=$(jq -r '[.[] | if .arch=="gpu" then "x86_64 GPU (CUDA)" else "x86_64 CPU" end] | join(", ")' matrix.json)
+          names=$(jq -r '.[] | "Windows_x86_64_\(.arch | ascii_upcase).zip"' matrix.json)
+          n=$(echo "$names" | wc -l)
 
-          This archive contains all RadarSimLib builds for Windows platforms with license features enabled.
-
-          ## Directory Structure
-
-          The builds are organized in the following structure:
-
-          ```
-          radarsimlib_windows_all/
-          ├── Windows_x86_64_CPU.zip
-          └── Windows_x86_64_GPU.zip
-          ```
-
-          ## Zip File Contents
-
-          Each zip file contains the following:
-          - `radarsimc.dll` - Dynamic library
-          - `radarsimc.lib` - Import library for linking
-          - `radarsim.h` - Header file for C/C++ integration
-
-          ## Architecture Information
-
-          ### All Builds (License-Enabled)
-          - **Windows_x86_64_CPU.zip**: CPU-only build with license verification
-          - **Windows_x86_64_GPU.zip**: CUDA GPU-accelerated build with license verification
-          - Requires valid license file for full feature access
-          - License activation via `Set_License()` or `Set_License_Files()` API
-          - Verification via `Is_Licensed()` call
-
-          ## Build Information
-
-          - **Total Builds**: 2 zip files (2 architectures)
-          - **Architectures**: x86_64 CPU, x86_64 GPU (CUDA)
-          - **License**: All builds have license verification enabled
-          - **Library Type**: Dynamic library (.dll) with import library (.lib)
-          - **Compiler**: MSVC
-          - **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-
-          ## Usage
-
-          1. Choose the appropriate architecture (CPU or GPU) for your system
-          2. Extract the corresponding zip file
-          3. Link against radarsimc.lib and include radarsim.h in your project
-          4. Ensure radarsimc.dll is accessible at runtime
-          5. Activate your license (see below)
-
-          ## License Activation
-
-          Place your license file (`license_radarsimc_*.lic`) in:
-          - Your application's working directory, or
-          - Use `Set_License()` API to activate programmatically
-
-          Verify activation status with `Is_Licensed()` API call.
-
-          ## Requirements
-
-          ### CPU Builds (Windows_x86_64_CPU.zip)
-          - Any x86_64 Windows system
-          - Microsoft Visual C++ Redistributable
-          - Valid RadarSimLib license file
-
-          ### GPU Builds (Windows_x86_64_GPU.zip)
-          - x86_64 Windows system with NVIDIA GPU
-          - CUDA 12.8.1 or compatible version
-          - Microsoft Visual C++ Redistributable
-          - Valid RadarSimLib license file
-          EOF
+          {
+            echo "# RadarSimLib Windows Build Artifacts"
+            echo
+            echo "This archive contains all RadarSimLib builds for Windows platforms with license features enabled."
+            echo
+            echo "## Directory Structure"
+            echo
+            echo "The builds are organized in the following structure:"
+            echo
+            echo '```'
+            echo "radarsimlib_windows_all/"
+            i=0
+            while read -r name; do
+              i=$((i+1))
+              if [ "$i" -eq "$n" ]; then
+                echo "└── ${name}"
+              else
+                echo "├── ${name}"
+              fi
+            done <<< "$names"
+            echo '```'
+            echo
+            echo "## Zip File Contents"
+            echo
+            echo "Each zip file contains the following:"
+            echo '- `radarsimc.dll` - Dynamic library'
+            echo '- `radarsimc.lib` - Import library for linking'
+            echo '- `radarsim.h` - Header file for C/C++ integration'
+            echo
+            echo "## Architecture Information"
+            echo
+            echo "### All Builds (License-Enabled)"
+            jq -r '.[] | "- **Windows_x86_64_\(.arch | ascii_upcase).zip**: \(if .arch=="gpu" then "CUDA GPU-accelerated" else "CPU-only" end) build with license verification"' matrix.json
+            echo "- Requires valid license file for full feature access"
+            echo '- License activation via `Set_License()` or `Set_License_Files()` API'
+            echo '- Verification via `Is_Licensed()` call'
+            echo
+            echo "## Build Information"
+            echo
+            echo "- **Total Builds**: ${total_builds} zip files (${total_builds} architectures)"
+            echo "- **Architectures**: ${arch_list}"
+            echo "- **License**: All builds have license verification enabled"
+            echo "- **Library Type**: Dynamic library (.dll) with import library (.lib)"
+            echo "- **Compiler**: MSVC"
+            echo "- **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            echo
+            echo "## Usage"
+            echo
+            echo "1. Choose the appropriate architecture (CPU or GPU) for your system"
+            echo "2. Extract the corresponding zip file"
+            echo "3. Link against radarsimc.lib and include radarsim.h in your project"
+            echo "4. Ensure radarsimc.dll is accessible at runtime"
+            echo "5. Activate your license (see below)"
+            echo
+            echo "## License Activation"
+            echo
+            echo 'Place your license file (`license_radarsimc_*.lic`) in:'
+            echo "- Your application's working directory, or"
+            echo '- Use `Set_License()` API to activate programmatically'
+            echo
+            echo 'Verify activation status with `Is_Licensed()` API call.'
+            echo
+            echo "## Requirements"
+            jq -r --arg cuda "$cuda_version" '.[] |
+              if .arch == "gpu" then
+                "\n### GPU Builds (Windows_x86_64_GPU.zip)\n- x86_64 Windows system with NVIDIA GPU\n- CUDA \($cuda) or compatible version\n- Microsoft Visual C++ Redistributable\n- Valid RadarSimLib license file"
+              else
+                "\n### CPU Builds (Windows_x86_64_CPU.zip)\n- Any x86_64 Windows system\n- Microsoft Visual C++ Redistributable\n- Valid RadarSimLib license file"
+              end
+            ' matrix.json
+          } > packed/radarsimlib_windows_all/README.md
 
       - name: Create compressed archive
         run: |
@@ -328,34 +359,43 @@ jobs:
 
   # Summary job that runs after all builds complete
   build-summary:
-    needs: [build, pack-artifacts]
+    needs: [setup, build, pack-artifacts]
     runs-on: windows-latest
     if: always()
     steps:
       - name: Generate build summary
         run: |
+          $matrix = '${{ needs.setup.outputs.matrix }}' | ConvertFrom-Json
+          $totalBuilds = $matrix.Count
+          $archNames = ($matrix | ForEach-Object { $_.arch.ToUpper() }) -join ' and '
+          $archList = ($matrix | ForEach-Object { if ($_.arch -eq 'gpu') { 'x86_64 GPU (CUDA)' } else { 'x86_64 CPU' } }) -join ', '
+
           echo "# Windows RadarSimLib Build Summary" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "## Build Matrix Results" >> $env:GITHUB_STEP_SUMMARY
-          echo "Total builds: 2 - CPU and GPU (both with license enabled)" >> $env:GITHUB_STEP_SUMMARY
+          echo "Total builds: $totalBuilds - $archNames (all with license enabled)" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "### Architecture Distribution" >> $env:GITHUB_STEP_SUMMARY
-          echo "- **CPU x86_64**: 1 build on windows-latest" >> $env:GITHUB_STEP_SUMMARY
-          echo "- **GPU CUDA**: 1 build on windows-latest" >> $env:GITHUB_STEP_SUMMARY
+          foreach ($m in $matrix) {
+            $label = if ($m.arch -eq 'gpu') { 'GPU CUDA' } else { 'CPU x86_64' }
+            echo "- **$label**: 1 build on windows-latest" >> $env:GITHUB_STEP_SUMMARY
+          }
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "### License Configuration" >> $env:GITHUB_STEP_SUMMARY
           echo "- All builds: License verification enabled" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "### Artifacts Generated" >> $env:GITHUB_STEP_SUMMARY
-          echo "- ``radarsimlib_win_x86_64_cpu`` - CPU build with license" >> $env:GITHUB_STEP_SUMMARY
-          echo "- ``radarsimlib_win_x86_64_gpu`` - GPU build with license" >> $env:GITHUB_STEP_SUMMARY
+          foreach ($m in $matrix) {
+            $label = if ($m.arch -eq 'gpu') { 'GPU' } else { 'CPU' }
+            echo "- ``$($m.artifact_name)`` - $label build with license" >> $env:GITHUB_STEP_SUMMARY
+          }
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "### Packed Artifacts" >> $env:GITHUB_STEP_SUMMARY
           if ("${{ needs.pack-artifacts.result }}" -eq "success") {
             echo "**All artifacts successfully packed into single archive**" >> $env:GITHUB_STEP_SUMMARY
             echo "- Archive: ``radarsimlib_windows_all_builds``" >> $env:GITHUB_STEP_SUMMARY
             echo "- Formats: tar.gz, zip" >> $env:GITHUB_STEP_SUMMARY
-            echo "- Contains: 2 build variants (CPU and GPU) with license verification" >> $env:GITHUB_STEP_SUMMARY
+            echo "- Contains: $totalBuilds build variants ($archList) with license verification" >> $env:GITHUB_STEP_SUMMARY
           } else {
             echo "**Artifact packing failed or was skipped**" >> $env:GITHUB_STEP_SUMMARY
           }
