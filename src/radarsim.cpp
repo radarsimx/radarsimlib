@@ -39,6 +39,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
@@ -52,6 +53,7 @@
 #include <vector>
 
 #include "libs/license_manager.hpp"
+#include "libs/motion_lib.hpp"
 #include "point.hpp"
 #include "points_manager.hpp"
 #include "radar.hpp"
@@ -2000,6 +2002,256 @@ int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
     std::cerr << "Run_NoiseSimulator: Unknown error occurred" << std::endl;
     return RADARSIMCPP_ERROR_EXCEPTION;
   }
+}
+
+/*********************************************
+ *
+ *  Scene State Query
+ *
+ *********************************************/
+/**
+ * @brief Get global Tx/Rx channel locations and radar boresight at query
+ * timestamp(s)
+ *
+ * @param[in] ptr_radar_c Pointer to the radar system
+ * @param[in] timestamp_array Query timestamps (s)
+ * @param[in] num_timestamps Number of query timestamps - must be > 0
+ * @param[out] tx_locations_out Global Tx channel locations (pre-allocated)
+ * @param[out] rx_locations_out Global Rx channel locations (pre-allocated)
+ * @param[out] boresight_out Global radar boresight direction (pre-allocated)
+ *
+ * @return int RADARSIM_SUCCESS (0) on success, or a RADARSIM_ERROR_* code
+ */
+int Get_Scene_State(t_Radar* ptr_radar_c, double* timestamp_array,
+                    int num_timestamps, float* tx_locations_out,
+                    float* rx_locations_out, float* boresight_out) {
+  if (ptr_radar_c == nullptr || ptr_radar_c->_ptr_radar == nullptr ||
+      timestamp_array == nullptr || tx_locations_out == nullptr ||
+      rx_locations_out == nullptr || boresight_out == nullptr) {
+    return RADARSIMCPP_ERROR_NULL_POINTER;
+  }
+  if (num_timestamps <= 0) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
+  }
+
+  try {
+    auto& radar = *(ptr_radar_c->_ptr_radar);
+
+    bool time_varying = radar.array_size_ > 1;
+    if (time_varying && radar.array_size_ != radar.frame_size_) {
+      // The engine has no per-sample timestamp array to interpolate
+      // against - time-varying platform motion must have exactly one
+      // location/rotation entry per frame.
+      return RADARSIMCPP_ERROR_INVALID_PARAMETER;
+    }
+
+    int num_tx = radar.tx_->channel_size_;
+    int num_rx = radar.rx_->channel_size_;
+    int frame_size = radar.frame_size_;
+
+    const rsv::Vec3<float> base_bore(1.0f, 0.0f, 0.0f);
+
+    for (int k = 0; k < num_timestamps; k++) {
+      float t = static_cast<float>(timestamp_array[k]);
+      rsv::Vec3<float> loc;
+      rsv::Vec3<float> rot;
+
+      if (!time_varying) {
+        loc = radar.vect_location_[0] + radar.speed_ * t;
+        rot = radar.vect_rotation_[0] + radar.rotrate_ * t;
+      } else if (timestamp_array[k] <= radar.vect_frame_start_time_[0]) {
+        loc = radar.vect_location_[0];
+        rot = radar.vect_rotation_[0];
+      } else if (timestamp_array[k] >=
+                 radar.vect_frame_start_time_[frame_size - 1]) {
+        loc = radar.vect_location_[frame_size - 1];
+        rot = radar.vect_rotation_[frame_size - 1];
+      } else {
+        int hi = 1;
+        while (hi < frame_size - 1 &&
+               radar.vect_frame_start_time_[hi] < timestamp_array[k]) {
+          hi++;
+        }
+        int lo = hi - 1;
+        double t0 = radar.vect_frame_start_time_[lo];
+        double t1 = radar.vect_frame_start_time_[hi];
+        float alpha =
+            (t1 > t0) ? static_cast<float>((timestamp_array[k] - t0) /
+                                           (t1 - t0))
+                      : 0.0f;
+        loc = radar.vect_location_[lo] +
+              (radar.vect_location_[hi] - radar.vect_location_[lo]) * alpha;
+        rot = radar.vect_rotation_[lo] +
+              (radar.vect_rotation_[hi] - radar.vect_rotation_[lo]) * alpha;
+      }
+
+      rsv::Vec3<float> bore = Rotate<float>(base_bore, rot);
+      boresight_out[k * 3] = bore[0];
+      boresight_out[k * 3 + 1] = bore[1];
+      boresight_out[k * 3 + 2] = bore[2];
+
+      for (int m = 0; m < num_tx; m++) {
+        rsv::Vec3<float> global =
+            loc + Rotate<float>(radar.tx_->vect_channels_[m].location_, rot);
+        int base = (k * num_tx + m) * 3;
+        tx_locations_out[base] = global[0];
+        tx_locations_out[base + 1] = global[1];
+        tx_locations_out[base + 2] = global[2];
+      }
+
+      for (int n = 0; n < num_rx; n++) {
+        rsv::Vec3<float> global =
+            loc + Rotate<float>(radar.rx_->vect_channels_[n].location_, rot);
+        int base = (k * num_rx + n) * 3;
+        rx_locations_out[base] = global[0];
+        rx_locations_out[base + 1] = global[1];
+        rx_locations_out[base + 2] = global[2];
+      }
+    }
+  } catch (const std::exception& e) {
+    std::cerr << "Get_Scene_State: Unexpected error: " << e.what()
+              << std::endl;
+    return RADARSIMCPP_ERROR_EXCEPTION;
+  } catch (...) {
+    std::cerr << "Get_Scene_State: Unknown error occurred" << std::endl;
+    return RADARSIMCPP_ERROR_EXCEPTION;
+  }
+
+  return 0;
+}
+
+/**
+ * @brief Get the number of mesh targets registered in a target management
+ * system
+ *
+ * @param[in] ptr_targets_c Pointer to the target management system
+ *
+ * @return int Number of mesh targets, or 0 if ptr_targets_c is NULL
+ */
+int Get_Num_Targets(t_Targets* ptr_targets_c) {
+  if (ptr_targets_c == nullptr || ptr_targets_c->_ptr_targets == nullptr) {
+    return 0;
+  }
+  return static_cast<int>(ptr_targets_c->_ptr_targets->vect_targets_.size());
+}
+
+/**
+ * @brief Get the triangle (cell) count of a specific mesh target
+ *
+ * @param[in] ptr_targets_c Pointer to the target management system
+ * @param[in] target_index Index of the mesh target [0, Get_Num_Targets())
+ *
+ * @return int Triangle count, or 0 if the handle/index is invalid
+ */
+int Get_Target_Mesh_Size(t_Targets* ptr_targets_c, int target_index) {
+  if (ptr_targets_c == nullptr || ptr_targets_c->_ptr_targets == nullptr) {
+    return 0;
+  }
+  auto& targets = ptr_targets_c->_ptr_targets->vect_targets_;
+  if (target_index < 0 || target_index >= static_cast<int>(targets.size())) {
+    return 0;
+  }
+  return static_cast<int>(targets[target_index].vect_mesh_.size());
+}
+
+/**
+ * @brief Get transformed (global) mesh vertex positions of one target at
+ * query timestamp(s)
+ *
+ * @param[in] ptr_targets_c Pointer to the target management system
+ * @param[in] target_index Index of the mesh target [0, Get_Num_Targets())
+ * @param[in] timestamp_array Query timestamps (s)
+ * @param[in] num_timestamps Number of query timestamps - must be > 0
+ * @param[in] sim_timestamps Real-world time of each motion-array sample for
+ *            time-varying targets, or NULL for constant-motion targets
+ * @param[in] num_sim_timestamps Length of sim_timestamps
+ * @param[out] points_out Transformed vertex coordinates (pre-allocated)
+ *
+ * @return int RADARSIM_SUCCESS (0) on success, or a RADARSIM_ERROR_* code
+ */
+int Get_Target_Mesh_State(t_Targets* ptr_targets_c, int target_index,
+                          double* timestamp_array, int num_timestamps,
+                          double* sim_timestamps, int num_sim_timestamps,
+                          double* points_out) {
+  if (ptr_targets_c == nullptr || ptr_targets_c->_ptr_targets == nullptr ||
+      timestamp_array == nullptr || points_out == nullptr) {
+    return RADARSIMCPP_ERROR_NULL_POINTER;
+  }
+  if (num_timestamps <= 0) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
+  }
+
+  auto& targets = ptr_targets_c->_ptr_targets->vect_targets_;
+  if (target_index < 0 || target_index >= static_cast<int>(targets.size())) {
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
+  }
+
+  try {
+    // Operate on a deep copy so the live target (possibly shared with an
+    // in-progress simulation) is never mutated by this query.
+    Target<float> target_copy = targets[target_index];
+
+    bool time_varying = target_copy.array_size_ > 1;
+    if (time_varying &&
+        (sim_timestamps == nullptr ||
+         num_sim_timestamps != target_copy.array_size_)) {
+      return RADARSIMCPP_ERROR_INVALID_PARAMETER;
+    }
+
+    int cell_size = static_cast<int>(target_copy.vect_mesh_.size());
+
+    // Query timestamps in sorted order, since Target::Move's constant-
+    // motion path integrates from the target's current time incrementally.
+    std::vector<int> order(num_timestamps);
+    for (int i = 0; i < num_timestamps; i++) {
+      order[i] = i;
+    }
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
+      return timestamp_array[a] < timestamp_array[b];
+    });
+
+    for (int oi = 0; oi < num_timestamps; oi++) {
+      int i = order[oi];
+      double t = timestamp_array[i];
+
+      int idx = 0;
+      if (time_varying) {
+        double best_diff = std::fabs(sim_timestamps[0] - t);
+        for (int s = 1; s < num_sim_timestamps; s++) {
+          double diff = std::fabs(sim_timestamps[s] - t);
+          if (diff < best_diff) {
+            best_diff = diff;
+            idx = s;
+          }
+        }
+      }
+
+      target_copy.Move(idx, t);
+
+      for (int j = 0; j < cell_size; j++) {
+        const rsv::Vec3<float>* verts = target_copy.vect_mesh_[j].vertex_;
+        int base = (i * cell_size + j) * 9;
+        for (int v = 0; v < 3; v++) {
+          points_out[base + v * 3] = static_cast<double>(verts[v][0]);
+          points_out[base + v * 3 + 1] = static_cast<double>(verts[v][1]);
+          points_out[base + v * 3 + 2] = static_cast<double>(verts[v][2]);
+        }
+      }
+    }
+  } catch (const std::invalid_argument& e) {
+    std::cerr << "Get_Target_Mesh_State: Invalid argument: " << e.what()
+              << std::endl;
+    return RADARSIMCPP_ERROR_INVALID_PARAMETER;
+  } catch (const std::exception& e) {
+    std::cerr << "Get_Target_Mesh_State: Unexpected error: " << e.what()
+              << std::endl;
+    return RADARSIMCPP_ERROR_EXCEPTION;
+  } catch (...) {
+    std::cerr << "Get_Target_Mesh_State: Unknown error occurred" << std::endl;
+    return RADARSIMCPP_ERROR_EXCEPTION;
+  }
+
+  return 0;
 }
 
 /*********************************************

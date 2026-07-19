@@ -47,7 +47,7 @@ extern "C" {
 // #define RADARSIM_SIMPLE_CLEANUP
 
 #define VERSION_MAJOR 15
-#define VERSION_MINOR 2
+#define VERSION_MINOR 3
 #define VERSION_PATCH 0
 
 /*********************************************
@@ -767,6 +767,106 @@ EXPORTED int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
                                 int ts_channel_size, int ts_pulse_size,
                                 int ts_sample_size, double* noise_real,
                                 double* noise_imag, unsigned long long seed);
+
+/*********************************************
+ *
+ *  Scene State Query
+ *
+ *********************************************/
+/**
+ * @brief Get global Tx/Rx channel locations and radar boresight at query
+ * timestamp(s)
+ *
+ * @param[in] ptr_radar_c Pointer to the radar system
+ * @param[in] timestamp_array Query timestamps (s)
+ * @param[in] num_timestamps Number of query timestamps - must be > 0
+ * @param[out] tx_locations_out Global Tx channel locations (pre-allocated)
+ *             Layout: [num_timestamps][num_tx_channels][3 (x,y,z)]
+ * @param[out] rx_locations_out Global Rx channel locations (pre-allocated)
+ *             Layout: [num_timestamps][num_rx_channels][3 (x,y,z)]
+ * @param[out] boresight_out Global radar boresight direction (pre-allocated)
+ *             Layout: [num_timestamps][3 (x,y,z)]
+ *
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: num_timestamps <= 0, or the
+ *           radar's location/rotation array size does not equal its frame
+ *           count (see note below)
+ *         - RADARSIM_ERROR_EXCEPTION: unexpected error
+ *
+ * @note Use Get_Num_Txchannel/Get_Num_Rxchannel on the radar's transmitter/
+ * receiver to size tx_locations_out/rx_locations_out before calling.
+ * @note For radars built with Create_Radar (constant-velocity motion),
+ * platform pose is computed analytically at each query timestamp.
+ * @note For radars built with Create_Radar_Array (time-varying motion),
+ * platform pose is linearly interpolated against the radar's per-frame
+ * start times, which requires the location/rotation array to contain
+ * exactly one entry per frame. Timestamps outside the frame time range are
+ * clamped to the nearest endpoint.
+ */
+EXPORTED int Get_Scene_State(t_Radar* ptr_radar_c, double* timestamp_array,
+                             int num_timestamps, float* tx_locations_out,
+                             float* rx_locations_out, float* boresight_out);
+
+/**
+ * @brief Get the number of mesh targets registered in a target management
+ * system
+ *
+ * @param[in] ptr_targets_c Pointer to the target management system
+ *
+ * @return int Number of mesh targets, or 0 if ptr_targets_c is NULL
+ */
+EXPORTED int Get_Num_Targets(t_Targets* ptr_targets_c);
+
+/**
+ * @brief Get the triangle (cell) count of a specific mesh target
+ *
+ * @details Use this to pre-allocate the points_out buffer passed to
+ * Get_Target_Mesh_State.
+ *
+ * @param[in] ptr_targets_c Pointer to the target management system
+ * @param[in] target_index Index of the mesh target [0, Get_Num_Targets())
+ *
+ * @return int Triangle count, or 0 if the handle/index is invalid
+ */
+EXPORTED int Get_Target_Mesh_Size(t_Targets* ptr_targets_c, int target_index);
+
+/**
+ * @brief Get transformed (global) mesh vertex positions of one target at
+ * query timestamp(s)
+ *
+ * @param[in] ptr_targets_c Pointer to the target management system
+ * @param[in] target_index Index of the mesh target [0, Get_Num_Targets())
+ * @param[in] timestamp_array Query timestamps (s)
+ * @param[in] num_timestamps Number of query timestamps - must be > 0
+ * @param[in] sim_timestamps Real-world time of each motion-array sample for
+ *            time-varying targets (added via Add_Mesh_Target_Array). Pass
+ *            NULL for targets with constant motion (added via
+ *            Add_Mesh_Target).
+ * @param[in] num_sim_timestamps Length of sim_timestamps; must equal the
+ *            target's motion-array length when sim_timestamps is not NULL.
+ * @param[out] points_out Transformed vertex coordinates (pre-allocated)
+ *             Layout: [num_timestamps][cell_size][3 vertices][3 (x,y,z)],
+ *             where cell_size = Get_Target_Mesh_Size(ptr_targets_c,
+ *             target_index)
+ *
+ * @return int RADARSIM_SUCCESS (0) on success, or one of:
+ *         - RADARSIM_ERROR_NULL_POINTER: NULL pointer argument
+ *         - RADARSIM_ERROR_INVALID_PARAMETER: invalid target_index,
+ *           num_timestamps <= 0, or missing/mismatched sim_timestamps for a
+ *           time-varying target
+ *         - RADARSIM_ERROR_EXCEPTION: unexpected error
+ *
+ * @note Operates on an internal copy of the target - the live target inside
+ * ptr_targets_c is never mutated, so simulation results are unaffected.
+ * @note Output is per-triangle, not de-duplicated by shared vertex - each
+ * triangle stores its own 3 vertex copies.
+ */
+EXPORTED int Get_Target_Mesh_State(t_Targets* ptr_targets_c, int target_index,
+                                   double* timestamp_array,
+                                   int num_timestamps, double* sim_timestamps,
+                                   int num_sim_timestamps,
+                                   double* points_out);
 
 #ifdef __cplusplus
 }
