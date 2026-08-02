@@ -126,6 +126,7 @@ class RadarSimWrapper:
             ctypes.c_float,  # resistor
             ctypes.c_float,  # baseband_gain
             ctypes.c_float,  # baseband_bw
+            ctypes.c_double,  # gate_delay
         ]
         self.lib.Create_Receiver.restype = ctypes.c_void_p
 
@@ -327,7 +328,7 @@ class RadarSimWrapper:
 
         # Create receiver
         print("3. Creating receiver...")
-        rx = self.lib.Create_Receiver(10e6, 20.0, 50.0, 30.0, 5e6)
+        rx = self.lib.Create_Receiver(10e6, 20.0, 50.0, 30.0, 5e6, 0.0)
         if not rx:
             raise RadarSimError("Failed to create receiver")
 

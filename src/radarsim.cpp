@@ -872,16 +872,27 @@ void Free_Transmitter(t_Transmitter* ptr_tx_c) {
  * @param[in] resistor Load resistor (Ohm) - must be > 0
  * @param[in] baseband_gain Baseband amplifier gain (dB)
  * @param[in] baseband_bw Baseband bandwidth (Hz) - must be > 0
+ * @param[in] gate_delay Range-gate / deramp reference delay (s) - must be >= 0
  *
  * @return t_Receiver* Pointer to Receiver object, NULL on failure
  *
  * @note Automatically registered for cleanup. Use Free_Receiver() for manual
  * cleanup.
+ * @note gate_delay opens the receive window that far after the chirp start and
+ * delays the deramp reference by the same amount, placing a target at range
+ * c * gate_delay / 2 at DC. 0 reproduces zero-delay deramp.
  */
 t_Receiver* Create_Receiver(float fs, float rf_gain, float resistor,
-                            float baseband_gain, float baseband_bw) {
+                            float baseband_gain, float baseband_bw,
+                            double gate_delay) {
   // Input validation
   if (fs <= 0 || resistor <= 0 || baseband_bw <= 0) {
+    return nullptr;
+  }
+
+  // A negative gate would place the reference before the transmit chirp, and a
+  // non-finite one poisons every sample time downstream.
+  if (!std::isfinite(gate_delay) || gate_delay < 0.0) {
     return nullptr;
   }
 
@@ -893,7 +904,7 @@ t_Receiver* Create_Receiver(float fs, float rf_gain, float resistor,
 
     // Create the Receiver object using shared_ptr
     ptr_rx_c->_ptr_receiver = std::make_shared<Receiver<float>>(
-        fs, rf_gain, resistor, baseband_gain, baseband_bw);
+        fs, rf_gain, resistor, baseband_gain, baseband_bw, gate_delay);
 
     // Register for automatic cleanup
 #ifdef RADARSIM_SIMPLE_CLEANUP

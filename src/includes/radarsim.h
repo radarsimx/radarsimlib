@@ -338,14 +338,23 @@ typedef struct s_Receiver t_Receiver;
  * @param[in] resistor Load resistor (Ohm)
  * @param[in] baseband_gain Baseband amplifier gain (dB)
  * @param[in] baseband_bw Baseband bandwidth (Hz)
+ * @param[in] gate_delay Range-gate / deramp reference delay (s) - must be >= 0
  *
  * @return t_Receiver* Pointer to Receiver object, NULL on failure
  *
  * @note Automatically registered for cleanup. Use Free_Receiver() for manual
  * cleanup.
+ * @note The receive window opens gate_delay after the chirp start and the
+ * deramp reference is the transmit chirp delayed by the same amount, so a
+ * target at range c * gate_delay / 2 produces a DC beat. Pass 0 for
+ * zero-delay deramp, the behavior of builds without this parameter.
+ * @note gate_delay is a double: at long gate delays a float mantissa resolves
+ * only ~1e-10 s, which is a large fraction of a carrier cycle at microwave
+ * frequencies and would randomize target phase.
  */
 EXPORTED t_Receiver* Create_Receiver(float fs, float rf_gain, float resistor,
-                                     float baseband_gain, float baseband_bw);
+                                     float baseband_gain, float baseband_bw,
+                                     double gate_delay);
 
 /**
  * @brief Add a receiver channel with antenna pattern configuration

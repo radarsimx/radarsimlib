@@ -167,10 +167,11 @@ int main() {
     const float load_resistor = 1000.0f;  // 1000 ohm load
     const float baseband_gain = 30.0f;    // 30 dB baseband gain
     const float baseband_bw = 5e6;        // 5 MHz baseband bandwidth
+    const double gate_delay = 0.0;        // No range gate, deramp at zero delay
 
     // Create receiver
     t_Receiver* rx = Create_Receiver(sampling_rate, rf_gain, load_resistor,
-                                     baseband_gain, baseband_bw);
+                                     baseband_gain, baseband_bw, gate_delay);
     if (!rx) {
       throw std::runtime_error("Failed to create receiver");
     }
