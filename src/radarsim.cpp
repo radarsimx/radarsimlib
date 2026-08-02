@@ -52,6 +52,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "core/execution_policy.hpp"
 #include "libs/license_manager.hpp"
 #include "libs/motion_lib.hpp"
 #include "point.hpp"
@@ -67,6 +68,38 @@
 #include "snapshot.hpp"
 #include "targets_manager.hpp"
 #include "transmitter.hpp"
+
+/*********************************************
+ *
+ *  Execution Policy Dispatch
+ *
+ *********************************************/
+/**
+ * @brief Invoke a simulator with the execution policy this machine can run
+ *
+ * @details
+ * Every simulator is explicitly instantiated for both cpu_policy and
+ * gpu_policy, so a CUDA build carries both code paths. The policy tags
+ * themselves resolve at compile time, which on its own would mean a CUDA build
+ * attempts CUDA even where no GPU exists. This picks between the two
+ * instantiations at runtime instead, so a GPU build degrades to CPU rather
+ * than failing.
+ *
+ * In a CPU-only build gpu_available() is always false, and gpu_policy is
+ * already an alias for CPU execution, so this collapses to one path with no
+ * added cost.
+ *
+ * @param[in] fn Generic callable taking an execution policy tag by value
+ *
+ * @return RadarSimErrorCode Result of the invoked simulator
+ */
+template <typename Fn>
+static RadarSimErrorCode DispatchByDevice(Fn&& fn) {
+  if (radarsimx::gpu_available()) {
+    return fn(radarsimx::gpu_policy{});
+  }
+  return fn(radarsimx::cpu_policy{});
+}
 
 /*********************************************
  *
@@ -1654,24 +1687,24 @@ int Run_RadarSimulator(t_Radar* ptr_radar_c, t_Targets* ptr_targets_c,
   }
 
   if (ptr_targets_c->_ptr_points->vect_points_.size() > 0) {
-    PointSimulator<double, float> simc = PointSimulator<double, float>();
-
-    RadarSimErrorCode error_code =
-        simc.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points);
+    RadarSimErrorCode error_code = DispatchByDevice([&](auto policy) {
+      PointSimulator<double, float, decltype(policy)> simc;
+      return simc.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_points);
+    });
     if (error_code != SUCCESS) {
       return static_cast<int>(error_code);
     }
   }
 
   if (ptr_targets_c->_ptr_targets->vect_targets_.size() > 0) {
-    MeshSimulator<double, float> scene_c = MeshSimulator<double, float>();
-
     rsv::Vec2<int> ray_filter_vec2 =
         rsv::Vec2<int>(ray_filter[0], ray_filter[1]);
 
-    RadarSimErrorCode error_code =
-        scene_c.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_targets, level,
-                    density, ray_filter_vec2, false, "", false);
+    RadarSimErrorCode error_code = DispatchByDevice([&](auto policy) {
+      MeshSimulator<double, float, decltype(policy)> scene_c;
+      return scene_c.Run(ptr_radar_c->_ptr_radar, ptr_targets_c->_ptr_targets,
+                         level, density, ray_filter_vec2, false, "", false);
+    });
     if (error_code != SUCCESS) {
       return static_cast<int>(error_code);
     }
@@ -1698,11 +1731,11 @@ int Run_RadarSimulator(t_Radar* ptr_radar_c, t_Targets* ptr_targets_c,
 int Run_InterferenceSimulator(t_Radar* ptr_radar_c, t_Radar* ptr_interf_radar_c,
                               double* ptr_interf_real,
                               double* ptr_interf_imag) {
-  InterferenceSimulator<double, float> simc =
-      InterferenceSimulator<double, float>();
   ptr_radar_c->_ptr_radar->InitBaseband(ptr_interf_real, ptr_interf_imag);
-  RadarSimErrorCode error_code =
-      simc.Run(ptr_radar_c->_ptr_radar, ptr_interf_radar_c->_ptr_radar);
+  RadarSimErrorCode error_code = DispatchByDevice([&](auto policy) {
+    InterferenceSimulator<double, float, decltype(policy)> simc;
+    return simc.Run(ptr_radar_c->_ptr_radar, ptr_interf_radar_c->_ptr_radar);
+  });
   ptr_radar_c->_ptr_radar->SyncBaseband();
   return static_cast<int>(error_code);
 }
@@ -1760,9 +1793,6 @@ int Run_RcsSimulator(t_Targets* ptr_targets_c, double* inc_dir_array,
       ptr_targets_c->_ptr_targets->CompleteTargetInitialization();
     }
 
-    // Create RCS simulator
-    RcsSimulator<double> rcs_sim;
-
     // Convert C arrays to C++ vectors for incident directions
     std::vector<rsv::Vec3<double>> inc_dir_vect;
     inc_dir_vect.reserve(num_directions);
@@ -1792,20 +1822,27 @@ int Run_RcsSimulator(t_Targets* ptr_targets_c, double* inc_dir_array,
         std::complex<double>(obs_polar_real[1], obs_polar_imag[1]),
         std::complex<double>(obs_polar_real[2], obs_polar_imag[2]));
 
-    // Run RCS simulation
-    RadarSimErrorCode error_code =
-        rcs_sim.Run(ptr_targets_c->_ptr_targets, inc_dir_vect, obs_dir_vect,
-                    inc_polar, obs_polar, frequency, density);
+    // Run RCS simulation, then copy results back to the C array. Both happen
+    // inside the dispatch so the simulator outlives neither.
+    RadarSimErrorCode error_code = DispatchByDevice([&](auto policy) {
+      RcsSimulator<double, decltype(policy)> rcs_sim;
+      RadarSimErrorCode code =
+          rcs_sim.Run(ptr_targets_c->_ptr_targets, inc_dir_vect, obs_dir_vect,
+                      inc_polar, obs_polar, frequency, density);
+      if (code != SUCCESS) {
+        return code;
+      }
+
+      const std::vector<double>& rcs_values = rcs_sim.GetRcs();
+      for (size_t i = 0;
+           i < rcs_values.size() && i < static_cast<size_t>(num_directions);
+           i++) {
+        rcs_result[i] = rcs_values[i];
+      }
+      return code;
+    });
     if (error_code != SUCCESS) {
       return static_cast<int>(error_code);
-    }
-
-    // Copy results back to C array
-    const std::vector<double>& rcs_values = rcs_sim.GetRcs();
-    for (size_t i = 0;
-         i < rcs_values.size() && i < static_cast<size_t>(num_directions);
-         i++) {
-      rcs_result[i] = rcs_values[i];
     }
 
   } catch (const std::bad_alloc& e) {
@@ -1882,9 +1919,6 @@ int Run_LidarSimulator(t_Targets* ptr_targets_c, double* phi_array,
       ptr_targets_c->_ptr_targets->CompleteTargetInitialization();
     }
 
-    // Create LiDAR simulator
-    LidarSimulator<float> lidar_sim;
-
     // Convert C arrays to C++ vectors
     std::vector<float> phi_vect;
     std::vector<float> theta_vect;
@@ -1901,37 +1935,43 @@ int Run_LidarSimulator(t_Targets* ptr_targets_c, double* phi_array,
                               static_cast<float>(sensor_location[1]),
                               static_cast<float>(sensor_location[2]));
 
-    // Run LiDAR simulation
-    RadarSimErrorCode lidar_error = lidar_sim.Run(
-        ptr_targets_c->_ptr_targets, phi_vect, theta_vect, location);
+    // Run LiDAR simulation and drain the point cloud inside the dispatch, so
+    // the results are read while the simulator is still alive.
+    int point_count = 0;
+    RadarSimErrorCode lidar_error = DispatchByDevice([&](auto policy) {
+      LidarSimulator<float, decltype(policy)> lidar_sim;
+      RadarSimErrorCode code = lidar_sim.Run(ptr_targets_c->_ptr_targets,
+                                             phi_vect, theta_vect, location);
+      if (code != SUCCESS) {
+        return code;
+      }
+
+      // Extract results from point cloud
+      for (size_t i = 0;
+           i < lidar_sim.cloud_.size() && point_count < max_points; i++) {
+        const auto& ray = lidar_sim.cloud_[i];
+
+        // The final hit point is at location_[reflections_], indexed [0..2]
+        cloud_points[point_count * 3] =
+            static_cast<double>(ray.location_[ray.reflections_][0]);
+        cloud_points[point_count * 3 + 1] =
+            static_cast<double>(ray.location_[ray.reflections_][1]);
+        cloud_points[point_count * 3 + 2] =
+            static_cast<double>(ray.location_[ray.reflections_][2]);
+
+        // Store distance using the final range
+        cloud_distances[point_count] =
+            static_cast<double>(ray.range_[ray.reflections_]);
+
+        // Store intensity (1.0 by default since Ray has no amplitude)
+        cloud_intensities[point_count] = 1.0;
+
+        point_count++;
+      }
+      return code;
+    });
     if (lidar_error != SUCCESS) {
       return static_cast<int>(lidar_error);
-    }
-
-    // Extract results from point cloud
-    int point_count = 0;
-    for (size_t i = 0; i < lidar_sim.cloud_.size() && point_count < max_points;
-         i++) {
-      const auto& ray = lidar_sim.cloud_[i];
-
-      // Calculate hit point coordinates using the final location from the ray
-      // arrays The final hit point is at location_[reflections_] and uses array
-      // indexing [0], [1], [2]
-      cloud_points[point_count * 3] =
-          static_cast<double>(ray.location_[ray.reflections_][0]);
-      cloud_points[point_count * 3 + 1] =
-          static_cast<double>(ray.location_[ray.reflections_][1]);
-      cloud_points[point_count * 3 + 2] =
-          static_cast<double>(ray.location_[ray.reflections_][2]);
-
-      // Store distance using the final range
-      cloud_distances[point_count] =
-          static_cast<double>(ray.range_[ray.reflections_]);
-
-      // Store intensity (use 1.0 as default since Ray doesn't have amplitude)
-      cloud_intensities[point_count] = 1.0;
-
-      point_count++;
     }
 
     // Return actual number of points found
@@ -1992,12 +2032,12 @@ int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
   }
 
   try {
-    NoiseSimulator<double, float> noise_sim;
-
-    RadarSimErrorCode error_code =
-        noise_sim.Run(ptr_radar_c->_ptr_radar, noise_level, is_complex,
-                      timestamps, ts_channel_size, ts_pulse_size,
-                      ts_sample_size, noise_real, noise_imag, seed);
+    RadarSimErrorCode error_code = DispatchByDevice([&](auto policy) {
+      NoiseSimulator<double, float, decltype(policy)> noise_sim;
+      return noise_sim.Run(ptr_radar_c->_ptr_radar, noise_level, is_complex,
+                           timestamps, ts_channel_size, ts_pulse_size,
+                           ts_sample_size, noise_real, noise_imag, seed);
+    });
 
     return static_cast<int>(error_code);
 

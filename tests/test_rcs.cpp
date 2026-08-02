@@ -249,6 +249,20 @@ TEST(RcsPlateSizeTest, LargerPlateHasLargerRcs) {
 }
 
 /**
+ * @brief Relative tolerance for comparing two Physical Optics results
+ *
+ * @details The GPU kernels accumulate scattered field contributions with
+ * floating-point atomicAdd (simulator_rcs.cpp, po_raypool.cpp). The order in
+ * which threads accumulate varies between launches, and floating-point
+ * addition is not associative, so two runs of identical geometry agree to
+ * roughly 1e-14 relative rather than bit-for-bit. The CPU path is exact.
+ *
+ * This tolerance is several orders of magnitude above that noise and far below
+ * any real regression.
+ */
+constexpr double kRcsRelTolerance = 1e-9;
+
+/**
  * @brief Every requested direction gets its own output slot
  */
 TEST_F(RcsSimulatorTest, MultipleDirectionsFillEverySlot) {
@@ -262,13 +276,18 @@ TEST_F(RcsSimulatorTest, MultipleDirectionsFillEverySlot) {
   for (int i = 0; i < kNumDirections; i++) {
     EXPECT_TRUE(std::isfinite(rcs[i])) << "direction " << i;
     EXPECT_GT(rcs[i], 0.0) << "direction " << i;
-    // Identical geometry for every direction, so the answers must agree.
-    EXPECT_DOUBLE_EQ(rcs[i], rcs[0]) << "direction " << i;
+    // Identical geometry for every direction, so the answers must agree --
+    // to within the GPU reduction tolerance, not bit-for-bit.
+    EXPECT_NEAR(rcs[i], rcs[0], std::abs(rcs[0]) * kRcsRelTolerance)
+        << "direction " << i;
   }
 }
 
 /**
  * @brief Repeating a Physical Optics run reproduces the same RCS
+ *
+ * @details Reproducible to within the GPU reduction tolerance; see
+ * kRcsRelTolerance for why this is not bit-for-bit.
  */
 TEST_F(RcsSimulatorTest, RunIsRepeatable) {
   AddPlate(0.5f);
@@ -277,7 +296,7 @@ TEST_F(RcsSimulatorTest, RunIsRepeatable) {
   ASSERT_EQ(RunMonostatic(1, first), RADARSIM_SUCCESS);
   ASSERT_EQ(RunMonostatic(1, second), RADARSIM_SUCCESS);
 
-  EXPECT_DOUBLE_EQ(first[0], second[0]);
+  EXPECT_NEAR(first[0], second[0], std::abs(first[0]) * kRcsRelTolerance);
 }
 
 }  // namespace
