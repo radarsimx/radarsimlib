@@ -4,12 +4,11 @@
  *
  * @details
  * Test scenarios:
- * - Target list initialization and destruction
- * - Point target addition
- * - Mesh target addition
- * - Parameter validation
- * - Automatic memory management
- * - Manual vs automatic cleanup
+ * - Target manager initialization and destruction
+ * - Point target addition (constant and time-varying)
+ * - Mesh target addition (constant and time-varying)
+ * - Parameter validation with exact error codes
+ * - Free-tier target and triangle limits
  *
  *    ----------
  *    Copyright (C) 2023 - PRESENT  radarsimx.com
@@ -30,419 +29,348 @@
 #include <vector>
 
 #include "radarsim.h"
+#include "test_helpers.hpp"
+
+using rstest::TargetsPtr;
+using rstest::TriangleMesh;
+
+namespace {
 
 /**
- * @brief Test fixture for Targets tests
- *
- * @details
- * This test suite demonstrates both automatic and manual memory management:
- * - Automatic: Objects are automatically cleaned up at program exit
- * - Manual: Objects can still be explicitly freed with Free_Targets()
- * - Mixed: Some objects freed manually, others automatically
+ * @brief Test fixture owning a target manager and default target parameters
  */
 class TargetsTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Setup test data
-    setupTestData();
+    targets = rstest::MakeTargets();
+    ASSERT_NE(targets, nullptr);
   }
 
-  void TearDown() override {
-    // With automatic memory management, manual cleanup is optional
-    // Objects will be automatically cleaned up at program exit
-    // But we can still manually free for testing purposes
-    if (valid_targets) {
-      Free_Targets(valid_targets);
-      valid_targets = nullptr;
-    }
+  /** @brief Add the fixture's default mesh triangle */
+  int AddMesh(t_Targets* handle) {
+    return Add_Mesh_Target(mesh.points.data(), mesh.cells.data(),
+                           mesh.cell_size, motion.origin, motion.location,
+                           motion.speed, motion.rotation, motion.rotation_rate,
+                           1.0f, 0.0f, 1.0f, 0.0f, false, 0.0f, false, handle);
   }
 
-  void setupTestData() {
-    // Setup point target parameters
-    point_location[0] = 10.0f;
-    point_location[1] = 5.0f;
-    point_location[2] = 0.0f;
-    point_speed[0] = 0.0f;
-    point_speed[1] = 0.0f;
-    point_speed[2] = 0.0f;
-    point_rcs = 10.0f;  // 10 dBsm
-    point_phase = 0.0f;
-
-    // Setup simple mesh target (triangle)
-    setupSimpleMesh();
-
-    // Setup mesh target parameters
-    mesh_origin[0] = 0.0f;
-    mesh_origin[1] = 0.0f;
-    mesh_origin[2] = 0.0f;
-    mesh_location[0] = 20.0f;
-    mesh_location[1] = 0.0f;
-    mesh_location[2] = 0.0f;
-    mesh_speed[0] = 0.0f;
-    mesh_speed[1] = 0.0f;
-    mesh_speed[2] = 0.0f;
-    mesh_rotation[0] = 0.0f;
-    mesh_rotation[1] = 0.0f;
-    mesh_rotation[2] = 0.0f;
-    mesh_rotation_rate[0] = 0.0f;
-    mesh_rotation_rate[1] = 0.0f;
-    mesh_rotation_rate[2] = 0.0f;
-
-    ep_real = 1.0f;
-    ep_imag = 0.0f;  // Permittivity
-    mu_real = 1.0f;
-    mu_imag = 0.0f;  // Permeability
-    skip_diffusion = false;
-    mesh_density = 0.0f;
-    environment = false;
+  /** @brief Add the fixture's default point scatterer */
+  int AddPoint(t_Targets* handle) {
+    return Add_Point_Target(point_location, point_speed, point_rcs, point_phase,
+                            handle);
   }
 
-  void setupSimpleMesh() {
-    // Create a simple triangle mesh
-    mesh_points = {
-        0.0f, 0.0f, 0.0f,  // vertex 0
-        1.0f, 0.0f, 0.0f,  // vertex 1
-        0.5f, 1.0f, 0.0f   // vertex 2
-    };
+  TargetsPtr targets;
+  TriangleMesh mesh;
+  rstest::Motion motion;
 
-    mesh_cells = {0, 1, 2};  // One triangle
-    cell_size = 1;
-  }
-
-  // Test data
-  float point_location[3], point_speed[3];
-  float point_rcs, point_phase;
-
-  std::vector<float> mesh_points;
-  std::vector<int> mesh_cells;
-  int cell_size;
-  float mesh_origin[3], mesh_location[3], mesh_speed[3];
-  float mesh_rotation[3], mesh_rotation_rate[3];
-  float ep_real, ep_imag, mu_real, mu_imag;
-  bool skip_diffusion;
-  float mesh_density;
-  bool environment;
-
-  t_Targets* valid_targets = nullptr;
+  float point_location[3] = {10.0f, 5.0f, 0.0f};
+  float point_speed[3] = {0.0f, 0.0f, 0.0f};
+  float point_rcs = 10.0f;  ///< dBsm
+  float point_phase = 0.0f;
 };
 
-/**
- * @brief Test target list initialization
- */
-TEST_F(TargetsTest, InitTargets) {
-  valid_targets = Init_Targets();
+/*********************************************
+ *
+ *  Initialization
+ *
+ *********************************************/
 
-  EXPECT_NE(valid_targets, nullptr);
-  // Note: No Is_Valid_Pointer function available in the C API
+TEST_F(TargetsTest, InitStartsEmpty) {
+  EXPECT_EQ(Get_Num_Targets(targets.get()), 0);
 }
 
-/**
- * @brief Test adding point target
- */
-TEST_F(TargetsTest, AddPointTarget) {
-  valid_targets = Init_Targets();
-  ASSERT_NE(valid_targets, nullptr);
-
-  // Test adding valid point target
-  int result = Add_Point_Target(point_location, point_speed, point_rcs,
-                                point_phase, valid_targets);
-
-  EXPECT_EQ(result, 0);  // 0 for success according to API
+TEST_F(TargetsTest, FreeIsNullSafe) {
+  Free_Targets(nullptr);  // must not crash
 }
 
-/**
- * @brief Test adding point target with null parameters
- */
-TEST_F(TargetsTest, AddPointTargetNullParams) {
-  valid_targets = Init_Targets();
-  ASSERT_NE(valid_targets, nullptr);
+/*********************************************
+ *
+ *  Point targets
+ *
+ *********************************************/
 
-  // Test with null location
-  int result = Add_Point_Target(nullptr, point_speed, point_rcs, point_phase,
-                                valid_targets);
-  EXPECT_NE(result, 0);  // Non-zero for failure
-
-  // Test with null speed
-  result = Add_Point_Target(point_location, nullptr, point_rcs, point_phase,
-                            valid_targets);
-  EXPECT_NE(result, 0);  // Non-zero for failure
-
-  // Test with null targets
-  result = Add_Point_Target(point_location, point_speed, point_rcs, point_phase,
-                            nullptr);
-  EXPECT_NE(result, 0);  // Non-zero for failure
+TEST_F(TargetsTest, AddPointTargetSucceeds) {
+  EXPECT_EQ(AddPoint(targets.get()), RADARSIM_SUCCESS);
 }
 
-/**
- * @brief Test adding mesh target
- */
-TEST_F(TargetsTest, AddMeshTarget) {
-  valid_targets = Init_Targets();
-  ASSERT_NE(valid_targets, nullptr);
-
-  // Test adding valid mesh target
-  int result = Add_Mesh_Target(
-      mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
-      mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
-      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
-      valid_targets);
-
-  EXPECT_EQ(result, 0);  // 0 for success according to API
-}
-
-/**
- * @brief Test adding mesh target with null parameters
- */
-TEST_F(TargetsTest, AddMeshTargetNullParams) {
-  valid_targets = Init_Targets();
-  ASSERT_NE(valid_targets, nullptr);
-
-  // Test with null points
-  int result = Add_Mesh_Target(
-      nullptr, mesh_cells.data(), cell_size, mesh_origin, mesh_location,
-      mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real, ep_imag, mu_real,
-      mu_imag, skip_diffusion, mesh_density, environment, valid_targets);
-  EXPECT_NE(result, 0);  // Non-zero for failure
-
-  // Test with null cells
-  result = Add_Mesh_Target(mesh_points.data(), nullptr, cell_size, mesh_origin,
-                           mesh_location, mesh_speed, mesh_rotation,
-                           mesh_rotation_rate, ep_real, ep_imag, mu_real,
-                           mu_imag, skip_diffusion, mesh_density, environment,
-                           valid_targets);
-  EXPECT_NE(result, 0);  // Non-zero for failure
-
-  // Test with null targets
-  result = Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size,
-                           mesh_origin, mesh_location, mesh_speed,
-                           mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
-                           mu_real, mu_imag, skip_diffusion, mesh_density,
-                           environment, nullptr);
-  EXPECT_NE(result, 0);  // Non-zero for failure
-}
-
-/**
- * @brief Test adding mesh target with invalid parameters
- */
-TEST_F(TargetsTest, AddMeshTargetInvalidParams) {
-  valid_targets = Init_Targets();
-  ASSERT_NE(valid_targets, nullptr);
-
-  // Test with zero cell size
-  int result = Add_Mesh_Target(
-      mesh_points.data(), mesh_cells.data(), 0, mesh_origin, mesh_location,
-      mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real, ep_imag, mu_real,
-      mu_imag, skip_diffusion, mesh_density, environment, valid_targets);
-  EXPECT_NE(result, 0);  // Non-zero for failure
-
-  // Test with negative cell size
-  result = Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), -1,
-                           mesh_origin, mesh_location, mesh_speed,
-                           mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
-                           mu_real, mu_imag, skip_diffusion, mesh_density,
-                           environment, valid_targets);
-  EXPECT_NE(result, 0);  // Non-zero for failure
-}
-
-/**
- * @brief Test multiple targets
- */
-TEST_F(TargetsTest, MultipleTargets) {
-  valid_targets = Init_Targets();
-  ASSERT_NE(valid_targets, nullptr);
-
-  // Add point target
-  int result1 = Add_Point_Target(point_location, point_speed, point_rcs,
-                                 point_phase, valid_targets);
-  EXPECT_EQ(result1, 0);  // 0 for success according to API
-
-  // Add mesh target
-  int result2 = Add_Mesh_Target(
-      mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
-      mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
-      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
-      valid_targets);
-  EXPECT_EQ(result2, 0);  // 0 for success according to API
-}
-
-/**
- * @brief Test automatic memory management
- */
-TEST_F(TargetsTest, AutomaticMemoryManagement) {
-  // Test that we can create target lists without manual cleanup
-  t_Targets* targets1 = Init_Targets();
-  ASSERT_NE(targets1, nullptr);
-
-  t_Targets* targets2 = Init_Targets();
-  ASSERT_NE(targets2, nullptr);
-
-  // Add different types of targets to both lists
-  int result1 = Add_Point_Target(point_location, point_speed, point_rcs,
-                                 point_phase, targets1);
-  EXPECT_EQ(result1, 0);
-
-  int result2 = Add_Mesh_Target(
-      mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
-      mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
-      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
-      targets2);
-  EXPECT_EQ(result2, 0);
-
-  // Don't call Free_Targets - test automatic cleanup
-  // These target lists will be automatically cleaned up at program exit
-}
-
-/**
- * @brief Test manual vs automatic cleanup
- */
-TEST_F(TargetsTest, ManualVsAutomaticCleanup) {
-  // Create two target lists
-  t_Targets* manual_targets = Init_Targets();
-  t_Targets* auto_targets = Init_Targets();
-
-  ASSERT_NE(manual_targets, nullptr);
-  ASSERT_NE(auto_targets, nullptr);
-
-  // Add targets to both
-  Add_Point_Target(point_location, point_speed, point_rcs, point_phase,
-                   manual_targets);
-  Add_Point_Target(point_location, point_speed, point_rcs + 5.0f, point_phase,
-                   auto_targets);
-
-  // Manually free one target list
-  Free_Targets(manual_targets);
-
-  // Leave auto_targets for automatic cleanup at program exit
-  // This demonstrates both cleanup methods work
-}
-
-/**
- * @brief Test target list destruction (original test preserved)
- */
-TEST_F(TargetsTest, FreeTargets) {
-  // Test freeing a valid target list
-  t_Targets* test_targets = Init_Targets();
-  ASSERT_NE(test_targets, nullptr);
-
-  // Add some targets
-  Add_Point_Target(point_location, point_speed, point_rcs, point_phase,
-                   test_targets);
-  Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
-                  mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate,
-                  ep_real, ep_imag, mu_real, mu_imag, skip_diffusion,
-                  mesh_density, environment, test_targets);
-
-  // Should not crash when freeing a valid target list
-  Free_Targets(test_targets);
-
-  // Test freeing a null pointer - should handle gracefully
-  Free_Targets(nullptr);
-}
-
-/**
- * @brief Test automatic cleanup control
- */
-TEST_F(TargetsTest, AutomaticCleanupControl) {
-  // Test enabling automatic cleanup (should be enabled by default)
-//   Enable_Automatic_Cleanup(true);
-
-  // Create a target list that will be automatically cleaned up
-  t_Targets* targets = Init_Targets();
-  ASSERT_NE(targets, nullptr);
-
-  // Verify it works by adding both types of targets
-  int result1 = Add_Point_Target(point_location, point_speed, point_rcs,
-                                 point_phase, targets);
-  EXPECT_EQ(result1, 0);
-
-  int result2 = Add_Mesh_Target(
-      mesh_points.data(), mesh_cells.data(), cell_size, mesh_origin,
-      mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
-      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
-      targets);
-  EXPECT_EQ(result2, 0);
-
-  // Don't free - let automatic cleanup handle it
-}
-
-/**
- * @brief Test unlicensed point target limit
- */
-TEST_F(TargetsTest, UnlicensedPointTargetLimit) {
-  valid_targets = Init_Targets();
-  ASSERT_NE(valid_targets, nullptr);
-
-  // Add 2 point targets (unlicensed limit)
+TEST_F(TargetsTest, AddPointTargetRejectsNullArguments) {
+  EXPECT_EQ(Add_Point_Target(nullptr, point_speed, point_rcs, point_phase,
+                             targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Add_Point_Target(point_location, nullptr, point_rcs, point_phase,
+                             targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
   EXPECT_EQ(Add_Point_Target(point_location, point_speed, point_rcs,
-                             point_phase, valid_targets),
-            0);
-  EXPECT_EQ(Add_Point_Target(point_location, point_speed, point_rcs,
-                             point_phase, valid_targets),
-            0);
+                             point_phase, nullptr),
+            RADARSIM_ERROR_NULL_POINTER);
+}
 
-  // Third point target should fail (exceeds unlicensed limit of 2)
-  EXPECT_NE(Add_Point_Target(point_location, point_speed, point_rcs,
-                             point_phase, valid_targets),
-            0);
+TEST_F(TargetsTest, AddPointTargetArraySucceeds) {
+  float location_array[6] = {10.0f, 0.0f, 0.0f, 20.0f, 0.0f, 0.0f};
+  float speed[3] = {0.0f, 0.0f, 0.0f};
+  float rcs_array[2] = {10.0f, 12.0f};
+  float phase_array[2] = {0.0f, 0.5f};
+
+  EXPECT_EQ(Add_Point_Target_Array(location_array, 2, speed, rcs_array,
+                                   phase_array, 2, targets.get()),
+            RADARSIM_SUCCESS);
+}
+
+TEST_F(TargetsTest, AddPointTargetArrayRejectsNullArguments) {
+  float location_array[3] = {10.0f, 0.0f, 0.0f};
+  float speed[3] = {0.0f, 0.0f, 0.0f};
+  float rcs_array[1] = {10.0f};
+  float phase_array[1] = {0.0f};
+
+  EXPECT_EQ(Add_Point_Target_Array(nullptr, 1, speed, rcs_array, phase_array,
+                                   1, targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Add_Point_Target_Array(location_array, 1, nullptr, rcs_array,
+                                   phase_array, 1, targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Add_Point_Target_Array(location_array, 1, speed, nullptr,
+                                   phase_array, 1, targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Add_Point_Target_Array(location_array, 1, speed, rcs_array,
+                                   nullptr, 1, targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Add_Point_Target_Array(location_array, 1, speed, rcs_array,
+                                   phase_array, 1, nullptr),
+            RADARSIM_ERROR_NULL_POINTER);
+}
+
+TEST_F(TargetsTest, AddPointTargetArrayRejectsNonPositiveSizes) {
+  float location_array[3] = {10.0f, 0.0f, 0.0f};
+  float speed[3] = {0.0f, 0.0f, 0.0f};
+  float rcs_array[1] = {10.0f};
+  float phase_array[1] = {0.0f};
+
+  EXPECT_EQ(Add_Point_Target_Array(location_array, 0, speed, rcs_array,
+                                   phase_array, 1, targets.get()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Add_Point_Target_Array(location_array, -1, speed, rcs_array,
+                                   phase_array, 1, targets.get()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Add_Point_Target_Array(location_array, 1, speed, rcs_array,
+                                   phase_array, 0, targets.get()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Add_Point_Target_Array(location_array, 1, speed, rcs_array,
+                                   phase_array, -1, targets.get()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
 }
 
 /**
- * @brief Test unlicensed mesh target limit
+ * @brief Unlicensed builds accept a bounded number of point scatterers
  */
-TEST_F(TargetsTest, UnlicensedMeshTargetLimit) {
-  valid_targets = Init_Targets();
-  ASSERT_NE(valid_targets, nullptr);
+TEST_F(TargetsTest, FreeTierPointTargetLimit) {
+  RS_SKIP_IF_LICENSED();
 
-  // Add 2 mesh targets (unlicensed limit)
-  EXPECT_EQ(Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size,
-                            mesh_origin, mesh_location, mesh_speed,
-                            mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
-                            mu_real, mu_imag, skip_diffusion, mesh_density,
-                            environment, valid_targets),
-            0);
-  EXPECT_EQ(Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size,
-                            mesh_origin, mesh_location, mesh_speed,
-                            mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
-                            mu_real, mu_imag, skip_diffusion, mesh_density,
-                            environment, valid_targets),
-            0);
-
-  // Third mesh target should fail (exceeds unlicensed limit of 2)
-  EXPECT_NE(Add_Mesh_Target(mesh_points.data(), mesh_cells.data(), cell_size,
-                            mesh_origin, mesh_location, mesh_speed,
-                            mesh_rotation, mesh_rotation_rate, ep_real, ep_imag,
-                            mu_real, mu_imag, skip_diffusion, mesh_density,
-                            environment, valid_targets),
-            0);
-}
-
-/**
- * @brief Test unlicensed mesh triangle limit
- */
-TEST_F(TargetsTest, UnlicensedMeshTriangleLimit) {
-  valid_targets = Init_Targets();
-  ASSERT_NE(valid_targets, nullptr);
-
-  // Create a mesh with more than 8 triangles (exceeds unlicensed limit)
-  std::vector<float> large_mesh_points;
-  std::vector<int> large_mesh_cells;
-  // 10 vertices arranged in a strip
-  for (int i = 0; i < 10; i++) {
-    large_mesh_points.push_back(static_cast<float>(i));
-    large_mesh_points.push_back(0.0f);
-    large_mesh_points.push_back(0.0f);
-  }
-  // 9 triangles
-  for (int i = 0; i < 9; i++) {
-    large_mesh_cells.push_back(i);
-    large_mesh_cells.push_back(i + 1);
-    large_mesh_cells.push_back(0);
+  for (int i = 0; i < rstest::kFreeTierMaxPointTargets; i++) {
+    EXPECT_EQ(AddPoint(targets.get()), RADARSIM_SUCCESS) << "target " << i;
   }
 
-  int result = Add_Mesh_Target(
-      large_mesh_points.data(), large_mesh_cells.data(), 9, mesh_origin,
-      mesh_location, mesh_speed, mesh_rotation, mesh_rotation_rate, ep_real,
-      ep_imag, mu_real, mu_imag, skip_diffusion, mesh_density, environment,
-      valid_targets);
-  EXPECT_NE(result, 0);  // Should fail: 9 triangles > 8 limit
+  EXPECT_EQ(AddPoint(targets.get()), RADARSIM_ERROR_FREE_TIER_LIMIT);
 }
+
+/**
+ * @brief The point limit is shared between the scalar and array entry points
+ */
+TEST_F(TargetsTest, FreeTierPointLimitAppliesToArrayVariant) {
+  RS_SKIP_IF_LICENSED();
+
+  for (int i = 0; i < rstest::kFreeTierMaxPointTargets; i++) {
+    ASSERT_EQ(AddPoint(targets.get()), RADARSIM_SUCCESS);
+  }
+
+  float location_array[3] = {10.0f, 0.0f, 0.0f};
+  float speed[3] = {0.0f, 0.0f, 0.0f};
+  float rcs_array[1] = {10.0f};
+  float phase_array[1] = {0.0f};
+
+  EXPECT_EQ(Add_Point_Target_Array(location_array, 1, speed, rcs_array,
+                                   phase_array, 1, targets.get()),
+            RADARSIM_ERROR_FREE_TIER_LIMIT);
+}
+
+/*********************************************
+ *
+ *  Mesh targets
+ *
+ *********************************************/
+
+TEST_F(TargetsTest, AddMeshTargetSucceeds) {
+  EXPECT_EQ(AddMesh(targets.get()), RADARSIM_SUCCESS);
+  EXPECT_EQ(Get_Num_Targets(targets.get()), 1);
+  EXPECT_EQ(Get_Target_Mesh_Size(targets.get(), 0), mesh.cell_size);
+}
+
+TEST_F(TargetsTest, AddMeshTargetRejectsNullArguments) {
+  EXPECT_EQ(Add_Mesh_Target(nullptr, mesh.cells.data(), mesh.cell_size,
+                            motion.origin, motion.location, motion.speed,
+                            motion.rotation, motion.rotation_rate, 1.0f, 0.0f,
+                            1.0f, 0.0f, false, 0.0f, false, targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Add_Mesh_Target(mesh.points.data(), nullptr, mesh.cell_size,
+                            motion.origin, motion.location, motion.speed,
+                            motion.rotation, motion.rotation_rate, 1.0f, 0.0f,
+                            1.0f, 0.0f, false, 0.0f, false, targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Add_Mesh_Target(mesh.points.data(), mesh.cells.data(),
+                            mesh.cell_size, nullptr, motion.location,
+                            motion.speed, motion.rotation,
+                            motion.rotation_rate, 1.0f, 0.0f, 1.0f, 0.0f,
+                            false, 0.0f, false, targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(AddMesh(nullptr), RADARSIM_ERROR_NULL_POINTER);
+}
+
+TEST_F(TargetsTest, AddMeshTargetRejectsNonPositiveCellSize) {
+  EXPECT_EQ(Add_Mesh_Target(mesh.points.data(), mesh.cells.data(), 0,
+                            motion.origin, motion.location, motion.speed,
+                            motion.rotation, motion.rotation_rate, 1.0f, 0.0f,
+                            1.0f, 0.0f, false, 0.0f, false, targets.get()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Add_Mesh_Target(mesh.points.data(), mesh.cells.data(), -1,
+                            motion.origin, motion.location, motion.speed,
+                            motion.rotation, motion.rotation_rate, 1.0f, 0.0f,
+                            1.0f, 0.0f, false, 0.0f, false, targets.get()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+}
+
+TEST_F(TargetsTest, AddMeshTargetArraySucceeds) {
+  float location_array[6] = {10.0f, 0.0f, 0.0f, 12.0f, 0.0f, 0.0f};
+  float speed_array[6] = {0.0f};
+  float rotation_array[6] = {0.0f};
+  float rotation_rate_array[6] = {0.0f};
+
+  EXPECT_EQ(Add_Mesh_Target_Array(mesh.points.data(), mesh.cells.data(),
+                                  mesh.cell_size, motion.origin,
+                                  location_array, speed_array, rotation_array,
+                                  rotation_rate_array, 2, 1.0f, 0.0f, 1.0f,
+                                  0.0f, false, 0.0f, false, targets.get()),
+            RADARSIM_SUCCESS);
+  EXPECT_EQ(Get_Num_Targets(targets.get()), 1);
+}
+
+TEST_F(TargetsTest, AddMeshTargetArrayRejectsNullArguments) {
+  float motion_array[3] = {0.0f, 0.0f, 0.0f};
+
+  EXPECT_EQ(Add_Mesh_Target_Array(nullptr, mesh.cells.data(), mesh.cell_size,
+                                  motion.origin, motion_array, motion_array,
+                                  motion_array, motion_array, 1, 1.0f, 0.0f,
+                                  1.0f, 0.0f, false, 0.0f, false,
+                                  targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Add_Mesh_Target_Array(mesh.points.data(), mesh.cells.data(),
+                                  mesh.cell_size, motion.origin, nullptr,
+                                  motion_array, motion_array, motion_array, 1,
+                                  1.0f, 0.0f, 1.0f, 0.0f, false, 0.0f, false,
+                                  targets.get()),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Add_Mesh_Target_Array(mesh.points.data(), mesh.cells.data(),
+                                  mesh.cell_size, motion.origin, motion_array,
+                                  motion_array, motion_array, motion_array, 1,
+                                  1.0f, 0.0f, 1.0f, 0.0f, false, 0.0f, false,
+                                  nullptr),
+            RADARSIM_ERROR_NULL_POINTER);
+}
+
+TEST_F(TargetsTest, AddMeshTargetArrayRejectsNonPositiveSizes) {
+  float motion_array[3] = {0.0f, 0.0f, 0.0f};
+
+  EXPECT_EQ(Add_Mesh_Target_Array(mesh.points.data(), mesh.cells.data(), 0,
+                                  motion.origin, motion_array, motion_array,
+                                  motion_array, motion_array, 1, 1.0f, 0.0f,
+                                  1.0f, 0.0f, false, 0.0f, false,
+                                  targets.get()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Add_Mesh_Target_Array(mesh.points.data(), mesh.cells.data(),
+                                  mesh.cell_size, motion.origin, motion_array,
+                                  motion_array, motion_array, motion_array, 0,
+                                  1.0f, 0.0f, 1.0f, 0.0f, false, 0.0f, false,
+                                  targets.get()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+}
+
+/**
+ * @brief Unlicensed builds accept a bounded number of mesh targets
+ */
+TEST_F(TargetsTest, FreeTierMeshTargetLimit) {
+  RS_SKIP_IF_LICENSED();
+
+  for (int i = 0; i < rstest::kFreeTierMaxMeshTargets; i++) {
+    EXPECT_EQ(AddMesh(targets.get()), RADARSIM_SUCCESS) << "target " << i;
+  }
+
+  EXPECT_EQ(AddMesh(targets.get()), RADARSIM_ERROR_FREE_TIER_LIMIT);
+  EXPECT_EQ(Get_Num_Targets(targets.get()), rstest::kFreeTierMaxMeshTargets);
+}
+
+/**
+ * @brief Unlicensed builds bound the triangle count of a single mesh
+ */
+TEST_F(TargetsTest, FreeTierMeshTriangleLimit) {
+  RS_SKIP_IF_LICENSED();
+
+  const int too_many = rstest::kFreeTierMaxMeshTriangles + 1;
+  std::vector<float> points;
+  std::vector<int> cells;
+  for (int i = 0; i < too_many + 1; i++) {
+    points.push_back(static_cast<float>(i));
+    points.push_back(0.0f);
+    points.push_back(0.0f);
+  }
+  for (int i = 0; i < too_many; i++) {
+    cells.push_back(i);
+    cells.push_back(i + 1);
+    cells.push_back(0);
+  }
+
+  EXPECT_EQ(Add_Mesh_Target(points.data(), cells.data(), too_many,
+                            motion.origin, motion.location, motion.speed,
+                            motion.rotation, motion.rotation_rate, 1.0f, 0.0f,
+                            1.0f, 0.0f, false, 0.0f, false, targets.get()),
+            RADARSIM_ERROR_FREE_TIER_LIMIT);
+  EXPECT_EQ(Get_Num_Targets(targets.get()), 0);
+
+  // Exactly at the limit must still be accepted.
+  EXPECT_EQ(Add_Mesh_Target(points.data(), cells.data(),
+                            rstest::kFreeTierMaxMeshTriangles, motion.origin,
+                            motion.location, motion.speed, motion.rotation,
+                            motion.rotation_rate, 1.0f, 0.0f, 1.0f, 0.0f,
+                            false, 0.0f, false, targets.get()),
+            RADARSIM_SUCCESS);
+}
+
+/*********************************************
+ *
+ *  Mixed content
+ *
+ *********************************************/
+
+/**
+ * @brief Point and mesh targets are tracked in independent pools
+ */
+TEST_F(TargetsTest, PointAndMeshTargetsCoexist) {
+  ASSERT_EQ(AddPoint(targets.get()), RADARSIM_SUCCESS);
+  ASSERT_EQ(AddMesh(targets.get()), RADARSIM_SUCCESS);
+
+  // Get_Num_Targets counts mesh targets only.
+  EXPECT_EQ(Get_Num_Targets(targets.get()), 1);
+}
+
+/**
+ * @brief Two managers are fully independent of one another
+ */
+TEST_F(TargetsTest, ManagersAreIndependent) {
+  TargetsPtr other = rstest::MakeTargets();
+  ASSERT_NE(other, nullptr);
+
+  ASSERT_EQ(AddMesh(targets.get()), RADARSIM_SUCCESS);
+
+  EXPECT_EQ(Get_Num_Targets(targets.get()), 1);
+  EXPECT_EQ(Get_Num_Targets(other.get()), 0);
+}
+
+}  // namespace

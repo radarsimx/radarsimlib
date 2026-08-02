@@ -4,11 +4,10 @@
  *
  * @details
  * Test scenarios:
- * - Receiver creation and destruction
- * - Channel addition
- * - Parameter validation
- * - Automatic memory management
- * - Manual vs automatic cleanup
+ * - Receiver creation with valid and out-of-range RF parameters
+ * - Channel addition and channel counting
+ * - Free-tier channel limit enforcement
+ * - Destruction and null-safety
  *
  *    ----------
  *    Copyright (C) 2023 - PRESENT  radarsimx.com
@@ -26,293 +25,221 @@
 
 #include <gtest/gtest.h>
 
-#include <cmath>
+#include <limits>
 #include <vector>
 
 #include "radarsim.h"
+#include "test_helpers.hpp"
 
-// Define constants since type_def.hpp is not directly accessible
-#define kPI 3.141592653589793
+using rstest::IsotropicAntenna;
+using rstest::LinearPolarization;
+using rstest::ReceiverPtr;
+
+namespace {
 
 /**
- * @brief Test fixture for Receiver tests
- *
- * @details
- * This test suite demonstrates both automatic and manual memory management:
- * - Automatic: Objects are automatically cleaned up at program exit
- * - Manual: Objects can still be explicitly freed with Free_Receiver()
- * - Mixed: Some objects freed manually, others automatically
+ * @brief Test fixture owning receiver and channel parameters
  */
 class ReceiverTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    // Setup test data
-    setupTestData();
+  /** @brief Create a receiver owned by the caller's smart pointer */
+  ReceiverPtr Create(float sampling_rate = 1e6f, double gate = 0.0) {
+    return ReceiverPtr(Create_Receiver(sampling_rate, rf_gain, resistor,
+                                       baseband_gain, baseband_bw, gate));
   }
 
-  void TearDown() override {
-    // With automatic memory management, manual cleanup is optional
-    // Objects will be automatically cleaned up at program exit
-    // But we can still manually free for testing purposes
-    if (valid_receiver) {
-      Free_Receiver(valid_receiver);
-      valid_receiver = nullptr;
-    }
+  /** @brief Add the fixture's default channel to the given receiver */
+  int AddChannel(t_Receiver* rx) {
+    return Add_Rxchannel(location, polarization.real, polarization.imag,
+                         antenna.phi, antenna.phi_pattern,
+                         IsotropicAntenna::kLength, antenna.theta,
+                         antenna.theta_pattern, IsotropicAntenna::kLength,
+                         IsotropicAntenna::kGain, rx);
   }
 
-  void setupTestData() {
-    // Setup receiver parameters
-    fs = 1e6;               // 1 MHz sampling rate
-    rf_gain = 30.0f;        // 30 dB RF gain
-    resistor = 50.0f;       // 50 Ohm
-    baseband_gain = 20.0f;  // 20 dB baseband gain
-    baseband_bw = 500e3;    // 500 kHz baseband bandwidth
+  float fs = 1e6f;             ///< 1 MHz sampling rate
+  float rf_gain = 30.0f;       ///< 30 dB RF gain
+  float resistor = 50.0f;      ///< 50 Ohm load
+  float baseband_gain = 20.0f; ///< 20 dB baseband gain
+  float baseband_bw = 500e3f;  ///< 500 kHz baseband bandwidth
+  double gate_delay = 0.0;     ///< No range gate (zero-delay deramp)
 
-    // Setup channel parameters
-    location[0] = 0.0f;
-    location[1] = 0.0f;
-    location[2] = 0.0f;
-    polar_real[0] = 1.0f;
-    polar_real[1] = 0.0f;
-    polar_real[2] = 0.0f;
-    polar_imag[0] = 0.0f;
-    polar_imag[1] = 0.0f;
-    polar_imag[2] = 0.0f;
-
-    // Setup radiation pattern
-    phi_length = 2;
-    phi[0] = -static_cast<float>(kPI) / 2.0f;
-    phi[1] = static_cast<float>(kPI) / 2.0f;
-    phi_ptn[0] = 0.0f;
-    phi_ptn[1] = 0.0f;
-
-    theta_length = 2;
-    theta[0] = 0.0f;
-    theta[1] = static_cast<float>(kPI);
-    theta_ptn[0] = 0.0f;
-    theta_ptn[1] = 0.0f;
-
-    antenna_gain = 20.0f;  // 20 dB
-  }
-
-  // Test data
-  float fs, rf_gain, resistor, baseband_gain, baseband_bw;
-  float location[3], polar_real[3], polar_imag[3];
-  float phi[2], phi_ptn[2], theta[2], theta_ptn[2];
-  int phi_length, theta_length;
-  float antenna_gain;
-
-  t_Receiver* valid_receiver = nullptr;
+  IsotropicAntenna antenna;
+  LinearPolarization polarization;
+  float location[3] = {0.0f, 0.0f, 0.0f};
 };
 
-/**
- * @brief Test receiver creation with valid parameters
- */
-TEST_F(ReceiverTest, CreateReceiverValid) {
-  valid_receiver =
-      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw);
+/*********************************************
+ *
+ *  Creation
+ *
+ *********************************************/
 
-  EXPECT_NE(valid_receiver, nullptr);
-  // Note: No Is_Valid_Pointer function available in the C API
+TEST_F(ReceiverTest, CreateWithValidParameters) {
+  ReceiverPtr rx = Create();
+
+  ASSERT_NE(rx, nullptr);
+  EXPECT_EQ(Get_Num_Rxchannel(rx.get()), 0)
+      << "A freshly created receiver must have no channels";
+}
+
+TEST_F(ReceiverTest, CreateRejectsNonPositiveSamplingRate) {
+  EXPECT_EQ(Create_Receiver(0.0f, rf_gain, resistor, baseband_gain, baseband_bw,
+                            gate_delay),
+            nullptr);
+  EXPECT_EQ(Create_Receiver(-1.0f, rf_gain, resistor, baseband_gain,
+                            baseband_bw, gate_delay),
+            nullptr);
+}
+
+TEST_F(ReceiverTest, CreateRejectsNonPositiveResistor) {
+  EXPECT_EQ(Create_Receiver(fs, rf_gain, 0.0f, baseband_gain, baseband_bw,
+                            gate_delay),
+            nullptr);
+  EXPECT_EQ(Create_Receiver(fs, rf_gain, -1.0f, baseband_gain, baseband_bw,
+                            gate_delay),
+            nullptr);
+}
+
+TEST_F(ReceiverTest, CreateRejectsNonPositiveBandwidth) {
+  EXPECT_EQ(
+      Create_Receiver(fs, rf_gain, resistor, baseband_gain, 0.0f, gate_delay),
+      nullptr);
+  EXPECT_EQ(
+      Create_Receiver(fs, rf_gain, resistor, baseband_gain, -1.0f, gate_delay),
+      nullptr);
 }
 
 /**
- * @brief Test receiver creation with invalid parameters
+ * @brief Gains are unconstrained - negative gain is a valid attenuator
  */
-TEST_F(ReceiverTest, CreateReceiverInvalidParams) {
-  // Test with zero sampling rate
-  t_Receiver* rx =
-      Create_Receiver(0.0f, rf_gain, resistor, baseband_gain, baseband_bw);
-  EXPECT_EQ(rx, nullptr);
+TEST_F(ReceiverTest, CreateAcceptsNegativeGains) {
+  ReceiverPtr rx(
+      Create_Receiver(fs, -10.0f, resistor, -6.0f, baseband_bw, gate_delay));
+  EXPECT_NE(rx, nullptr);
+}
 
-  // Test with negative sampling rate
-  rx = Create_Receiver(-1.0f, rf_gain, resistor, baseband_gain, baseband_bw);
-  EXPECT_EQ(rx, nullptr);
+/*********************************************
+ *
+ *  Range gate
+ *
+ *********************************************/
 
-  // Test with zero resistor
-  rx = Create_Receiver(fs, rf_gain, 0.0f, baseband_gain, baseband_bw);
-  EXPECT_EQ(rx, nullptr);
+/**
+ * @brief A positive gate delay is a valid configuration
+ *
+ * @details The gate opens the receive window this far after the chirp start
+ * and delays the deramp reference by the same amount, so a target at
+ * c * gate / 2 beats at DC. 741 us corresponds to ~111 km.
+ */
+TEST_F(ReceiverTest, CreateAcceptsPositiveGateDelay) {
+  ReceiverPtr rx = Create(fs, 741e-6);
 
-  // Test with negative resistor
-  rx = Create_Receiver(fs, rf_gain, -1.0f, baseband_gain, baseband_bw);
-  EXPECT_EQ(rx, nullptr);
-
-  // Test with negative baseband bandwidth
-  rx = Create_Receiver(fs, rf_gain, resistor, baseband_gain, -1.0f);
-  EXPECT_EQ(rx, nullptr);
-
-  // Test with 0 baseband bandwidth
-  rx = Create_Receiver(fs, rf_gain, resistor, baseband_gain, 0.0f);
-  EXPECT_EQ(rx, nullptr);
+  ASSERT_NE(rx, nullptr);
+  EXPECT_EQ(Get_Num_Rxchannel(rx.get()), 0);
 }
 
 /**
- * @brief Test adding receiver channels
+ * @brief A zero gate delay is the documented default (zero-delay deramp)
  */
-TEST_F(ReceiverTest, AddRxChannel) {
-  valid_receiver =
-      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw);
-  ASSERT_NE(valid_receiver, nullptr);
-
-  // Test adding valid channel
-  int result = Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn,
-                             phi_length, theta, theta_ptn, theta_length,
-                             antenna_gain, valid_receiver);
-
-  EXPECT_EQ(result, 0);  // 0 for success according to API
-  EXPECT_EQ(Get_Num_Rxchannel(valid_receiver), 1);
+TEST_F(ReceiverTest, CreateAcceptsZeroGateDelay) {
+  EXPECT_NE(Create(fs, 0.0), nullptr);
 }
 
 /**
- * @brief Test adding receiver channel with null receiver
+ * @brief A negative gate would place the deramp reference before the chirp
  */
-TEST_F(ReceiverTest, AddRxChannelNullReceiver) {
-  int result =
-      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                    theta, theta_ptn, theta_length, antenna_gain, nullptr);
-
-  EXPECT_NE(result, 0);  // Non-zero for failure
+TEST_F(ReceiverTest, CreateRejectsNegativeGateDelay) {
+  EXPECT_EQ(
+      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw, -1e-6),
+      nullptr);
 }
 
 /**
- * @brief Test getting number of channels with null receiver
+ * @brief Non-finite gate delays are rejected rather than propagated
+ *
+ * @details The gate is added to every sample instant, so a NaN or infinite
+ * value would silently poison the whole baseband rather than fail loudly.
  */
-TEST_F(ReceiverTest, GetNumRxChannelsNull) {
-  // This might crash if not handled properly, so we test it
-  // Note: This test might need to be commented out if the implementation
-  // doesn't handle null pointers in Get_Num_Rxchannel
-  // EXPECT_EQ(Get_Num_Rxchannel(nullptr), 0);
+TEST_F(ReceiverTest, CreateRejectsNonFiniteGateDelay) {
+  EXPECT_EQ(Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw,
+                            std::numeric_limits<double>::quiet_NaN()),
+            nullptr);
+  EXPECT_EQ(Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw,
+                            std::numeric_limits<double>::infinity()),
+            nullptr);
+  EXPECT_EQ(Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw,
+                            -std::numeric_limits<double>::infinity()),
+            nullptr);
 }
 
-/**
- * @brief Test getting number of channels
- */
-TEST_F(ReceiverTest, GetNumRxChannels) {
-  valid_receiver =
-      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw);
-  ASSERT_NE(valid_receiver, nullptr);
+/*********************************************
+ *
+ *  Channels
+ *
+ *********************************************/
 
-  // Initially should have 0 channels
-  EXPECT_EQ(Get_Num_Rxchannel(valid_receiver), 0);
-
-  // Add a channel
-  Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                theta, theta_ptn, theta_length, antenna_gain, valid_receiver);
-
-  EXPECT_EQ(Get_Num_Rxchannel(valid_receiver), 1);
-
-  // Adding another channel should fail (unlicensed limit: 1 channel)
-  int result =
-      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                    theta, theta_ptn, theta_length, antenna_gain, valid_receiver);
-  EXPECT_NE(result, 0);
-  EXPECT_EQ(Get_Num_Rxchannel(valid_receiver), 1);
-}
-
-/**
- * @brief Test automatic memory management
- */
-TEST_F(ReceiverTest, AutomaticMemoryManagement) {
-  // Test that we can create receivers without manual cleanup
-  t_Receiver* rx1 =
-      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw);
-  ASSERT_NE(rx1, nullptr);
-
-  t_Receiver* rx2 =
-      Create_Receiver(fs * 2, rf_gain, resistor, baseband_gain, baseband_bw);
-  ASSERT_NE(rx2, nullptr);
-
-  // Add channels to both receivers
-  int result1 =
-      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                    theta, theta_ptn, theta_length, antenna_gain, rx1);
-  EXPECT_EQ(result1, 0);
-
-  int result2 =
-      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                    theta, theta_ptn, theta_length, antenna_gain, rx2);
-  EXPECT_EQ(result2, 0);
-
-  // Don't call Free_Receiver - test automatic cleanup
-  // These receivers will be automatically cleaned up at program exit
-}
-
-/**
- * @brief Test manual vs automatic cleanup
- */
-TEST_F(ReceiverTest, ManualVsAutomaticCleanup) {
-  // Create two receivers
-  t_Receiver* manual_rx =
-      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw);
-  t_Receiver* auto_rx =
-      Create_Receiver(fs * 2, rf_gain, resistor, baseband_gain, baseband_bw);
-
-  ASSERT_NE(manual_rx, nullptr);
-  ASSERT_NE(auto_rx, nullptr);
-
-  // Manually free one receiver
-  Free_Receiver(manual_rx);
-
-  // Leave auto_rx for automatic cleanup at program exit
-  // This demonstrates both cleanup methods work
-}
-
-/**
- * @brief Test receiver destruction (original test preserved)
- */
-TEST_F(ReceiverTest, FreeReceiver) {
-  // Test freeing a valid receiver
-  t_Receiver* test_receiver =
-      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw);
-  ASSERT_NE(test_receiver, nullptr);
-
-  // Should not crash when freeing a valid receiver
-  Free_Receiver(test_receiver);
-
-  // Test freeing a null pointer - should handle gracefully
-  Free_Receiver(nullptr);
-}
-
-/**
- * @brief Test automatic cleanup control
- */
-TEST_F(ReceiverTest, AutomaticCleanupControl) {
-  // Test enabling automatic cleanup (should be enabled by default)
-//   Enable_Automatic_Cleanup(true);
-
-  // Create a receiver that will be automatically cleaned up
-  t_Receiver* rx =
-      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw);
+TEST_F(ReceiverTest, AddChannelIncrementsCount) {
+  ReceiverPtr rx = Create();
   ASSERT_NE(rx, nullptr);
 
-  // Verify it works by adding a channel
-  int result =
-      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                    theta, theta_ptn, theta_length, antenna_gain, rx);
-  EXPECT_EQ(result, 0);
-  EXPECT_EQ(Get_Num_Rxchannel(rx), 1);
+  EXPECT_EQ(AddChannel(rx.get()), RADARSIM_SUCCESS);
+  EXPECT_EQ(Get_Num_Rxchannel(rx.get()), 1);
+}
 
-  // Don't free - let automatic cleanup handle it
+TEST_F(ReceiverTest, AddChannelRejectsNullReceiver) {
+  EXPECT_EQ(AddChannel(nullptr), RADARSIM_ERROR_NULL_POINTER);
 }
 
 /**
- * @brief Test unlicensed receiver channel limit
+ * @brief Get_Num_Rxchannel should report 0 for a null handle
+ *
+ * @details Disabled: the accessor dereferences its argument unconditionally,
+ * unlike the sibling accessors Get_BB_Size and Get_Num_Targets which both
+ * return 0 for null. Enable once the guard is added.
  */
-TEST_F(ReceiverTest, UnlicensedChannelLimit) {
-  valid_receiver =
-      Create_Receiver(fs, rf_gain, resistor, baseband_gain, baseband_bw);
-  ASSERT_NE(valid_receiver, nullptr);
-
-  // First channel should succeed
-  int result =
-      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                    theta, theta_ptn, theta_length, antenna_gain, valid_receiver);
-  EXPECT_EQ(result, 0);
-
-  // Second channel should fail (unlicensed limit: 1 channel)
-  result =
-      Add_Rxchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                    theta, theta_ptn, theta_length, antenna_gain, valid_receiver);
-  EXPECT_NE(result, 0);
-  EXPECT_EQ(Get_Num_Rxchannel(valid_receiver), 1);
+TEST_F(ReceiverTest, DISABLED_GetNumChannelsIsNullSafe) {
+  EXPECT_EQ(Get_Num_Rxchannel(nullptr), 0);
 }
+
+/**
+ * @brief Unlicensed builds accept exactly one receiver channel
+ */
+TEST_F(ReceiverTest, FreeTierChannelLimit) {
+  RS_SKIP_IF_LICENSED();
+
+  ReceiverPtr rx = Create();
+  ASSERT_NE(rx, nullptr);
+
+  for (int i = 0; i < rstest::kFreeTierMaxRxChannels; i++) {
+    EXPECT_EQ(AddChannel(rx.get()), RADARSIM_SUCCESS) << "channel " << i;
+  }
+
+  EXPECT_EQ(AddChannel(rx.get()), RADARSIM_ERROR_FREE_TIER_LIMIT);
+  EXPECT_EQ(Get_Num_Rxchannel(rx.get()), rstest::kFreeTierMaxRxChannels)
+      << "A rejected channel must not be registered";
+}
+
+/*********************************************
+ *
+ *  Destruction
+ *
+ *********************************************/
+
+TEST_F(ReceiverTest, FreeIsNullSafeAndIndependent) {
+  Free_Receiver(nullptr);  // must not crash
+
+  t_Receiver* first = Create().release();
+  t_Receiver* second = Create(2e6f).release();
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+
+  Free_Receiver(first);
+
+  // Freeing one receiver must leave the other usable.
+  EXPECT_EQ(AddChannel(second), RADARSIM_SUCCESS);
+  EXPECT_EQ(Get_Num_Rxchannel(second), 1);
+  Free_Receiver(second);
+}
+
+}  // namespace

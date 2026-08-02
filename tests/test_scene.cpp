@@ -4,12 +4,12 @@
  *
  * @details
  * Test scenarios:
- * - Get_Scene_State for static and moving radar platforms
+ * - Get_Scene_State for static, moving and rotating radar platforms
  * - Get_Scene_State for time-varying (Create_Radar_Array) platforms
  * - Get_Num_Targets / Get_Target_Mesh_Size
  * - Get_Target_Mesh_State for constant-motion and time-varying targets
  * - Parameter validation
- * - Deep-copy safety (query does not mutate live target state)
+ * - Deep-copy safety (a query must not mutate live target state)
  *
  *    ----------
  *    Copyright (C) 2023 - PRESENT  radarsimx.com
@@ -31,134 +31,48 @@
 #include <vector>
 
 #include "radarsim.h"
+#include "test_helpers.hpp"
 
-#define kPI 3.141592653589793
-#define kTolerance 1e-3f
+using rstest::kPiF;
+using rstest::kTolerance;
+using rstest::RadarScenario;
+using rstest::TargetsPtr;
+using rstest::TriangleMesh;
+
+namespace {
+
+/** @brief Vertex stride of Get_Target_Mesh_State output: 3 vertices * 3 axes */
+constexpr int kFloatsPerTriangle = 9;
 
 /**
- * @brief Helper to create a minimal configured radar system for scene tests
+ * @brief Fixture for radar platform scene-state queries
  */
-struct SceneRadarSetup {
-  t_Transmitter* tx = nullptr;
-  t_Receiver* rx = nullptr;
-  t_Radar* radar = nullptr;
-
-  std::vector<double> freq;
-  std::vector<double> freq_time;
-  std::vector<double> freq_offset;
-  std::vector<double> pulse_start_time;
-  std::vector<float> pulse_mod_real;
-  std::vector<float> pulse_mod_imag;
-
-  bool CreateTxRx(float tx_location[3], float rx_location[3]) {
-    int num_samples = 8;
-    int num_pulses = 1;
-
-    freq.resize(num_samples);
-    freq_time.resize(num_samples);
-    for (int i = 0; i < num_samples; i++) {
-      freq[i] = 24.0e9 + i * 3e6;
-      freq_time[i] = i * 1e-6;
-    }
-
-    freq_offset.resize(num_pulses, 0.0);
-    pulse_start_time.resize(num_pulses, 0.0);
-
-    tx = Create_Transmitter(freq.data(), freq_time.data(), num_samples,
-                            freq_offset.data(), pulse_start_time.data(),
-                            num_pulses, 10.0f);
-    if (!tx) return false;
-
-    float polar_real[3] = {1.0f, 0.0f, 0.0f};
-    float polar_imag[3] = {0.0f, 0.0f, 0.0f};
-    float phi[2] = {-static_cast<float>(kPI) / 2.0f,
-                    static_cast<float>(kPI) / 2.0f};
-    float phi_ptn[2] = {0.0f, 0.0f};
-    float theta[2] = {0.0f, static_cast<float>(kPI)};
-    float theta_ptn[2] = {0.0f, 0.0f};
-
-    pulse_mod_real.resize(num_pulses, 1.0f);
-    pulse_mod_imag.resize(num_pulses, 0.0f);
-
-    int result = Add_Txchannel(tx_location, polar_real, polar_imag, phi,
-                               phi_ptn, 2, theta, theta_ptn, 2, 20.0f,
-                               nullptr, nullptr, nullptr, 0,
-                               pulse_mod_real.data(), pulse_mod_imag.data(),
-                               0.0f, 0.1f, tx);
-    if (result != 0) return false;
-
-    rx = Create_Receiver(1e6f, 30.0f, 50.0f, 20.0f, 500e3f);
-    if (!rx) return false;
-
-    result = Add_Rxchannel(rx_location, polar_real, polar_imag, phi, phi_ptn,
-                           2, theta, theta_ptn, 2, 20.0f, rx);
-    if (result != 0) return false;
-
-    return true;
-  }
-
-  bool CreateStaticRadar(float location[3], float speed[3], float rotation[3],
-                         float rotation_rate[3]) {
-    double frame_start_time[1] = {0.0};
-    radar = Create_Radar(tx, rx, frame_start_time, 1, location, speed,
-                         rotation, rotation_rate);
-    return radar != nullptr;
-  }
-
-  bool CreateArrayRadar(double* frame_start_time, int num_frames,
-                        float* location_array, int num_locations,
-                        float* speed, float* rotation_array,
-                        int num_rotations, float* rotation_rate) {
-    radar = Create_Radar_Array(tx, rx, frame_start_time, num_frames,
-                               location_array, num_locations, speed,
-                               rotation_array, num_rotations, rotation_rate);
-    return radar != nullptr;
-  }
-
-  void Destroy() {
-    if (radar) {
-      Free_Radar(radar);
-      radar = nullptr;
-    }
-    if (rx) {
-      Free_Receiver(rx);
-      rx = nullptr;
-    }
-    if (tx) {
-      Free_Transmitter(tx);
-      tx = nullptr;
-    }
-  }
-};
-
 class SceneStateTest : public ::testing::Test {
  protected:
-  void TearDown() override { setup_.Destroy(); }
+  void SetUp() override {
+    // Small waveform - these tests only exercise geometry, not signals.
+    scenario_.num_samples = 8;
+    scenario_.num_pulses = 1;
+  }
 
-  SceneRadarSetup setup_;
+  RadarScenario scenario_;
 };
 
 /**
- * @brief Static radar at the origin, zero rotation - channel globals should
- * equal the local channel offsets, boresight should be +X.
+ * @brief A static radar at the origin reports channel offsets verbatim and a
+ * boresight along +X.
  */
-TEST_F(SceneStateTest, StaticRadarOrigin) {
-  float tx_loc[3] = {1.0f, 0.0f, 0.0f};
-  float rx_loc[3] = {-1.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateTxRx(tx_loc, rx_loc));
-
-  float loc[3] = {0.0f, 0.0f, 0.0f};
-  float speed[3] = {0.0f, 0.0f, 0.0f};
-  float rotation[3] = {0.0f, 0.0f, 0.0f};
-  float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateStaticRadar(loc, speed, rotation, rotation_rate));
+TEST_F(SceneStateTest, StaticRadarAtOrigin) {
+  scenario_.tx_channel_location[0] = 1.0f;
+  scenario_.rx_channel_location[0] = -1.0f;
+  ASSERT_TRUE(scenario_.Build());
 
   double timestamps[1] = {0.0};
-  float tx_out[3], rx_out[3], bore_out[3];
+  float tx_out[3], rx_out[3], boresight[3];
 
-  int result = Get_Scene_State(setup_.radar, timestamps, 1, tx_out, rx_out,
-                               bore_out);
-  EXPECT_EQ(result, RADARSIM_SUCCESS);
+  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
+                            boresight),
+            RADARSIM_SUCCESS);
 
   EXPECT_NEAR(tx_out[0], 1.0f, kTolerance);
   EXPECT_NEAR(tx_out[1], 0.0f, kTolerance);
@@ -168,405 +82,415 @@ TEST_F(SceneStateTest, StaticRadarOrigin) {
   EXPECT_NEAR(rx_out[1], 0.0f, kTolerance);
   EXPECT_NEAR(rx_out[2], 0.0f, kTolerance);
 
-  EXPECT_NEAR(bore_out[0], 1.0f, kTolerance);
-  EXPECT_NEAR(bore_out[1], 0.0f, kTolerance);
-  EXPECT_NEAR(bore_out[2], 0.0f, kTolerance);
+  EXPECT_NEAR(boresight[0], 1.0f, kTolerance);
+  EXPECT_NEAR(boresight[1], 0.0f, kTolerance);
+  EXPECT_NEAR(boresight[2], 0.0f, kTolerance);
 }
 
 /**
- * @brief Constant-velocity radar - platform pose should extrapolate
- * analytically at query time.
+ * @brief Constant-velocity platforms extrapolate analytically at query time
  */
 TEST_F(SceneStateTest, ConstantVelocityExtrapolation) {
-  float tx_loc[3] = {0.0f, 0.0f, 0.0f};
-  float rx_loc[3] = {0.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateTxRx(tx_loc, rx_loc));
+  ASSERT_TRUE(scenario_.BuildTxRx());
 
-  float loc[3] = {0.0f, 0.0f, 0.0f};
+  float location[3] = {0.0f, 0.0f, 0.0f};
   float speed[3] = {2.0f, 0.0f, 0.0f};
   float rotation[3] = {0.0f, 0.0f, 0.0f};
   float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateStaticRadar(loc, speed, rotation, rotation_rate));
+  ASSERT_TRUE(scenario_.AttachRadar(location, speed, rotation, rotation_rate));
 
-  double timestamps[1] = {5.0};
-  float tx_out[3], rx_out[3], bore_out[3];
+  double timestamps[3] = {0.0, 5.0, 10.0};
+  float tx_out[9], rx_out[9], boresight[9];
 
-  int result = Get_Scene_State(setup_.radar, timestamps, 1, tx_out, rx_out,
-                               bore_out);
-  EXPECT_EQ(result, RADARSIM_SUCCESS);
+  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 3, tx_out, rx_out,
+                            boresight),
+            RADARSIM_SUCCESS);
 
-  // location(5) = (0,0,0) + 5*(2,0,0) = (10,0,0); channel offset is zero
-  EXPECT_NEAR(tx_out[0], 10.0f, kTolerance);
-  EXPECT_NEAR(rx_out[0], 10.0f, kTolerance);
+  // location(t) = (0,0,0) + t * (2,0,0), channel offset is zero
+  EXPECT_NEAR(tx_out[0], 0.0f, kTolerance);
+  EXPECT_NEAR(tx_out[3], 10.0f, kTolerance);
+  EXPECT_NEAR(tx_out[6], 20.0f, kTolerance);
+  EXPECT_NEAR(rx_out[3], 10.0f, kTolerance);
 }
 
 /**
- * @brief Rotated static radar - boresight should rotate from +X toward +Y
- * for a 90 degree yaw.
+ * @brief A 90 degree yaw rotates the boresight from +X to +Y and carries the
+ * channel offsets with it.
  */
 TEST_F(SceneStateTest, RotatedRadarBoresight) {
-  float tx_loc[3] = {1.0f, 0.0f, 0.0f};
-  float rx_loc[3] = {0.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateTxRx(tx_loc, rx_loc));
+  scenario_.tx_channel_location[0] = 1.0f;
+  ASSERT_TRUE(scenario_.BuildTxRx());
 
-  float loc[3] = {0.0f, 0.0f, 0.0f};
+  float location[3] = {0.0f, 0.0f, 0.0f};
   float speed[3] = {0.0f, 0.0f, 0.0f};
-  float rotation[3] = {static_cast<float>(kPI) / 2.0f, 0.0f, 0.0f};
+  float rotation[3] = {kPiF / 2.0f, 0.0f, 0.0f};
   float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateStaticRadar(loc, speed, rotation, rotation_rate));
+  ASSERT_TRUE(scenario_.AttachRadar(location, speed, rotation, rotation_rate));
 
   double timestamps[1] = {0.0};
-  float tx_out[3], rx_out[3], bore_out[3];
+  float tx_out[3], rx_out[3], boresight[3];
 
-  int result = Get_Scene_State(setup_.radar, timestamps, 1, tx_out, rx_out,
-                               bore_out);
-  EXPECT_EQ(result, RADARSIM_SUCCESS);
+  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
+                            boresight),
+            RADARSIM_SUCCESS);
 
-  EXPECT_NEAR(bore_out[0], 0.0f, kTolerance);
-  EXPECT_NEAR(bore_out[1], 1.0f, kTolerance);
-  EXPECT_NEAR(bore_out[2], 0.0f, kTolerance);
+  EXPECT_NEAR(boresight[0], 0.0f, kTolerance);
+  EXPECT_NEAR(boresight[1], 1.0f, kTolerance);
+  EXPECT_NEAR(boresight[2], 0.0f, kTolerance);
 
-  // tx channel (1,0,0) local, rotated 90deg yaw -> (0,1,0) global
+  // Local tx offset (1,0,0) yawed by 90 degrees becomes (0,1,0).
   EXPECT_NEAR(tx_out[0], 0.0f, kTolerance);
   EXPECT_NEAR(tx_out[1], 1.0f, kTolerance);
 }
 
 /**
- * @brief Time-varying radar with location/rotation array matching frame
- * count - should linearly interpolate against frame start times.
+ * @brief A constant rotation rate sweeps the boresight over time
  */
-TEST_F(SceneStateTest, TimeVaryingInterpolation) {
-  float tx_loc[3] = {0.0f, 0.0f, 0.0f};
-  float rx_loc[3] = {0.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateTxRx(tx_loc, rx_loc));
+TEST_F(SceneStateTest, RotationRateSweepsBoresight) {
+  ASSERT_TRUE(scenario_.BuildTxRx());
 
-  double frame_start_time[3] = {0.0, 1.0, 2.0};
-  float location_array[9] = {0.0f, 0.0f, 0.0f, 10.0f, 0.0f,
-                             0.0f, 20.0f, 0.0f, 0.0f};
-  float rotation_array[9] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                             0.0f, 0.0f, 0.0f, 0.0f};
+  float location[3] = {0.0f, 0.0f, 0.0f};
   float speed[3] = {0.0f, 0.0f, 0.0f};
-  float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
+  float rotation[3] = {0.0f, 0.0f, 0.0f};
+  float rotation_rate[3] = {kPiF / 2.0f, 0.0f, 0.0f};  // 90 deg/s yaw
+  ASSERT_TRUE(scenario_.AttachRadar(location, speed, rotation, rotation_rate));
 
-  ASSERT_TRUE(setup_.CreateArrayRadar(frame_start_time, 3, location_array, 3,
-                                      speed, rotation_array, 3,
-                                      rotation_rate));
+  double timestamps[2] = {0.0, 1.0};
+  float tx_out[6], rx_out[6], boresight[6];
 
-  double timestamps[4] = {0.5, 1.5, -1.0, 5.0};
-  float tx_out[4 * 3], rx_out[4 * 3], bore_out[4 * 3];
+  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 2, tx_out, rx_out,
+                            boresight),
+            RADARSIM_SUCCESS);
 
-  int result = Get_Scene_State(setup_.radar, timestamps, 4, tx_out, rx_out,
-                               bore_out);
-  EXPECT_EQ(result, RADARSIM_SUCCESS);
-
-  EXPECT_NEAR(tx_out[0], 5.0f, kTolerance);    // t=0.5 -> interpolated
-  EXPECT_NEAR(tx_out[3], 15.0f, kTolerance);   // t=1.5 -> interpolated
-  EXPECT_NEAR(tx_out[6], 0.0f, kTolerance);    // t=-1.0 -> clamped to first
-  EXPECT_NEAR(tx_out[9], 20.0f, kTolerance);   // t=5.0 -> clamped to last
+  EXPECT_NEAR(boresight[0], 1.0f, kTolerance);  // t = 0 -> +X
+  EXPECT_NEAR(boresight[4], 1.0f, kTolerance);  // t = 1 -> +Y
 }
 
 /**
- * @brief Time-varying radar with a location array length that does not
- * match the frame count should be rejected.
+ * @brief Time-varying platforms interpolate against the frame start times and
+ * clamp outside the covered interval.
  */
-TEST_F(SceneStateTest, TimeVaryingMismatchedFrameCount) {
-  float tx_loc[3] = {0.0f, 0.0f, 0.0f};
-  float rx_loc[3] = {0.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateTxRx(tx_loc, rx_loc));
+TEST_F(SceneStateTest, TimeVaryingInterpolationAndClamping) {
+  ASSERT_TRUE(scenario_.BuildTxRx());
+
+  double frame_start_time[3] = {0.0, 1.0, 2.0};
+  float location_array[9] = {0.0f,  0.0f, 0.0f,   //
+                             10.0f, 0.0f, 0.0f,   //
+                             20.0f, 0.0f, 0.0f};
+  float rotation_array[9] = {0.0f};
+  float speed[3] = {0.0f, 0.0f, 0.0f};
+  float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
+
+  ASSERT_TRUE(scenario_.AttachRadarArray(frame_start_time, 3, location_array,
+                                         3, speed, rotation_array, 3,
+                                         rotation_rate));
+
+  double timestamps[4] = {0.5, 1.5, -1.0, 5.0};
+  float tx_out[12], rx_out[12], boresight[12];
+
+  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 4, tx_out, rx_out,
+                            boresight),
+            RADARSIM_SUCCESS);
+
+  EXPECT_NEAR(tx_out[0], 5.0f, kTolerance);   // interpolated
+  EXPECT_NEAR(tx_out[3], 15.0f, kTolerance);  // interpolated
+  EXPECT_NEAR(tx_out[6], 0.0f, kTolerance);   // clamped to the first frame
+  EXPECT_NEAR(tx_out[9], 20.0f, kTolerance);  // clamped to the last frame
+}
+
+/**
+ * @brief A motion array that does not match the frame count is rejected,
+ * because there is nothing to interpolate against.
+ */
+TEST_F(SceneStateTest, TimeVaryingMismatchedFrameCountIsRejected) {
+  ASSERT_TRUE(scenario_.BuildTxRx());
 
   double frame_start_time[1] = {0.0};
   float location_array[6] = {0.0f, 0.0f, 0.0f, 10.0f, 0.0f, 0.0f};
-  float rotation_array[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  float rotation_array[6] = {0.0f};
   float speed[3] = {0.0f, 0.0f, 0.0f};
   float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
 
-  ASSERT_TRUE(setup_.CreateArrayRadar(frame_start_time, 1, location_array, 2,
-                                      speed, rotation_array, 2,
-                                      rotation_rate));
+  ASSERT_TRUE(scenario_.AttachRadarArray(frame_start_time, 1, location_array,
+                                         2, speed, rotation_array, 2,
+                                         rotation_rate));
 
   double timestamps[1] = {0.0};
-  float tx_out[3], rx_out[3], bore_out[3];
+  float tx_out[3], rx_out[3], boresight[3];
 
-  int result = Get_Scene_State(setup_.radar, timestamps, 1, tx_out, rx_out,
-                               bore_out);
-  EXPECT_EQ(result, RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
+                            boresight),
+            RADARSIM_ERROR_INVALID_PARAMETER);
 }
 
-TEST_F(SceneStateTest, NullPointerAndInvalidParams) {
-  float tx_loc[3] = {0.0f, 0.0f, 0.0f};
-  float rx_loc[3] = {0.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateTxRx(tx_loc, rx_loc));
-
-  float loc[3] = {0.0f, 0.0f, 0.0f};
-  float speed[3] = {0.0f, 0.0f, 0.0f};
-  float rotation[3] = {0.0f, 0.0f, 0.0f};
-  float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
-  ASSERT_TRUE(setup_.CreateStaticRadar(loc, speed, rotation, rotation_rate));
+TEST_F(SceneStateTest, RejectsNullArguments) {
+  ASSERT_TRUE(scenario_.Build());
 
   double timestamps[1] = {0.0};
-  float tx_out[3], rx_out[3], bore_out[3];
+  float tx_out[3], rx_out[3], boresight[3];
 
-  EXPECT_EQ(Get_Scene_State(nullptr, timestamps, 1, tx_out, rx_out, bore_out),
-           RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Scene_State(setup_.radar, nullptr, 1, tx_out, rx_out,
-                            bore_out),
-           RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Scene_State(setup_.radar, timestamps, 1, nullptr, rx_out,
-                            bore_out),
-           RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Scene_State(setup_.radar, timestamps, 0, tx_out, rx_out,
-                            bore_out),
-           RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Get_Scene_State(nullptr, timestamps, 1, tx_out, rx_out, boresight),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Get_Scene_State(scenario_.radar(), nullptr, 1, tx_out, rx_out,
+                            boresight),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, nullptr, rx_out,
+                            boresight),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, nullptr,
+                            boresight),
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
+                            nullptr),
+            RADARSIM_ERROR_NULL_POINTER);
 }
+
+TEST_F(SceneStateTest, RejectsNonPositiveTimestampCount) {
+  ASSERT_TRUE(scenario_.Build());
+
+  double timestamps[1] = {0.0};
+  float tx_out[3], rx_out[3], boresight[3];
+
+  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 0, tx_out, rx_out,
+                            boresight),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, -1, tx_out, rx_out,
+                            boresight),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+}
+
+/*********************************************
+ *
+ *  Target mesh state
+ *
+ *********************************************/
 
 /**
- * @brief Test fixture for target-mesh scene-state tests
+ * @brief Fixture owning a target manager and a unit triangle
  */
 class TargetMeshStateTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    mesh_points = {
-        0.0f, 0.0f, 0.0f,  // vertex 0
-        1.0f, 0.0f, 0.0f,  // vertex 1
-        0.5f, 1.0f, 0.0f   // vertex 2
-    };
-    mesh_cells = {0, 1, 2};
-    cell_size = 1;
+    targets_ = rstest::MakeTargets();
+    ASSERT_NE(targets_, nullptr);
   }
 
-  void TearDown() override {
-    if (targets) {
-      Free_Targets(targets);
-      targets = nullptr;
-    }
+  /** @brief Add the fixture triangle with the given motion */
+  int AddTriangle(const rstest::Motion& motion) {
+    return Add_Mesh_Target(mesh_.points.data(), mesh_.cells.data(),
+                           mesh_.cell_size, const_cast<float*>(motion.origin),
+                           const_cast<float*>(motion.location),
+                           const_cast<float*>(motion.speed),
+                           const_cast<float*>(motion.rotation),
+                           const_cast<float*>(motion.rotation_rate), 1.0f,
+                           0.0f, 1.0f, 0.0f, false, 0.0f, false,
+                           targets_.get());
   }
 
-  std::vector<float> mesh_points;
-  std::vector<int> mesh_cells;
-  int cell_size;
-  t_Targets* targets = nullptr;
+  TargetsPtr targets_;
+  TriangleMesh mesh_;
 };
 
-TEST_F(TargetMeshStateTest, NumTargetsAndMeshSize) {
-  targets = Init_Targets();
-  ASSERT_NE(targets, nullptr);
+TEST_F(TargetMeshStateTest, CountsAndSizesTrackAddedTargets) {
+  EXPECT_EQ(Get_Num_Targets(targets_.get()), 0);
+  EXPECT_EQ(Get_Target_Mesh_Size(targets_.get(), 0), 0);
 
-  EXPECT_EQ(Get_Num_Targets(targets), 0);
-  EXPECT_EQ(Get_Target_Mesh_Size(targets, 0), 0);
+  rstest::Motion motion;
+  motion.location[0] = 10.0f;
+  ASSERT_EQ(AddTriangle(motion), RADARSIM_SUCCESS);
 
-  float origin[3] = {0.0f, 0.0f, 0.0f};
-  float location[3] = {10.0f, 0.0f, 0.0f};
-  float speed[3] = {0.0f, 0.0f, 0.0f};
-  float rotation[3] = {0.0f, 0.0f, 0.0f};
-  float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
-
-  int result = Add_Mesh_Target(mesh_points.data(), mesh_cells.data(),
-                               cell_size, origin, location, speed, rotation,
-                               rotation_rate, 1.0f, 0.0f, 1.0f, 0.0f, false,
-                               0.0f, false, targets);
-  ASSERT_EQ(result, 0);
-
-  EXPECT_EQ(Get_Num_Targets(targets), 1);
-  EXPECT_EQ(Get_Target_Mesh_Size(targets, 0), cell_size);
-  EXPECT_EQ(Get_Target_Mesh_Size(targets, 1), 0);   // out of range
-  EXPECT_EQ(Get_Target_Mesh_Size(targets, -1), 0);  // out of range
+  EXPECT_EQ(Get_Num_Targets(targets_.get()), 1);
+  EXPECT_EQ(Get_Target_Mesh_Size(targets_.get(), 0), mesh_.cell_size);
+  EXPECT_EQ(Get_Target_Mesh_Size(targets_.get(), 1), 0);   // past the end
+  EXPECT_EQ(Get_Target_Mesh_Size(targets_.get(), -1), 0);  // negative index
 }
 
-TEST_F(TargetMeshStateTest, NullPointerHelpers) {
+TEST_F(TargetMeshStateTest, HelpersAreNullSafe) {
   EXPECT_EQ(Get_Num_Targets(nullptr), 0);
   EXPECT_EQ(Get_Target_Mesh_Size(nullptr, 0), 0);
 }
 
 /**
- * @brief Constant-motion mesh target - vertices should translate exactly by
- * speed*time at each query timestamp.
+ * @brief Constant-motion vertices translate by location + speed * t
  */
 TEST_F(TargetMeshStateTest, ConstantMotionTranslation) {
-  targets = Init_Targets();
-  ASSERT_NE(targets, nullptr);
-
-  float origin[3] = {0.0f, 0.0f, 0.0f};
-  float location[3] = {10.0f, 0.0f, 0.0f};
-  float speed[3] = {1.0f, 0.0f, 0.0f};
-  float rotation[3] = {0.0f, 0.0f, 0.0f};
-  float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
-
-  int result = Add_Mesh_Target(mesh_points.data(), mesh_cells.data(),
-                               cell_size, origin, location, speed, rotation,
-                               rotation_rate, 1.0f, 0.0f, 1.0f, 0.0f, false,
-                               0.0f, false, targets);
-  ASSERT_EQ(result, 0);
+  rstest::Motion motion;
+  motion.location[0] = 10.0f;
+  motion.speed[0] = 1.0f;
+  ASSERT_EQ(AddTriangle(motion), RADARSIM_SUCCESS);
 
   double timestamps[2] = {0.0, 5.0};
-  std::vector<double> points_out(2 * cell_size * 9);
+  std::vector<double> points_out(2 * mesh_.cell_size * kFloatsPerTriangle);
 
-  int gres = Get_Target_Mesh_State(targets, 0, timestamps, 2, nullptr, 0,
-                                   points_out.data());
-  EXPECT_EQ(gres, RADARSIM_SUCCESS);
+  ASSERT_EQ(Get_Target_Mesh_State(targets_.get(), 0, timestamps, 2, nullptr, 0,
+                                  points_out.data()),
+            RADARSIM_SUCCESS);
 
-  // t=0: vertex0 = mesh_points[0] + location = (0,0,0) + (10,0,0)
+  // t = 0: vertex 0 = (0,0,0) + (10,0,0)
   EXPECT_NEAR(points_out[0], 10.0, 1e-3);
   EXPECT_NEAR(points_out[1], 0.0, 1e-3);
   EXPECT_NEAR(points_out[2], 0.0, 1e-3);
-  // vertex1 = (1,0,0) + (10,0,0)
+  // t = 0: vertex 1 = (1,0,0) + (10,0,0)
   EXPECT_NEAR(points_out[3], 11.0, 1e-3);
 
-  // t=5: vertex0 = (0,0,0) + (10,0,0) + 5*(1,0,0) = (15,0,0)
-  int base_t1 = cell_size * 9;
-  EXPECT_NEAR(points_out[base_t1 + 0], 15.0, 1e-3);
-  EXPECT_NEAR(points_out[base_t1 + 1], 0.0, 1e-3);
-  EXPECT_NEAR(points_out[base_t1 + 2], 0.0, 1e-3);
+  // t = 5: vertex 0 = (10,0,0) + 5 * (1,0,0)
+  const int frame = mesh_.cell_size * kFloatsPerTriangle;
+  EXPECT_NEAR(points_out[frame + 0], 15.0, 1e-3);
+  EXPECT_NEAR(points_out[frame + 1], 0.0, 1e-3);
+  EXPECT_NEAR(points_out[frame + 2], 0.0, 1e-3);
 }
 
 /**
- * @brief Time-varying mesh target - query should nearest-neighbor match
- * against sim_timestamps and jump to the corresponding motion sample.
+ * @brief Query timestamps may be supplied out of order
+ */
+TEST_F(TargetMeshStateTest, UnsortedTimestampsMapToTheirOwnSlots) {
+  rstest::Motion motion;
+  motion.location[0] = 10.0f;
+  motion.speed[0] = 1.0f;
+  ASSERT_EQ(AddTriangle(motion), RADARSIM_SUCCESS);
+
+  double timestamps[3] = {5.0, 0.0, 2.0};
+  std::vector<double> points_out(3 * mesh_.cell_size * kFloatsPerTriangle);
+
+  ASSERT_EQ(Get_Target_Mesh_State(targets_.get(), 0, timestamps, 3, nullptr, 0,
+                                  points_out.data()),
+            RADARSIM_SUCCESS);
+
+  const int frame = mesh_.cell_size * kFloatsPerTriangle;
+  EXPECT_NEAR(points_out[0 * frame], 15.0, 1e-3);
+  EXPECT_NEAR(points_out[1 * frame], 10.0, 1e-3);
+  EXPECT_NEAR(points_out[2 * frame], 12.0, 1e-3);
+}
+
+/**
+ * @brief Time-varying targets snap to the nearest motion sample
  */
 TEST_F(TargetMeshStateTest, TimeVaryingNearestNeighbor) {
-  targets = Init_Targets();
-  ASSERT_NE(targets, nullptr);
-
   float origin[3] = {0.0f, 0.0f, 0.0f};
   float location_array[6] = {0.0f, 0.0f, 0.0f, 20.0f, 0.0f, 0.0f};
-  float speed_array[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-  float rotation_array[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-  float rotation_rate_array[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  float speed_array[6] = {0.0f};
+  float rotation_array[6] = {0.0f};
+  float rotation_rate_array[6] = {0.0f};
 
-  int result = Add_Mesh_Target_Array(
-      mesh_points.data(), mesh_cells.data(), cell_size, origin,
-      location_array, speed_array, rotation_array, rotation_rate_array, 2,
-      1.0f, 0.0f, 1.0f, 0.0f, false, 0.0f, false, targets);
-  ASSERT_EQ(result, 0);
+  ASSERT_EQ(Add_Mesh_Target_Array(mesh_.points.data(), mesh_.cells.data(),
+                                  mesh_.cell_size, origin, location_array,
+                                  speed_array, rotation_array,
+                                  rotation_rate_array, 2, 1.0f, 0.0f, 1.0f,
+                                  0.0f, false, 0.0f, false, targets_.get()),
+            RADARSIM_SUCCESS);
 
   double sim_timestamps[2] = {0.0, 10.0};
-  double timestamps[2] = {1.0, 9.0};  // nearest to sample 0 and sample 1
-  std::vector<double> points_out(2 * cell_size * 9);
+  double timestamps[2] = {1.0, 9.0};
+  std::vector<double> points_out(2 * mesh_.cell_size * kFloatsPerTriangle);
 
-  int gres = Get_Target_Mesh_State(targets, 0, timestamps, 2, sim_timestamps,
-                                   2, points_out.data());
-  EXPECT_EQ(gres, RADARSIM_SUCCESS);
+  ASSERT_EQ(Get_Target_Mesh_State(targets_.get(), 0, timestamps, 2,
+                                  sim_timestamps, 2, points_out.data()),
+            RADARSIM_SUCCESS);
 
-  // query t=1.0 -> nearest sim sample is index 0 (location (0,0,0))
-  EXPECT_NEAR(points_out[0], 0.0, 1e-3);
-  // query t=9.0 -> nearest sim sample is index 1 (location (20,0,0))
-  int base_t1 = cell_size * 9;
-  EXPECT_NEAR(points_out[base_t1 + 0], 20.0, 1e-3);
+  const int frame = mesh_.cell_size * kFloatsPerTriangle;
+  EXPECT_NEAR(points_out[0], 0.0, 1e-3);           // t=1 -> sample 0
+  EXPECT_NEAR(points_out[frame + 0], 20.0, 1e-3);  // t=9 -> sample 1
 }
 
+/**
+ * @brief A time-varying target cannot be queried without sim_timestamps
+ */
 TEST_F(TargetMeshStateTest, TimeVaryingRequiresSimTimestamps) {
-  targets = Init_Targets();
-  ASSERT_NE(targets, nullptr);
-
   float origin[3] = {0.0f, 0.0f, 0.0f};
   float location_array[6] = {0.0f, 0.0f, 0.0f, 20.0f, 0.0f, 0.0f};
-  float speed_array[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-  float rotation_array[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-  float rotation_rate_array[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  float speed_array[6] = {0.0f};
+  float rotation_array[6] = {0.0f};
+  float rotation_rate_array[6] = {0.0f};
 
-  int result = Add_Mesh_Target_Array(
-      mesh_points.data(), mesh_cells.data(), cell_size, origin,
-      location_array, speed_array, rotation_array, rotation_rate_array, 2,
-      1.0f, 0.0f, 1.0f, 0.0f, false, 0.0f, false, targets);
-  ASSERT_EQ(result, 0);
+  ASSERT_EQ(Add_Mesh_Target_Array(mesh_.points.data(), mesh_.cells.data(),
+                                  mesh_.cell_size, origin, location_array,
+                                  speed_array, rotation_array,
+                                  rotation_rate_array, 2, 1.0f, 0.0f, 1.0f,
+                                  0.0f, false, 0.0f, false, targets_.get()),
+            RADARSIM_SUCCESS);
 
   double timestamps[1] = {1.0};
-  std::vector<double> points_out(1 * cell_size * 9);
+  std::vector<double> points_out(mesh_.cell_size * kFloatsPerTriangle);
 
-  // sim_timestamps omitted for a time-varying target -> rejected
-  int gres = Get_Target_Mesh_State(targets, 0, timestamps, 1, nullptr, 0,
-                                   points_out.data());
-  EXPECT_EQ(gres, RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Get_Target_Mesh_State(targets_.get(), 0, timestamps, 1, nullptr, 0,
+                                  points_out.data()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+
+  // A mismatched sim_timestamps length is rejected the same way.
+  double sim_timestamps[3] = {0.0, 5.0, 10.0};
+  EXPECT_EQ(Get_Target_Mesh_State(targets_.get(), 0, timestamps, 1,
+                                  sim_timestamps, 3, points_out.data()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
 }
 
-TEST_F(TargetMeshStateTest, NullPointerAndInvalidParams) {
-  targets = Init_Targets();
-  ASSERT_NE(targets, nullptr);
-
-  float origin[3] = {0.0f, 0.0f, 0.0f};
-  float location[3] = {10.0f, 0.0f, 0.0f};
-  float speed[3] = {0.0f, 0.0f, 0.0f};
-  float rotation[3] = {0.0f, 0.0f, 0.0f};
-  float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
-
-  int result = Add_Mesh_Target(mesh_points.data(), mesh_cells.data(),
-                               cell_size, origin, location, speed, rotation,
-                               rotation_rate, 1.0f, 0.0f, 1.0f, 0.0f, false,
-                               0.0f, false, targets);
-  ASSERT_EQ(result, 0);
+TEST_F(TargetMeshStateTest, RejectsNullArguments) {
+  rstest::Motion motion;
+  motion.location[0] = 10.0f;
+  ASSERT_EQ(AddTriangle(motion), RADARSIM_SUCCESS);
 
   double timestamps[1] = {0.0};
-  std::vector<double> points_out(cell_size * 9);
+  std::vector<double> points_out(mesh_.cell_size * kFloatsPerTriangle);
 
   EXPECT_EQ(Get_Target_Mesh_State(nullptr, 0, timestamps, 1, nullptr, 0,
                                   points_out.data()),
-           RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Target_Mesh_State(targets, 0, nullptr, 1, nullptr, 0,
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Get_Target_Mesh_State(targets_.get(), 0, nullptr, 1, nullptr, 0,
                                   points_out.data()),
-           RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Target_Mesh_State(targets, 0, timestamps, 1, nullptr, 0,
+            RADARSIM_ERROR_NULL_POINTER);
+  EXPECT_EQ(Get_Target_Mesh_State(targets_.get(), 0, timestamps, 1, nullptr, 0,
                                   nullptr),
-           RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Target_Mesh_State(targets, 5, timestamps, 1, nullptr, 0,
+            RADARSIM_ERROR_NULL_POINTER);
+}
+
+TEST_F(TargetMeshStateTest, RejectsOutOfRangeArguments) {
+  rstest::Motion motion;
+  motion.location[0] = 10.0f;
+  ASSERT_EQ(AddTriangle(motion), RADARSIM_SUCCESS);
+
+  double timestamps[1] = {0.0};
+  std::vector<double> points_out(mesh_.cell_size * kFloatsPerTriangle);
+
+  EXPECT_EQ(Get_Target_Mesh_State(targets_.get(), 5, timestamps, 1, nullptr, 0,
                                   points_out.data()),
-           RADARSIM_ERROR_INVALID_PARAMETER);
-  EXPECT_EQ(Get_Target_Mesh_State(targets, 0, timestamps, 0, nullptr, 0,
+            RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Get_Target_Mesh_State(targets_.get(), -1, timestamps, 1, nullptr,
+                                  0, points_out.data()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Get_Target_Mesh_State(targets_.get(), 0, timestamps, 0, nullptr, 0,
                                   points_out.data()),
-           RADARSIM_ERROR_INVALID_PARAMETER);
+            RADARSIM_ERROR_INVALID_PARAMETER);
+  EXPECT_EQ(Get_Target_Mesh_State(targets_.get(), 0, timestamps, -1, nullptr,
+                                  0, points_out.data()),
+            RADARSIM_ERROR_INVALID_PARAMETER);
 }
 
 /**
- * @brief Querying mesh state must not perturb the live target used by a
- * subsequent RCS simulation run (deep-copy safety).
+ * @brief Querying a future timestamp must not advance the live target
+ *
+ * @details The query works on a deep copy. Re-querying t = 0 afterwards has to
+ * reproduce the construction state; if the copy leaked, the second query would
+ * see a target already displaced by speed * 100.
  */
 TEST_F(TargetMeshStateTest, QueryDoesNotMutateLiveTarget) {
-  targets = Init_Targets();
-  ASSERT_NE(targets, nullptr);
+  rstest::Motion motion;
+  motion.location[0] = 10.0f;
+  motion.speed[0] = 1.0f;
+  ASSERT_EQ(AddTriangle(motion), RADARSIM_SUCCESS);
 
-  float origin[3] = {0.0f, 0.0f, 0.0f};
-  float location[3] = {10.0f, 0.0f, 0.0f};
-  float speed[3] = {1.0f, 0.0f, 0.0f};
-  float rotation[3] = {0.0f, 0.0f, 0.0f};
-  float rotation_rate[3] = {0.0f, 0.0f, 0.0f};
+  double far_future[1] = {100.0};
+  std::vector<double> far_points(mesh_.cell_size * kFloatsPerTriangle);
+  ASSERT_EQ(Get_Target_Mesh_State(targets_.get(), 0, far_future, 1, nullptr, 0,
+                                  far_points.data()),
+            RADARSIM_SUCCESS);
+  ASSERT_NEAR(far_points[0], 110.0, 1e-2) << "the query itself did not move";
 
-  int result = Add_Mesh_Target(mesh_points.data(), mesh_cells.data(),
-                               cell_size, origin, location, speed, rotation,
-                               rotation_rate, -1.0f, 0.0f, 1.0f, 0.0f, false,
-                               0.0f, false, targets);
-  ASSERT_EQ(result, 0);
-
-  // Query far in the future - if this mutated the live target, the RCS
-  // simulation below would be evaluated against a target displaced by
-  // speed*100, not the original one at t=0.
-  double timestamps[1] = {100.0};
-  std::vector<double> points_out(cell_size * 9);
-  int gres = Get_Target_Mesh_State(targets, 0, timestamps, 1, nullptr, 0,
-                                   points_out.data());
-  ASSERT_EQ(gres, RADARSIM_SUCCESS);
-  EXPECT_NEAR(points_out[0], 110.0, 1e-2);  // sanity: query result did move
-
-  double inc_dir[3] = {-1.0, 0.0, 0.0};
-  double obs_dir[3] = {-1.0, 0.0, 0.0};
-  double inc_polar_real[3] = {0.0, 0.0, 1.0};
-  double inc_polar_imag[3] = {0.0, 0.0, 0.0};
-  double obs_polar_real[3] = {0.0, 0.0, 1.0};
-  double obs_polar_imag[3] = {0.0, 0.0, 0.0};
-  double rcs_result[1] = {0.0};
-
-  int rcs_res = Run_RcsSimulator(targets, inc_dir, obs_dir, 1, inc_polar_real,
-                                 inc_polar_imag, obs_polar_real,
-                                 obs_polar_imag, 24e9, 1.0, rcs_result);
-  // The RCS run should still complete against the untouched live target -
-  // if the query had mutated location_ to (110,0,0), this would still
-  // "succeed" numerically, so the real assertion is on Get_Target_Mesh_Size/
-  // repeatability below.
-  EXPECT_EQ(rcs_res, RADARSIM_SUCCESS);
-
-  // Re-querying at t=0 should still reproduce the original construction
-  // state - proving the earlier t=100 query left the live target untouched.
-  double timestamps_zero[1] = {0.0};
-  std::vector<double> points_out_zero(cell_size * 9);
-  int gres2 = Get_Target_Mesh_State(targets, 0, timestamps_zero, 1, nullptr,
-                                    0, points_out_zero.data());
-  ASSERT_EQ(gres2, RADARSIM_SUCCESS);
-  EXPECT_NEAR(points_out_zero[0], 10.0, 1e-2);
+  double now[1] = {0.0};
+  std::vector<double> now_points(mesh_.cell_size * kFloatsPerTriangle);
+  ASSERT_EQ(Get_Target_Mesh_State(targets_.get(), 0, now, 1, nullptr, 0,
+                                  now_points.data()),
+            RADARSIM_SUCCESS);
+  EXPECT_NEAR(now_points[0], 10.0, 1e-2)
+      << "an earlier query mutated the live target";
 }
+
+}  // namespace

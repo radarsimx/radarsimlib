@@ -250,16 +250,21 @@ if(GTEST)
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
 
-    # Collect test sources
-    file(GLOB_RECURSE TEST_SOURCES "tests/*.cpp")
+    # Collect test sources. CONFIGURE_DEPENDS re-runs the glob at build time so
+    # a newly added tests/*.cpp is picked up without a manual re-configure.
+    file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "tests/*.cpp")
 
     # Create test executable
     add_executable(radarsimc_test ${TEST_SOURCES})
 
-    # Link with gtest and main library
+    # tests/test_helpers.hpp is included as "test_helpers.hpp"
+    target_include_directories(radarsimc_test PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+
+    # Link with gtest and main library. gtest (not gtest_main) - the runner
+    # provides its own main() in tests/test_main.cpp.
     target_link_libraries(radarsimc_test
         PRIVATE
-        gtest_main
+        gtest
         radarsimc
     )
 
@@ -291,7 +296,16 @@ if(GTEST)
         endif()
     endif()
 
-    # Enable testing and add test
+    # Enable testing and register every TEST() as its own CTest case, so a
+    # failure names the individual test instead of the whole binary.
+    # PRE_TEST defers discovery to `ctest` time, which keeps the build from
+    # depending on the test executable being runnable (relevant for GPU builds
+    # and cross-compiled trees).
     enable_testing()
-    add_test(NAME radarsimc_test COMMAND radarsimc_test)
+    include(GoogleTest)
+    gtest_discover_tests(radarsimc_test
+        DISCOVERY_MODE PRE_TEST
+        DISCOVERY_TIMEOUT 60
+        PROPERTIES TIMEOUT 300
+    )
 endif()

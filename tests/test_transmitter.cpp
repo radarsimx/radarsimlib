@@ -4,11 +4,11 @@
  *
  * @details
  * Test scenarios:
- * - Transmitter creation and destruction
- * - Channel addition
- * - Parameter validation
- * - Automatic memory management
- * - Manual vs automatic cleanup
+ * - Transmitter creation with valid, null and out-of-range parameters
+ * - SSB phase noise transmitter creation
+ * - Channel addition and channel counting
+ * - Free-tier channel limit enforcement
+ * - Destruction and null-safety
  *
  *    ----------
  *    Copyright (C) 2023 - PRESENT  radarsimx.com
@@ -27,467 +27,304 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "radarsim.h"
+#include "test_helpers.hpp"
 
-// Define constants since type_def.hpp is not directly accessible
-#define kPI 3.141592653589793
+using rstest::IsotropicAntenna;
+using rstest::LinearPolarization;
+using rstest::TransmitterPtr;
+
+namespace {
 
 /**
- * @brief Test fixture for Transmitter tests
+ * @brief Test fixture owning the waveform and channel parameters
  *
- * @details
- * This test suite demonstrates both automatic and manual memory management:
- * - Automatic: Objects are automatically cleaned up at program exit
- * - Manual: Objects can still be explicitly freed with Free_Transmitter()
- * - Mixed: Some objects freed manually, others automatically
+ * @details Every transmitter created through Create() is owned by the fixture,
+ * so a failing assertion cannot leak a handle.
  */
 class TransmitterTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Setup test data
-    setupTestData();
-  }
-
-  void TearDown() override {
-    // With automatic memory management, manual cleanup is optional
-    // Objects will be automatically cleaned up at program exit
-    // But we can still manually free for testing purposes
-    if (valid_transmitter) {
-      Free_Transmitter(valid_transmitter);
-      valid_transmitter = nullptr;
-    }
-  }
-
-  void setupTestData() {
-    // Setup frequency sweep (24 GHz +/- 150 MHz)
     num_samples = 100;
     freq.resize(num_samples);
     freq_time.resize(num_samples);
-
     for (int i = 0; i < num_samples; i++) {
-      freq[i] = 24.0e9 + (i - num_samples / 2) * 3e6;  // 24 GHz +/- 150 MHz
-      freq_time[i] = i * 1e-6;                         // 1 microsecond samples
+      // 24 GHz +/- 150 MHz over 100 us
+      freq[i] = 24.0e9 + (i - num_samples / 2) * 3e6;
+      freq_time[i] = i * 1e-6;
     }
 
-    // Setup pulse parameters
     num_pulses = 256;
-    freq_offset.resize(num_pulses, 0.0);
+    freq_offset.assign(num_pulses, 0.0);
     pulse_start_time.resize(num_pulses);
-
     for (int i = 0; i < num_pulses; i++) {
-      pulse_start_time[i] = i * 100e-6;  // 100 microsecond PRI
+      pulse_start_time[i] = i * 100e-6;  // 100 us PRI
     }
 
-    tx_power = 10.0f;  // 10 dBm
-
-    // Setup channel parameters
-    location[0] = 0.0f;
-    location[1] = 0.0f;
-    location[2] = 0.0f;
-    polar_real[0] = 1.0f;
-    polar_real[1] = 0.0f;
-    polar_real[2] = 0.0f;
-    polar_imag[0] = 0.0f;
-    polar_imag[1] = 0.0f;
-    polar_imag[2] = 0.0f;
-
-    // Setup radiation pattern
-    phi_length = 2;
-    phi[0] = -static_cast<float>(kPI) / 2.0f;
-    phi[1] = static_cast<float>(kPI) / 2.0f;
-    phi_ptn[0] = 0.0f;
-    phi_ptn[1] = 0.0f;
-
-    theta_length = 2;
-    theta[0] = 0.0f;
-    theta[1] = static_cast<float>(kPI);
-    theta_ptn[0] = 0.0f;
-    theta_ptn[1] = 0.0f;
-
-    antenna_gain = 20.0f;  // 20 dB
-
-    // Setup modulation
     mod_length = 10;
     mod_t.resize(mod_length);
-    mod_var_real.resize(mod_length);
-    mod_var_imag.resize(mod_length);
-
+    mod_var_real.assign(mod_length, 1.0f);
+    mod_var_imag.assign(mod_length, 0.0f);
     for (int i = 0; i < mod_length; i++) {
-      mod_t[i] = static_cast<float>(i * 1e-8);  // 10 ns samples
-      mod_var_real[i] = 1.0f;
-      mod_var_imag[i] = 0.0f;
+      mod_t[i] = static_cast<float>(i * 1e-8);  // 10 ns steps
     }
 
-    // Setup pulse modulation
-    pulse_mod_real.resize(num_pulses, 1.0f);
-    pulse_mod_imag.resize(num_pulses, 0.0f);
-
-    delay = 0.0f;
-    grid = 0.1f;  // 0.1 rad grid
+    pulse_mod_real.assign(num_pulses, 1.0f);
+    pulse_mod_imag.assign(num_pulses, 0.0f);
   }
 
-  // Test data
-  std::vector<double> freq, freq_time, freq_offset, pulse_start_time;
-  std::vector<float> mod_t, mod_var_real, mod_var_imag, pulse_mod_real,
-      pulse_mod_imag;
-  int num_samples, num_pulses, phi_length, theta_length, mod_length;
-  float tx_power;
-  float location[3], polar_real[3], polar_imag[3];
-  float phi[2], phi_ptn[2], theta[2], theta_ptn[2];
-  float antenna_gain, delay, grid;
+  /** @brief Create a transmitter owned by the fixture */
+  TransmitterPtr Create(float power = 10.0f) {
+    return TransmitterPtr(Create_Transmitter(
+        freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+        pulse_start_time.data(), num_pulses, power));
+  }
 
-  t_Transmitter* valid_transmitter = nullptr;
+  /** @brief Add the fixture's default channel to the given transmitter */
+  int AddChannel(t_Transmitter* tx) {
+    return Add_Txchannel(location, polarization.real, polarization.imag,
+                         antenna.phi, antenna.phi_pattern,
+                         IsotropicAntenna::kLength, antenna.theta,
+                         antenna.theta_pattern, IsotropicAntenna::kLength,
+                         IsotropicAntenna::kGain, mod_t.data(),
+                         mod_var_real.data(), mod_var_imag.data(), mod_length,
+                         pulse_mod_real.data(), pulse_mod_imag.data(), 0.0f,
+                         0.1f, tx);
+  }
+
+  std::vector<double> freq, freq_time, freq_offset, pulse_start_time;
+  std::vector<float> mod_t, mod_var_real, mod_var_imag;
+  std::vector<float> pulse_mod_real, pulse_mod_imag;
+  int num_samples = 0, num_pulses = 0, mod_length = 0;
+
+  IsotropicAntenna antenna;
+  LinearPolarization polarization;
+  float location[3] = {0.0f, 0.0f, 0.0f};
 };
 
-/**
- * @brief Test transmitter creation with valid parameters
- */
-TEST_F(TransmitterTest, CreateTransmitterValid) {
-  valid_transmitter = Create_Transmitter(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power);
+/*********************************************
+ *
+ *  Creation
+ *
+ *********************************************/
 
-  EXPECT_NE(valid_transmitter, nullptr);
-  // Note: No Is_Valid_Pointer function available in the C API
+TEST_F(TransmitterTest, CreateWithValidParameters) {
+  TransmitterPtr tx = Create();
+
+  ASSERT_NE(tx, nullptr);
+  EXPECT_EQ(Get_Num_Txchannel(tx.get()), 0)
+      << "A freshly created transmitter must have no channels";
+}
+
+TEST_F(TransmitterTest, CreateRejectsNullArrays) {
+  EXPECT_EQ(Create_Transmitter(nullptr, freq_time.data(), num_samples,
+                               freq_offset.data(), pulse_start_time.data(),
+                               num_pulses, 10.0f),
+            nullptr);
+  EXPECT_EQ(Create_Transmitter(freq.data(), nullptr, num_samples,
+                               freq_offset.data(), pulse_start_time.data(),
+                               num_pulses, 10.0f),
+            nullptr);
+  EXPECT_EQ(Create_Transmitter(freq.data(), freq_time.data(), num_samples,
+                               nullptr, pulse_start_time.data(), num_pulses,
+                               10.0f),
+            nullptr);
+  EXPECT_EQ(Create_Transmitter(freq.data(), freq_time.data(), num_samples,
+                               freq_offset.data(), nullptr, num_pulses, 10.0f),
+            nullptr);
+}
+
+TEST_F(TransmitterTest, CreateRejectsNonPositiveSizes) {
+  EXPECT_EQ(Create_Transmitter(freq.data(), freq_time.data(), 0,
+                               freq_offset.data(), pulse_start_time.data(),
+                               num_pulses, 10.0f),
+            nullptr);
+  EXPECT_EQ(Create_Transmitter(freq.data(), freq_time.data(), -1,
+                               freq_offset.data(), pulse_start_time.data(),
+                               num_pulses, 10.0f),
+            nullptr);
+  EXPECT_EQ(Create_Transmitter(freq.data(), freq_time.data(), num_samples,
+                               freq_offset.data(), pulse_start_time.data(), 0,
+                               10.0f),
+            nullptr);
+  EXPECT_EQ(Create_Transmitter(freq.data(), freq_time.data(), num_samples,
+                               freq_offset.data(), pulse_start_time.data(), -1,
+                               10.0f),
+            nullptr);
 }
 
 /**
- * @brief Test transmitter creation with null parameters
+ * @brief Non-finite pulse parameters are rejected rather than propagated
  */
-TEST_F(TransmitterTest, CreateTransmitterNullParams) {
-  // Test with null frequency array
-  t_Transmitter* tx = Create_Transmitter(
-      nullptr, freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power);
-  EXPECT_EQ(tx, nullptr);
+TEST_F(TransmitterTest, CreateRejectsNonFinitePulseParameters) {
+  std::vector<double> bad_offset = freq_offset;
+  bad_offset[num_pulses / 2] = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_EQ(Create_Transmitter(freq.data(), freq_time.data(), num_samples,
+                               bad_offset.data(), pulse_start_time.data(),
+                               num_pulses, 10.0f),
+            nullptr);
 
-  // Test with null time array
-  tx = Create_Transmitter(freq.data(), nullptr, num_samples, freq_offset.data(),
-                          pulse_start_time.data(), num_pulses, tx_power);
-  EXPECT_EQ(tx, nullptr);
-
-  // Test with null frequency offset
-  tx = Create_Transmitter(freq.data(), freq_time.data(), num_samples, nullptr,
-                          pulse_start_time.data(), num_pulses, tx_power);
-  EXPECT_EQ(tx, nullptr);
-
-  // Test with null pulse start time
-  tx = Create_Transmitter(freq.data(), freq_time.data(), num_samples,
-                          freq_offset.data(), nullptr, num_pulses, tx_power);
-  EXPECT_EQ(tx, nullptr);
+  std::vector<double> bad_start = pulse_start_time;
+  bad_start.back() = std::numeric_limits<double>::infinity();
+  EXPECT_EQ(Create_Transmitter(freq.data(), freq_time.data(), num_samples,
+                               freq_offset.data(), bad_start.data(),
+                               num_pulses, 10.0f),
+            nullptr);
 }
 
-/**
- * @brief Test transmitter creation with invalid parameters
- */
-TEST_F(TransmitterTest, CreateTransmitterInvalidParams) {
-  // Test with zero waveform size
-  t_Transmitter* tx =
-      Create_Transmitter(freq.data(), freq_time.data(), 0, freq_offset.data(),
-                         pulse_start_time.data(), num_pulses, tx_power);
-  EXPECT_EQ(tx, nullptr);
+/*********************************************
+ *
+ *  Channels
+ *
+ *********************************************/
 
-  // Test with zero pulses
-  tx = Create_Transmitter(freq.data(), freq_time.data(), num_samples,
-                          freq_offset.data(), pulse_start_time.data(), 0,
-                          tx_power);
-  EXPECT_EQ(tx, nullptr);
-}
-
-/**
- * @brief Test adding transmitter channels
- */
-TEST_F(TransmitterTest, AddTxChannel) {
-  valid_transmitter = Create_Transmitter(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power);
-  ASSERT_NE(valid_transmitter, nullptr);
-
-  // Test adding valid channel
-  int result = Add_Txchannel(
-      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
-      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
-      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
-      pulse_mod_imag.data(), delay, grid, valid_transmitter);
-
-  EXPECT_EQ(result, 0);  // 0 for success according to API
-  EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 1);
-}
-
-/**
- * @brief Test adding transmitter channel with null transmitter
- */
-TEST_F(TransmitterTest, AddTxChannelNullTransmitter) {
-  int result = Add_Txchannel(
-      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
-      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
-      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
-      pulse_mod_imag.data(), delay, grid, nullptr);
-
-  EXPECT_NE(result, 0);  // Non-zero for failure
-}
-
-/**
- * @brief Test getting number of channels
- */
-TEST_F(TransmitterTest, GetNumTxChannels) {
-  valid_transmitter = Create_Transmitter(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power);
-  ASSERT_NE(valid_transmitter, nullptr);
-
-  // Initially should have 0 channels
-  EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 0);
-
-  // Add a channel
-  Add_Txchannel(location, polar_real, polar_imag, phi, phi_ptn, phi_length,
-                theta, theta_ptn, theta_length, antenna_gain, mod_t.data(),
-                mod_var_real.data(), mod_var_imag.data(), mod_length,
-                pulse_mod_real.data(), pulse_mod_imag.data(), delay, grid,
-                valid_transmitter);
-
-  EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 1);
-}
-
-/**
- * @brief Test automatic memory management
- */
-TEST_F(TransmitterTest, AutomaticMemoryManagement) {
-  // Test that we can create transmitters without manual cleanup
-  t_Transmitter* tx1 = Create_Transmitter(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power);
-  ASSERT_NE(tx1, nullptr);
-
-  t_Transmitter* tx2 = Create_Transmitter(freq.data(), freq_time.data(),
-                                          num_samples, freq_offset.data(),
-                                          pulse_start_time.data(), num_pulses,
-                                          tx_power + 5.0f  // Different power
-  );
-  ASSERT_NE(tx2, nullptr);
-
-  // Add channels to both transmitters
-  int result1 = Add_Txchannel(
-      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
-      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
-      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
-      pulse_mod_imag.data(), delay, grid, tx1);
-  EXPECT_EQ(result1, 0);
-
-  int result2 = Add_Txchannel(
-      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
-      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
-      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
-      pulse_mod_imag.data(), delay, grid, tx2);
-  EXPECT_EQ(result2, 0);
-
-  // Don't call Free_Transmitter - test automatic cleanup
-  // These transmitters will be automatically cleaned up at program exit
-}
-
-/**
- * @brief Test manual vs automatic cleanup
- */
-TEST_F(TransmitterTest, ManualVsAutomaticCleanup) {
-  // Create two transmitters
-  t_Transmitter* manual_tx = Create_Transmitter(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power);
-  t_Transmitter* auto_tx = Create_Transmitter(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power + 5.0f);
-
-  ASSERT_NE(manual_tx, nullptr);
-  ASSERT_NE(auto_tx, nullptr);
-
-  // Manually free one transmitter
-  Free_Transmitter(manual_tx);
-
-  // Leave auto_tx for automatic cleanup at program exit
-  // This demonstrates both cleanup methods work
-}
-
-/**
- * @brief Test transmitter destruction (original test preserved)
- */
-TEST_F(TransmitterTest, FreeTransmitter) {
-  // Test freeing a valid transmitter
-  t_Transmitter* test_transmitter = Create_Transmitter(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power);
-  ASSERT_NE(test_transmitter, nullptr);
-
-  // Should not crash when freeing a valid transmitter
-  Free_Transmitter(test_transmitter);
-
-  // Test freeing a null pointer - should handle gracefully
-  Free_Transmitter(nullptr);
-}
-
-/**
- * @brief Test automatic cleanup control
- */
-TEST_F(TransmitterTest, AutomaticCleanupControl) {
-  // Test enabling automatic cleanup (should be enabled by default)
-  //   Enable_Automatic_Cleanup(true);
-
-  // Create a transmitter that will be automatically cleaned up
-  t_Transmitter* tx = Create_Transmitter(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power);
+TEST_F(TransmitterTest, AddChannelIncrementsCount) {
+  TransmitterPtr tx = Create();
   ASSERT_NE(tx, nullptr);
 
-  // Verify it works by adding a channel
-  int result = Add_Txchannel(
-      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
-      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
-      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
-      pulse_mod_imag.data(), delay, grid, tx);
-  EXPECT_EQ(result, 0);
-  EXPECT_EQ(Get_Num_Txchannel(tx), 1);
+  EXPECT_EQ(AddChannel(tx.get()), RADARSIM_SUCCESS);
+  EXPECT_EQ(Get_Num_Txchannel(tx.get()), 1);
+}
 
-  // Don't free - let automatic cleanup handle it
+TEST_F(TransmitterTest, AddChannelWithoutModulationSucceeds) {
+  TransmitterPtr tx = Create();
+  ASSERT_NE(tx, nullptr);
+
+  // mod_length == 0 means "no modulation"; the modulation arrays are then
+  // never dereferenced and may legitimately be null.
+  EXPECT_EQ(Add_Txchannel(location, polarization.real, polarization.imag,
+                          antenna.phi, antenna.phi_pattern,
+                          IsotropicAntenna::kLength, antenna.theta,
+                          antenna.theta_pattern, IsotropicAntenna::kLength,
+                          IsotropicAntenna::kGain, nullptr, nullptr, nullptr,
+                          0, pulse_mod_real.data(), pulse_mod_imag.data(),
+                          0.0f, 0.1f, tx.get()),
+            RADARSIM_SUCCESS);
+  EXPECT_EQ(Get_Num_Txchannel(tx.get()), 1);
+}
+
+TEST_F(TransmitterTest, AddChannelRejectsNullTransmitter) {
+  EXPECT_EQ(AddChannel(nullptr), RADARSIM_ERROR_NULL_POINTER);
 }
 
 /**
- * @brief Test unlicensed transmitter channel limit
+ * @brief Get_Num_Txchannel should report 0 for a null handle
+ *
+ * @details Disabled: the accessor dereferences its argument unconditionally,
+ * unlike the sibling accessors Get_BB_Size and Get_Num_Targets which both
+ * return 0 for null. Enable once the guard is added.
  */
-TEST_F(TransmitterTest, UnlicensedChannelLimit) {
-  valid_transmitter = Create_Transmitter(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power);
-  ASSERT_NE(valid_transmitter, nullptr);
-
-  // First channel should succeed
-  int result = Add_Txchannel(
-      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
-      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
-      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
-      pulse_mod_imag.data(), delay, grid, valid_transmitter);
-  EXPECT_EQ(result, 0);
-
-  // Second channel should fail (unlicensed limit: 1 channel)
-  result = Add_Txchannel(location, polar_real, polar_imag, phi, phi_ptn,
-                         phi_length, theta, theta_ptn, theta_length,
-                         antenna_gain, mod_t.data(), mod_var_real.data(),
-                         mod_var_imag.data(), mod_length, pulse_mod_real.data(),
-                         pulse_mod_imag.data(), delay, grid, valid_transmitter);
-  EXPECT_NE(result, 0);
-  EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 1);
+TEST_F(TransmitterTest, DISABLED_GetNumChannelsIsNullSafe) {
+  EXPECT_EQ(Get_Num_Txchannel(nullptr), 0);
 }
 
 /**
- * @brief Test SSB phase noise transmitter creation with valid parameters
+ * @brief Unlicensed builds accept exactly one transmitter channel
  */
-TEST_F(TransmitterTest, CreateTransmitterSSBPhaseNoiseValid) {
-  // Setup SSB phase noise parameters
+TEST_F(TransmitterTest, FreeTierChannelLimit) {
+  RS_SKIP_IF_LICENSED();
+
+  TransmitterPtr tx = Create();
+  ASSERT_NE(tx, nullptr);
+
+  for (int i = 0; i < rstest::kFreeTierMaxTxChannels; i++) {
+    EXPECT_EQ(AddChannel(tx.get()), RADARSIM_SUCCESS) << "channel " << i;
+  }
+
+  EXPECT_EQ(AddChannel(tx.get()), RADARSIM_ERROR_FREE_TIER_LIMIT);
+  EXPECT_EQ(Get_Num_Txchannel(tx.get()), rstest::kFreeTierMaxTxChannels)
+      << "A rejected channel must not be registered";
+}
+
+/*********************************************
+ *
+ *  Destruction
+ *
+ *********************************************/
+
+TEST_F(TransmitterTest, FreeIsNullSafeAndIndependent) {
+  Free_Transmitter(nullptr);  // must not crash
+
+  t_Transmitter* first = Create().release();
+  t_Transmitter* second = Create(15.0f).release();
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+
+  Free_Transmitter(first);
+
+  // Freeing one transmitter must leave the other usable.
+  EXPECT_EQ(AddChannel(second), RADARSIM_SUCCESS);
+  EXPECT_EQ(Get_Num_Txchannel(second), 1);
+  Free_Transmitter(second);
+}
+
+/*********************************************
+ *
+ *  SSB phase noise variant
+ *
+ *********************************************/
+
+/**
+ * @brief Test fixture adding phase noise parameters on top of the waveform
+ */
+class TransmitterPhaseNoiseTest : public TransmitterTest {
+ protected:
+  TransmitterPtr CreatePn(int pn_size = 4, double pn_fs = 2e6,
+                          int pn_num_samples = 1000,
+                          unsigned long long seed = 42) {
+    return TransmitterPtr(Create_Transmitter_SSBPhaseNoise(
+        freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+        pulse_start_time.data(), num_pulses, 10.0f, pn_freq.data(),
+        pn_power.data(), pn_size, pn_fs, pn_num_samples, seed, false));
+  }
+
   std::vector<double> pn_freq = {1e3, 10e3, 100e3, 1e6};
   std::vector<double> pn_power = {-80.0, -90.0, -100.0, -110.0};
-  double pn_fs = 2e6;
-  int pn_num_samples = 1000;
-  unsigned long long pn_seed = 42;
-  bool pn_validation = false;
+};
 
-  t_Transmitter* tx = Create_Transmitter_SSBPhaseNoise(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
-      pn_power.data(), static_cast<int>(pn_freq.size()), pn_fs, pn_num_samples,
-      pn_seed, pn_validation);
+TEST_F(TransmitterPhaseNoiseTest, CreateWithValidParameters) {
+  TransmitterPtr tx = CreatePn();
 
-  EXPECT_NE(tx, nullptr);
-
-  if (tx != nullptr) {
-    Free_Transmitter(tx);
-  }
+  ASSERT_NE(tx, nullptr);
+  EXPECT_EQ(Get_Num_Txchannel(tx.get()), 0);
 }
 
-/**
- * @brief Test SSB phase noise transmitter creation with null parameters
- */
-TEST_F(TransmitterTest, CreateTransmitterSSBPhaseNoiseNullParams) {
-  std::vector<double> pn_freq = {1e3, 10e3};
-  std::vector<double> pn_power = {-80.0, -90.0};
-
-  // Test with null freq
-  t_Transmitter* tx = Create_Transmitter_SSBPhaseNoise(
-      nullptr, freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
-      pn_power.data(), 2, 2e6, 1000, 0, false);
-  EXPECT_EQ(tx, nullptr);
-
-  // Test with null pn_freq
-  tx = Create_Transmitter_SSBPhaseNoise(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power, nullptr, pn_power.data(),
-      2, 2e6, 1000, 0, false);
-  EXPECT_EQ(tx, nullptr);
-
-  // Test with null pn_power
-  tx = Create_Transmitter_SSBPhaseNoise(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(), nullptr, 2,
-      2e6, 1000, 0, false);
-  EXPECT_EQ(tx, nullptr);
+TEST_F(TransmitterPhaseNoiseTest, CreateRejectsNullArrays) {
+  EXPECT_EQ(Create_Transmitter_SSBPhaseNoise(
+                nullptr, freq_time.data(), num_samples, freq_offset.data(),
+                pulse_start_time.data(), num_pulses, 10.0f, pn_freq.data(),
+                pn_power.data(), 2, 2e6, 1000, 0, false),
+            nullptr);
+  EXPECT_EQ(Create_Transmitter_SSBPhaseNoise(
+                freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+                pulse_start_time.data(), num_pulses, 10.0f, nullptr,
+                pn_power.data(), 2, 2e6, 1000, 0, false),
+            nullptr);
+  EXPECT_EQ(Create_Transmitter_SSBPhaseNoise(
+                freq.data(), freq_time.data(), num_samples, freq_offset.data(),
+                pulse_start_time.data(), num_pulses, 10.0f, pn_freq.data(),
+                nullptr, 2, 2e6, 1000, 0, false),
+            nullptr);
 }
 
-/**
- * @brief Test SSB phase noise transmitter creation with invalid parameters
- */
-TEST_F(TransmitterTest, CreateTransmitterSSBPhaseNoiseInvalidParams) {
-  std::vector<double> pn_freq = {1e3, 10e3};
-  std::vector<double> pn_power = {-80.0, -90.0};
-
-  // Test with zero pn_size
-  t_Transmitter* tx = Create_Transmitter_SSBPhaseNoise(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
-      pn_power.data(), 0, 2e6, 1000, 0, false);
-  EXPECT_EQ(tx, nullptr);
-
-  // Test with zero pn_fs
-  tx = Create_Transmitter_SSBPhaseNoise(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
-      pn_power.data(), 2, 0.0, 1000, 0, false);
-  EXPECT_EQ(tx, nullptr);
-
-  // Test with zero pn_num_samples
-  tx = Create_Transmitter_SSBPhaseNoise(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
-      pn_power.data(), 2, 2e6, 0, 0, false);
-  EXPECT_EQ(tx, nullptr);
-
-  // Test with zero waveform_size
-  tx = Create_Transmitter_SSBPhaseNoise(
-      freq.data(), freq_time.data(), 0, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
-      pn_power.data(), 2, 2e6, 1000, 0, false);
-  EXPECT_EQ(tx, nullptr);
+TEST_F(TransmitterPhaseNoiseTest, CreateRejectsInvalidPhaseNoiseParameters) {
+  EXPECT_EQ(CreatePn(/*pn_size=*/0), nullptr);
+  EXPECT_EQ(CreatePn(/*pn_size=*/-1), nullptr);
+  EXPECT_EQ(CreatePn(4, /*pn_fs=*/0.0), nullptr);
+  EXPECT_EQ(CreatePn(4, /*pn_fs=*/-1.0), nullptr);
+  EXPECT_EQ(CreatePn(4, 2e6, /*pn_num_samples=*/0), nullptr);
+  EXPECT_EQ(CreatePn(4, 2e6, /*pn_num_samples=*/-5), nullptr);
 }
 
-/**
- * @brief Test SSB phase noise transmitter with channel addition
- */
-TEST_F(TransmitterTest, SSBPhaseNoiseAddChannel) {
-  std::vector<double> pn_freq = {1e3, 10e3, 100e3};
-  std::vector<double> pn_power = {-80.0, -90.0, -100.0};
+TEST_F(TransmitterPhaseNoiseTest, AcceptsChannels) {
+  TransmitterPtr tx = CreatePn();
+  ASSERT_NE(tx, nullptr);
 
-  valid_transmitter = Create_Transmitter_SSBPhaseNoise(
-      freq.data(), freq_time.data(), num_samples, freq_offset.data(),
-      pulse_start_time.data(), num_pulses, tx_power, pn_freq.data(),
-      pn_power.data(), static_cast<int>(pn_freq.size()), 2e6, 1000, 42, false);
-  ASSERT_NE(valid_transmitter, nullptr);
-
-  // Add a channel to the SSB phase noise transmitter
-  int result = Add_Txchannel(
-      location, polar_real, polar_imag, phi, phi_ptn, phi_length, theta,
-      theta_ptn, theta_length, antenna_gain, mod_t.data(), mod_var_real.data(),
-      mod_var_imag.data(), mod_length, pulse_mod_real.data(),
-      pulse_mod_imag.data(), delay, grid, valid_transmitter);
-
-  EXPECT_EQ(result, 0);
-  EXPECT_EQ(Get_Num_Txchannel(valid_transmitter), 1);
+  EXPECT_EQ(AddChannel(tx.get()), RADARSIM_SUCCESS);
+  EXPECT_EQ(Get_Num_Txchannel(tx.get()), 1);
 }
+
+}  // namespace
