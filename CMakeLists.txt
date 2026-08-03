@@ -132,6 +132,31 @@ endif()
 # Build library
 add_library(radarsimc SHARED ${SOURCES})
 
+# Export only what radarsim.h marks EXPORTED.
+#
+# ELF resolves a shared library's own calls through the PLT against the entire
+# process, so every symbol this library exports is one another module can
+# interpose. Statically linking mbedTLS does not prevent that: with default
+# visibility its symbols land in the dynamic symbol table, and a process that
+# also loads a system libmbedcrypto silently redirects our license verification
+# into it. Different mbedTLS versions disagree on enough details to reject a
+# valid license. The same hazard applies to HDF5, which --whole-archive below
+# pulls in wholesale.
+#
+# Windows keeps CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS; its imports are resolved per
+# module, so it has no equivalent exposure.
+set_target_properties(radarsimc PROPERTIES
+    C_VISIBILITY_PRESET hidden
+    CXX_VISIBILITY_PRESET hidden
+    CUDA_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
+
+# Visibility flags only reach sources this project compiles. mbedTLS and HDF5
+# arrive as prebuilt static archives, so localize their symbols at link time.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(radarsimc PRIVATE "LINKER:--exclude-libs,ALL")
+endif()
+
 # Set target HDF5 include directories
 target_include_directories(radarsimc PUBLIC ${HDF5_INCLUDE_DIR})
 

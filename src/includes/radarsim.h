@@ -38,8 +38,16 @@
 extern "C" {
 #endif
 
+/* Marks the public ABI. On ELF and Mach-O targets the library is compiled with
+ * -fvisibility=hidden, so this attribute is what keeps these functions -- and
+ * only these -- in the dynamic symbol table. Exporting anything else lets a
+ * foreign copy of a bundled dependency (mbedTLS, HDF5) interpose our internal
+ * calls at load time, because ELF resolves them through the PLT against the
+ * whole process. */
 #if defined _WIN64 || defined _WIN32
 #define EXPORTED __declspec(dllexport)
+#elif defined(__GNUC__) || defined(__clang__)
+#define EXPORTED __attribute__((visibility("default")))
 #else
 #define EXPORTED
 #endif
