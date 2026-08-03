@@ -2057,7 +2057,7 @@ int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
 
 /*********************************************
  *
- *  Scene State Query
+ *  Radar State Query
  *
  *********************************************/
 /**
@@ -2073,7 +2073,7 @@ int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
  *
  * @return int RADARSIM_SUCCESS (0) on success, or a RADARSIM_ERROR_* code
  */
-int Get_Scene_State(t_Radar* ptr_radar_c, double* timestamp_array,
+int Get_Radar_State(t_Radar* ptr_radar_c, double* timestamp_array,
                     int num_timestamps, float* tx_locations_out,
                     float* rx_locations_out, float* boresight_out) {
   if (ptr_radar_c == nullptr || ptr_radar_c->_ptr_radar == nullptr ||
@@ -2160,11 +2160,11 @@ int Get_Scene_State(t_Radar* ptr_radar_c, double* timestamp_array,
       }
     }
   } catch (const std::exception& e) {
-    std::cerr << "Get_Scene_State: Unexpected error: " << e.what()
+    std::cerr << "Get_Radar_State: Unexpected error: " << e.what()
               << std::endl;
     return RADARSIMCPP_ERROR_EXCEPTION;
   } catch (...) {
-    std::cerr << "Get_Scene_State: Unknown error occurred" << std::endl;
+    std::cerr << "Get_Radar_State: Unknown error occurred" << std::endl;
     return RADARSIMCPP_ERROR_EXCEPTION;
   }
 

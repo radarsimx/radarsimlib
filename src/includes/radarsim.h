@@ -55,7 +55,7 @@ extern "C" {
 // #define RADARSIM_SIMPLE_CLEANUP
 
 #define VERSION_MAJOR 15
-#define VERSION_MINOR 3
+#define VERSION_MINOR 4
 #define VERSION_PATCH 0
 
 /*********************************************
@@ -787,7 +787,7 @@ EXPORTED int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
 
 /*********************************************
  *
- *  Scene State Query
+ *  Radar State Query
  *
  *********************************************/
 /**
@@ -821,7 +821,7 @@ EXPORTED int Run_NoiseSimulator(t_Radar* ptr_radar_c, double noise_level,
  * exactly one entry per frame. Timestamps outside the frame time range are
  * clamped to the nearest endpoint.
  */
-EXPORTED int Get_Scene_State(t_Radar* ptr_radar_c, double* timestamp_array,
+EXPORTED int Get_Radar_State(t_Radar* ptr_radar_c, double* timestamp_array,
                              int num_timestamps, float* tx_locations_out,
                              float* rx_locations_out, float* boresight_out);
 

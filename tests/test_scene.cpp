@@ -1,11 +1,11 @@
 /*
  * @file test_scene.cpp
- * @brief Unit tests for Scene State Query C wrapper functions
+ * @brief Unit tests for scene state query C wrapper functions
  *
  * @details
  * Test scenarios:
- * - Get_Scene_State for static, moving and rotating radar platforms
- * - Get_Scene_State for time-varying (Create_Radar_Array) platforms
+ * - Get_Radar_State for static, moving and rotating radar platforms
+ * - Get_Radar_State for time-varying (Create_Radar_Array) platforms
  * - Get_Num_Targets / Get_Target_Mesh_Size
  * - Get_Target_Mesh_State for constant-motion and time-varying targets
  * - Parameter validation
@@ -45,9 +45,9 @@ namespace {
 constexpr int kFloatsPerTriangle = 9;
 
 /**
- * @brief Fixture for radar platform scene-state queries
+ * @brief Fixture for radar platform state queries
  */
-class SceneStateTest : public ::testing::Test {
+class RadarStateTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // Small waveform - these tests only exercise geometry, not signals.
@@ -62,7 +62,7 @@ class SceneStateTest : public ::testing::Test {
  * @brief A static radar at the origin reports channel offsets verbatim and a
  * boresight along +X.
  */
-TEST_F(SceneStateTest, StaticRadarAtOrigin) {
+TEST_F(RadarStateTest, StaticRadarAtOrigin) {
   scenario_.tx_channel_location[0] = 1.0f;
   scenario_.rx_channel_location[0] = -1.0f;
   ASSERT_TRUE(scenario_.Build());
@@ -70,7 +70,7 @@ TEST_F(SceneStateTest, StaticRadarAtOrigin) {
   double timestamps[1] = {0.0};
   float tx_out[3], rx_out[3], boresight[3];
 
-  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
+  ASSERT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
                             boresight),
             RADARSIM_SUCCESS);
 
@@ -90,7 +90,7 @@ TEST_F(SceneStateTest, StaticRadarAtOrigin) {
 /**
  * @brief Constant-velocity platforms extrapolate analytically at query time
  */
-TEST_F(SceneStateTest, ConstantVelocityExtrapolation) {
+TEST_F(RadarStateTest, ConstantVelocityExtrapolation) {
   ASSERT_TRUE(scenario_.BuildTxRx());
 
   float location[3] = {0.0f, 0.0f, 0.0f};
@@ -102,7 +102,7 @@ TEST_F(SceneStateTest, ConstantVelocityExtrapolation) {
   double timestamps[3] = {0.0, 5.0, 10.0};
   float tx_out[9], rx_out[9], boresight[9];
 
-  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 3, tx_out, rx_out,
+  ASSERT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 3, tx_out, rx_out,
                             boresight),
             RADARSIM_SUCCESS);
 
@@ -117,7 +117,7 @@ TEST_F(SceneStateTest, ConstantVelocityExtrapolation) {
  * @brief A 90 degree yaw rotates the boresight from +X to +Y and carries the
  * channel offsets with it.
  */
-TEST_F(SceneStateTest, RotatedRadarBoresight) {
+TEST_F(RadarStateTest, RotatedRadarBoresight) {
   scenario_.tx_channel_location[0] = 1.0f;
   ASSERT_TRUE(scenario_.BuildTxRx());
 
@@ -130,7 +130,7 @@ TEST_F(SceneStateTest, RotatedRadarBoresight) {
   double timestamps[1] = {0.0};
   float tx_out[3], rx_out[3], boresight[3];
 
-  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
+  ASSERT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
                             boresight),
             RADARSIM_SUCCESS);
 
@@ -146,7 +146,7 @@ TEST_F(SceneStateTest, RotatedRadarBoresight) {
 /**
  * @brief A constant rotation rate sweeps the boresight over time
  */
-TEST_F(SceneStateTest, RotationRateSweepsBoresight) {
+TEST_F(RadarStateTest, RotationRateSweepsBoresight) {
   ASSERT_TRUE(scenario_.BuildTxRx());
 
   float location[3] = {0.0f, 0.0f, 0.0f};
@@ -158,7 +158,7 @@ TEST_F(SceneStateTest, RotationRateSweepsBoresight) {
   double timestamps[2] = {0.0, 1.0};
   float tx_out[6], rx_out[6], boresight[6];
 
-  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 2, tx_out, rx_out,
+  ASSERT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 2, tx_out, rx_out,
                             boresight),
             RADARSIM_SUCCESS);
 
@@ -170,7 +170,7 @@ TEST_F(SceneStateTest, RotationRateSweepsBoresight) {
  * @brief Time-varying platforms interpolate against the frame start times and
  * clamp outside the covered interval.
  */
-TEST_F(SceneStateTest, TimeVaryingInterpolationAndClamping) {
+TEST_F(RadarStateTest, TimeVaryingInterpolationAndClamping) {
   ASSERT_TRUE(scenario_.BuildTxRx());
 
   double frame_start_time[3] = {0.0, 1.0, 2.0};
@@ -188,7 +188,7 @@ TEST_F(SceneStateTest, TimeVaryingInterpolationAndClamping) {
   double timestamps[4] = {0.5, 1.5, -1.0, 5.0};
   float tx_out[12], rx_out[12], boresight[12];
 
-  ASSERT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 4, tx_out, rx_out,
+  ASSERT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 4, tx_out, rx_out,
                             boresight),
             RADARSIM_SUCCESS);
 
@@ -202,7 +202,7 @@ TEST_F(SceneStateTest, TimeVaryingInterpolationAndClamping) {
  * @brief A motion array that does not match the frame count is rejected,
  * because there is nothing to interpolate against.
  */
-TEST_F(SceneStateTest, TimeVaryingMismatchedFrameCountIsRejected) {
+TEST_F(RadarStateTest, TimeVaryingMismatchedFrameCountIsRejected) {
   ASSERT_TRUE(scenario_.BuildTxRx());
 
   double frame_start_time[1] = {0.0};
@@ -218,43 +218,43 @@ TEST_F(SceneStateTest, TimeVaryingMismatchedFrameCountIsRejected) {
   double timestamps[1] = {0.0};
   float tx_out[3], rx_out[3], boresight[3];
 
-  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
+  EXPECT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
                             boresight),
             RADARSIM_ERROR_INVALID_PARAMETER);
 }
 
-TEST_F(SceneStateTest, RejectsNullArguments) {
+TEST_F(RadarStateTest, RejectsNullArguments) {
   ASSERT_TRUE(scenario_.Build());
 
   double timestamps[1] = {0.0};
   float tx_out[3], rx_out[3], boresight[3];
 
-  EXPECT_EQ(Get_Scene_State(nullptr, timestamps, 1, tx_out, rx_out, boresight),
+  EXPECT_EQ(Get_Radar_State(nullptr, timestamps, 1, tx_out, rx_out, boresight),
             RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Scene_State(scenario_.radar(), nullptr, 1, tx_out, rx_out,
+  EXPECT_EQ(Get_Radar_State(scenario_.radar(), nullptr, 1, tx_out, rx_out,
                             boresight),
             RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, nullptr, rx_out,
+  EXPECT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 1, nullptr, rx_out,
                             boresight),
             RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, nullptr,
+  EXPECT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 1, tx_out, nullptr,
                             boresight),
             RADARSIM_ERROR_NULL_POINTER);
-  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
+  EXPECT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 1, tx_out, rx_out,
                             nullptr),
             RADARSIM_ERROR_NULL_POINTER);
 }
 
-TEST_F(SceneStateTest, RejectsNonPositiveTimestampCount) {
+TEST_F(RadarStateTest, RejectsNonPositiveTimestampCount) {
   ASSERT_TRUE(scenario_.Build());
 
   double timestamps[1] = {0.0};
   float tx_out[3], rx_out[3], boresight[3];
 
-  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, 0, tx_out, rx_out,
+  EXPECT_EQ(Get_Radar_State(scenario_.radar(), timestamps, 0, tx_out, rx_out,
                             boresight),
             RADARSIM_ERROR_INVALID_PARAMETER);
-  EXPECT_EQ(Get_Scene_State(scenario_.radar(), timestamps, -1, tx_out, rx_out,
+  EXPECT_EQ(Get_Radar_State(scenario_.radar(), timestamps, -1, tx_out, rx_out,
                             boresight),
             RADARSIM_ERROR_INVALID_PARAMETER);
 }
