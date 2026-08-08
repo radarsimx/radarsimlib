@@ -73,7 +73,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ssh-key: ${{ secrets.RADARSIMCPP }}
           submodules: recursive
@@ -150,7 +150,7 @@ jobs:
         shell: powershell
 
       - name: Archive built module
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: success()
         with:
           name: ${{ matrix.artifact_name }}
@@ -159,7 +159,7 @@ jobs:
           compression-level: 6
 
       - name: Upload build logs on failure
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: build-logs-${{ matrix.artifact_name }}
@@ -178,7 +178,7 @@ jobs:
         run: mkdir -p artifacts
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts/
 
@@ -194,7 +194,7 @@ jobs:
           echo "MATRIX_EOF" >> "$GITHUB_OUTPUT"
 
       - name: Delete downloaded artifacts
-        uses: geekyeggo/delete-artifact@v5
+        uses: geekyeggo/delete-artifact@v6
         with:
           failOnError: false
           name: ${{ steps.matrix-info.outputs.names }}
@@ -348,7 +348,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Upload packed artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: radarsimlib_windows_all_builds
           path: |
