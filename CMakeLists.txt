@@ -55,71 +55,49 @@ function(setup_openmp_macos)
     endif()
 endfunction()
 
-# Function to setup HDF5 for different platforms
-function(setup_hdf5_for_platform)
-    set(HDF5_BASE "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs")
+# Prebuilt dependencies
+#
+# HDF5 and mbedTLS are never compiled here. They are built once per release in
+# the radarsimx-deps repository and consumed as static libraries, resolved by
+# setup_prebuilt_dep() from radarsimcpp's cmake/PrebuiltDeps.cmake. That module
+# owns everything platform-specific about locating them - the platform triplet,
+# the .a/.lib naming, and the deps-submodule-or-download decision - so this file
+# only has to say which libraries it wants.
+#
+# See src/radarsimcpp/cmake/deps_manifest.cmake for the pinned versions and
+# checksums, and src/radarsimcpp/deps/README.md for how they are produced.
+include(PrebuiltDeps)
 
-    if(WIN32)
-        set(HDF5_INCLUDE_DIR "${HDF5_BASE}/include" "${HDF5_BASE}/include_win_x86_64")
-        set(HDF5_LIB_DIR "${HDF5_BASE}/lib_win_x86_64")
-        set(HDF5_LIBS libhdf5 libhdf5_cpp libhdf5_hl libhdf5_hl_cpp shlwapi)
-    elseif(UNIX AND NOT APPLE)
-        set(HDF5_INCLUDE_DIR "${HDF5_BASE}/include" "${HDF5_BASE}/include_linux_x86_64")
-        set(HDF5_LIB_DIR "${HDF5_BASE}/lib_linux_x86_64")
-        set(HDF5_LIBS
-            "${HDF5_BASE}/lib_linux_x86_64/libhdf5.a"
-            "${HDF5_BASE}/lib_linux_x86_64/libhdf5_cpp.a"
-            "${HDF5_BASE}/lib_linux_x86_64/libhdf5_hl.a"
-            "${HDF5_BASE}/lib_linux_x86_64/libhdf5_hl_cpp.a")
-    elseif(APPLE)
-        if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm64")
-            set(HDF5_INCLUDE_DIR "${HDF5_BASE}/include" "${HDF5_BASE}/include_macos_arm64")
-            set(HDF5_LIB_DIR "${HDF5_BASE}/lib_macos_arm64")
-        else()
-            set(HDF5_INCLUDE_DIR "${HDF5_BASE}/include" "${HDF5_BASE}/include_macos_x86_64")
-            set(HDF5_LIB_DIR "${HDF5_BASE}/lib_macos_x86_64")
-        endif()
+# shlwapi supplies the path helpers HDF5's Windows VFD calls into.
+set(HDF5_SYSTEM_LIBS "")
+if(WIN32)
+    set(HDF5_SYSTEM_LIBS shlwapi)
+endif()
 
-        set(HDF5_LIBS hdf5 hdf5_cpp hdf5_hl hdf5_hl_cpp)
-    endif()
-
-    # Export to parent scope
-    set(HDF5_INCLUDE_DIR ${HDF5_INCLUDE_DIR} PARENT_SCOPE)
-    set(HDF5_LIB_DIR ${HDF5_LIB_DIR} PARENT_SCOPE)
-    set(HDF5_LIBS ${HDF5_LIBS} PARENT_SCOPE)
-endfunction()
-
-# Setup HDF5
-setup_hdf5_for_platform()
+setup_prebuilt_dep(hdf5
+    LIBS hdf5 hdf5_cpp hdf5_hl hdf5_hl_cpp
+    SYSTEM_LIBS ${HDF5_SYSTEM_LIBS}
+    TARGET radarsimx::hdf5
+)
 
 # Setup License Verification (optional)
-# mbedTLS is built from source via FetchContent to ensure static linking with
-# -fPIC on all platforms, avoiding runtime shared library dependencies.
 if(ENABLE_LICENSE)
-    message(STATUS "License verification enabled - building mbedTLS from source")
+    message(STATUS "License verification enabled - using prebuilt mbedTLS")
 
-    include(FetchContent)
+    # bcrypt backs mbedTLS's entropy source on Windows.
+    set(MBEDTLS_SYSTEM_LIBS "")
+    if(WIN32)
+        set(MBEDTLS_SYSTEM_LIBS bcrypt)
+    endif()
 
-    # Disable mbedTLS components we don't need
-    set(ENABLE_TESTING OFF CACHE BOOL "Disable mbedTLS tests" FORCE)
-    set(ENABLE_PROGRAMS OFF CACHE BOOL "Disable mbedTLS programs" FORCE)
-    set(GEN_FILES OFF CACHE BOOL "Disable mbedTLS file generation" FORCE)
-
-    # Build only static mbedTLS libraries
-    set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build static mbedTLS" FORCE)
-    set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Don't build shared mbedTLS" FORCE)
-
-    # Ensure PIC is enabled (required for linking static libs into shared lib)
-    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-    FetchContent_Declare(
-        mbedtls
-        URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-4.1.0/mbedtls-4.1.0.tar.bz2
+    # In dependency order: mbedtls needs mbedx509, which needs tfpsacrypto.
+    setup_prebuilt_dep(mbedtls
+        LIBS mbedtls mbedx509 tfpsacrypto
+        SYSTEM_LIBS ${MBEDTLS_SYSTEM_LIBS}
+        TARGET radarsimx::mbedtls
     )
-    FetchContent_MakeAvailable(mbedtls)
 
     add_compile_definitions(RADARSIMCPP_ENABLE_LICENSE)
-    message(STATUS "mbedTLS will be built from source with static linking")
 endif()
 
 # Collect source files
@@ -157,42 +135,42 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(radarsimc PRIVATE "LINKER:--exclude-libs,ALL")
 endif()
 
-# Set target HDF5 include directories
-target_include_directories(radarsimc PUBLIC ${HDF5_INCLUDE_DIR})
+# Link the prebuilt dependencies. Both imported targets carry their own include
+# directories and absolute library paths, so there is no link_directories search
+# to get wrong.
+target_link_libraries(radarsimc PUBLIC radarsimx::hdf5)
+
+# /NODEFAULTLIB entries accumulated below and applied once. LINK_FLAGS is a
+# single string property, so setting it twice drops the earlier value - which is
+# how a GPU build with ENABLE_LICENSE used to lose the MSVCRTD exclusion.
+set(RADARSIMC_LINK_FLAGS "")
 
 # Link mbedTLS if license verification is enabled
 if(ENABLE_LICENSE)
-    target_link_libraries(radarsimc PUBLIC mbedtls mbedx509 tfpsacrypto)
+    target_link_libraries(radarsimc PUBLIC radarsimx::mbedtls)
 
-    # On Windows, mbedTLS entropy functions require bcrypt library
     if(WIN32)
-        target_link_libraries(radarsimc PUBLIC bcrypt)
-        # Suppress MSVCRTD conflict warning when mixing debug/release libs
-        # Use LINK_FLAGS property instead of target_link_options to ensure the flag
-        # is placed in the VS linker section only and not passed to cl.exe
-        set_target_properties(radarsimc PROPERTIES LINK_FLAGS "/NODEFAULTLIB:MSVCRTD")
+        # The prebuilt libraries are compiled against the release CRT (/MD) - see
+        # deps/cmake/baseline.cmake - so a Debug build pulls in both MSVCRT and
+        # MSVCRTD. Drop the debug one.
+        list(APPEND RADARSIMC_LINK_FLAGS "/NODEFAULTLIB:MSVCRTD")
     endif()
 
     message(STATUS "License verification linked with mbedTLS (static)")
 endif()
 
-# Link HDF5 libraries - use full paths for Linux, link directories for other platforms
+# radarsimc is a shared library and its consumers call HDF5 directly, so the
+# HDF5 symbols have to survive into the .so even though nothing in radarsimc's
+# own objects references them. --whole-archive is GNU ld specific; MSVC and ld64
+# keep them via CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS and two-level namespaces.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_link_libraries(radarsimc PUBLIC ${HDF5_LIBS})
+    set(HDF5_WHOLE_ARCHIVE "LINKER:--whole-archive")
+    foreach(hdf5_lib IN LISTS HDF5_LIBRARIES)
+        list(APPEND HDF5_WHOLE_ARCHIVE "LINKER:${hdf5_lib}")
+    endforeach()
+    list(APPEND HDF5_WHOLE_ARCHIVE "LINKER:--no-whole-archive")
 
-    # Use whole-archive to force inclusion of all symbols from static libraries
-    set(HDF5_LINUX_LIB_DIR "${CMAKE_SOURCE_DIR}/src/radarsimcpp/hdf5-lib-build/libs/lib_linux_x86_64")
-    target_link_options(radarsimc PRIVATE
-        "LINKER:--whole-archive"
-        "LINKER:${HDF5_LINUX_LIB_DIR}/libhdf5.a"
-        "LINKER:${HDF5_LINUX_LIB_DIR}/libhdf5_cpp.a"
-        "LINKER:${HDF5_LINUX_LIB_DIR}/libhdf5_hl.a"
-        "LINKER:${HDF5_LINUX_LIB_DIR}/libhdf5_hl_cpp.a"
-        "LINKER:--no-whole-archive"
-    )
-else()
-    target_link_directories(radarsimc PUBLIC ${HDF5_LIB_DIR})
-    target_link_libraries(radarsimc PUBLIC ${HDF5_LIBS})
+    target_link_options(radarsimc PRIVATE ${HDF5_WHOLE_ARCHIVE})
 endif()
 
 if(GPU_BUILD)
@@ -221,9 +199,8 @@ if(GPU_BUILD)
         target_compile_options(radarsimc PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>)
 
         # Use proper linker flags for CUDA builds to avoid runtime library conflicts
-        set_target_properties(radarsimc PROPERTIES
-            MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
-            LINK_FLAGS "/NODEFAULTLIB:LIBCMT")
+        set_target_properties(radarsimc PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+        list(APPEND RADARSIMC_LINK_FLAGS "/NODEFAULTLIB:LIBCMT")
     endif()
 
 else()
@@ -259,6 +236,14 @@ else()
             target_compile_options(radarsimc PRIVATE -O3)
         endif()
     endif()
+endif()
+
+# Apply the accumulated /NODEFAULTLIB flags. LINK_FLAGS is used instead of
+# target_link_options so the flags land in the VS linker section only and are
+# not passed to cl.exe.
+if(RADARSIMC_LINK_FLAGS)
+    list(JOIN RADARSIMC_LINK_FLAGS " " RADARSIMC_LINK_FLAGS_STR)
+    set_target_properties(radarsimc PROPERTIES LINK_FLAGS "${RADARSIMC_LINK_FLAGS_STR}")
 endif()
 
 # Google Test setup
