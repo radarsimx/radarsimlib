@@ -195,7 +195,7 @@ jobs:
         run: |
           echo "::group::Build Process"
           chmod +x ./build.sh
-          ./build.sh --arch=${{ matrix.arch }} --license=on --test=${{ matrix.arch == 'cpu' && 'on' || 'off' }} --verbose
+          ./build.sh --arch=${{ matrix.arch }} --license=on --test=${{ matrix.arch == 'cpu' && 'on' || 'off' }} --verbose --deps=release
           echo "::endgroup::"
 
       - name: Display build statistics

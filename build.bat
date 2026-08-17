@@ -25,12 +25,17 @@ REM   --license=[on/off]  Enable license verification: 'on' or 'off' (default: o
 REM   --arch=[cpu/gpu]    Build architecture: 'cpu' or 'gpu' (default: cpu)
 REM   --test=[on/off]     Enable unit tests: 'on' or 'off' (default: on)
 REM   --jobs=N            Number of parallel build jobs (default: auto-detect)
+REM   --deps=[repo/release] Source of the prebuilt third-party libraries:
+REM                       'repo' uses the committed libs\ tree in the
+REM                       radarsimx-deps submodule, 'release' downloads the
+REM                       radarsimx-deps GitHub release archives (default: repo)
 REM
 REM EXAMPLES:
 REM   build_win.bat                                    REM Default build
 REM   build_win.bat --license=on --arch=gpu          REM GPU build with license verification
 REM   build_win.bat --jobs=8 --test=off              REM 8-core parallel build, no tests
 REM   build_win.bat --arch=cpu --license=on          REM CPU build with license verification
+REM   build_win.bat --deps=release                   REM Download prebuilt deps from a release
 REM
 REM EXIT CODES:
 REM   0  - Success
@@ -50,6 +55,7 @@ set BUILD_TYPE=Release
 set SCRIPT_DIR=%~dp0
 set BUILD_FAILED=0
 set JOBS=0
+set DEPS=repo
 
 REM Initialize error tracking
 set CMAKE_FAILED=0
@@ -75,12 +81,16 @@ REM Help section - displays command line parameter usage
     echo   --arch=ARCH         Build architecture: 'cpu' or 'gpu' (default: cpu)
     echo   --test=TEST         Enable unit tests: 'on' or 'off' (default: on)
     echo   --jobs=N            Number of parallel build jobs (default: auto-detect)
+    echo   --deps=DEPS         Prebuilt dependency source: 'repo' or 'release' (default: repo)
+    echo                         repo    - committed libs\ tree in the radarsimx-deps submodule
+    echo                         release - radarsimx-deps GitHub release archives (needs network)
     echo.
     echo EXAMPLES:
     echo   %~nx0                                    # Default build
     echo   %~nx0 --license=on --arch=gpu          # GPU build with license verification
     echo   %~nx0 --jobs=8 --test=off              # 8-core parallel build, no tests
     echo   %~nx0 --arch=cpu --license=on          # CPU build with license verification
+    echo   %~nx0 --deps=release                   # Download prebuilt deps from a release
     echo.
     echo WINDOWS-SPECIFIC NOTES:
     echo   - Uses MSVC compiler, creates .dll files
@@ -113,12 +123,14 @@ REM   LICENSE - License verification (on/off)
 REM   ARCH - Build architecture (cpu/gpu)
 REM   TEST - Unit test flag (on/off)
 REM   JOBS - Number of parallel build jobs
+REM   DEPS - Prebuilt dependency source (repo/release)
 REM Supported Options:
 REM   --help: Shows help and exits
 REM   --license=VALUE: Enables/disables license verification
 REM   --arch=VALUE: Sets architecture
 REM   --test=VALUE: Enables/disables tests
 REM   --jobs=VALUE: Sets parallel job count
+REM   --deps=VALUE: Selects the prebuilt dependency source
 REM Exit:
 REM   Exits with code 0 on --help
 REM   Exits with code 1 on unknown options or validation errors
@@ -150,6 +162,12 @@ REM   Exits with code 1 on unknown options or validation errors
         shift
         goto GETOPTS
     )
+    if /I "%1" == "--deps" (
+        set DEPS=%2
+        shift
+        shift
+        goto GETOPTS
+    )
     if not "%1" == "" (
         echo ERROR: Unknown parameter: %1
         echo Use --help for usage information
@@ -176,6 +194,14 @@ REM   Exits with code 1 on unknown options or validation errors
     if /I NOT "%TEST%" == "on" (
         if /I NOT "%TEST%" == "off" (
             echo ERROR: Invalid --test parameter '%TEST%'. Please choose 'on' or 'off'
+            goto ERROR_EXIT
+        )
+    )
+
+    REM Validate prebuilt dependency source parameter
+    if /I NOT "%DEPS%" == "repo" (
+        if /I NOT "%DEPS%" == "release" (
+            echo ERROR: Invalid --deps parameter '%DEPS%'. Please choose 'repo' or 'release'
             goto ERROR_EXIT
         )
     )
@@ -290,6 +316,7 @@ REM Display banner and copyright information
     echo   - Tests: %TEST%
     echo   - Build Type: %BUILD_TYPE%
     echo   - Parallel Jobs: %JOBS%
+    echo   - Prebuilt Dependencies: %DEPS%
     echo   - Script Directory: %SCRIPT_DIR%
     echo.
     echo ######                               #####           #     # 
@@ -346,6 +373,7 @@ REM Global Variables Used:
 REM   ARCH - Determines GPU_BUILD CMake option
 REM   LICENSE - Determines ENABLE_LICENSE CMake option
 REM   TEST - Determines GTEST CMake option
+REM   DEPS - Determines RADARSIMCPP_DEPS_PREFER_DOWNLOAD CMake option
 REM   BUILD_TYPE - CMake build configuration (Release/Debug)
 REM   JOBS - Number of parallel build jobs
 REM Output:
@@ -369,11 +397,17 @@ REM   Sets CMAKE_FAILED=1 and exits on any CMake failures
     pushd ".\build"
     
     REM Configure CMake build based on architecture, license, and test settings
-    echo INFO: Configuring CMake build - Architecture: %ARCH%, License: %LICENSE%, Tests: %TEST%...
-    
+    echo INFO: Configuring CMake build - Architecture: %ARCH%, License: %LICENSE%, Tests: %TEST%, Deps: %DEPS%...
+
     REM Set license flag
     set LICENSE_FLAG=OFF
     if /I "%LICENSE%" == "on" set LICENSE_FLAG=ON
+
+    REM Select where the prebuilt third-party libraries come from. 'repo' uses the
+    REM committed libs\ tree in the radarsimx-deps submodule and needs no network;
+    REM 'release' downloads the checksum-pinned archives from the deps release.
+    set DEPS_DOWNLOAD_FLAG=OFF
+    if /I "%DEPS%" == "release" set DEPS_DOWNLOAD_FLAG=ON
 
     REM Set CMake options based on configuration
     set CMAKE_OPTIONS=
@@ -384,6 +418,7 @@ REM   Sets CMAKE_FAILED=1 and exits on any CMake failures
     )
     
     set CMAKE_OPTIONS=%CMAKE_OPTIONS% -DENABLE_LICENSE=%LICENSE_FLAG%
+    set CMAKE_OPTIONS=%CMAKE_OPTIONS% -DRADARSIMCPP_DEPS_PREFER_DOWNLOAD=%DEPS_DOWNLOAD_FLAG%
 
     if /I "%TEST%" == "on" (
         set CMAKE_OPTIONS=%CMAKE_OPTIONS% -DGTEST=ON
@@ -572,6 +607,7 @@ REM   Continues with warnings if test tools are not available
     echo   - Tests: %TEST%
     echo   - Build Type: %BUILD_TYPE%
     echo   - Parallel Jobs: %JOBS%
+    echo   - Prebuilt Dependencies: %DEPS%
     echo   - Script Directory: %SCRIPT_DIR%
     echo.
     echo Output Locations:
@@ -608,6 +644,7 @@ REM Error handling
     echo   - Tests: %TEST%
     echo   - Build Type: %BUILD_TYPE%
     echo   - Parallel Jobs: %JOBS%
+    echo   - Prebuilt Dependencies: %DEPS%
     echo.
     echo Error Summary:
     if %CMAKE_FAILED% neq 0 echo   - CMake configuration or build failed

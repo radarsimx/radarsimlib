@@ -134,7 +134,7 @@ jobs:
           CUDA_TOOLKIT_ROOT_DIR: ${{ matrix.arch == 'gpu' && env.CUDA_PATH || '' }}
         run: |
           echo "::group::Build Process"
-          .\build.bat --arch=${{ matrix.arch }} --license=on --test=${{ matrix.arch == 'cpu' && 'on' || 'off' }}
+          .\build.bat --arch=${{ matrix.arch }} --license=on --test=${{ matrix.arch == 'cpu' && 'on' || 'off' }} --deps=release
           echo "::endgroup::"
         shell: cmd
 
