@@ -26,6 +26,7 @@ name: Build Windows Libraries
 # - Individual artifacts for each build configuration
 # - Packed archive containing all builds organized by architecture
 # - Build summaries and statistics
+# - GitHub release assets (GPU builds only, on tag pushes)
 #
 # Triggers:
 # - Tag pushes (release events)
@@ -173,6 +174,9 @@ jobs:
     needs: [setup, build]
     runs-on: ubuntu-latest
     if: success()
+    permissions:
+      # Needed to create/update the GitHub release on tag pushes
+      contents: write
     steps:
       - name: Create artifacts directory
         run: mkdir -p artifacts
@@ -356,6 +360,44 @@ jobs:
             packed/radarsimlib_windows_all_builds.zip
           retention-days: 1
           compression-level: 0
+
+      # Only GPU packages are published to the GitHub release. CPU builds are
+      # still built and packed above, but stay as workflow artifacts only.
+      - name: Publish GPU builds to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          shopt -s nullglob
+          mkdir -p release
+          for f in packed/radarsimlib_windows_all/*_GPU.zip; do
+            cp "$f" "release/radarsimlib_${TAG}_$(basename "$f")"
+          done
+
+          files=(release/*.zip)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No GPU packages found to publish"
+            exit 1
+          fi
+
+          echo "::group::Release assets"
+          ls -lh release/
+          echo "::endgroup::"
+
+          # The macOS, Ubuntu and Windows workflows run in parallel, so the release
+          # may already exist (or be created by another workflow at the same time).
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --generate-notes || echo "Release creation failed (it may already exist), continuing to upload"
+          fi
+          gh release upload "$TAG" "${files[@]}" --clobber
+
+          echo "### GitHub Release" >> $GITHUB_STEP_SUMMARY
+          echo "Published Windows GPU packages to release \`$TAG\`:" >> $GITHUB_STEP_SUMMARY
+          for f in "${files[@]}"; do
+            echo "- \`$(basename "$f")\`" >> $GITHUB_STEP_SUMMARY
+          done
 
   # Summary job that runs after all builds complete
   build-summary:
