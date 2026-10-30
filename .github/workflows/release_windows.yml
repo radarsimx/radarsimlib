@@ -15,7 +15,7 @@ name: Build Windows Libraries
 # - All builds: License enabled (license=on)
 #
 # Features:
-# - CUDA toolkit setup for GPU builds
+# - CUDA toolkit setup for GPU builds, cached across runs (.github/actions/setup-cuda-*)
 # - Build optimization and caching
 # - Artifact verification and validation
 # - Multi-architecture artifact packing
@@ -80,13 +80,15 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      # Installs only the sub-packages the build needs, or restores them from
+      # the Actions cache when it can; see .github/actions/setup-cuda-windows
+      # for why. The list is for CUDA 13 (CUDA 12 bundles crt and nvvm in nvcc).
       - name: Setup CUDA Toolkit
         if: matrix.arch == 'gpu'
-        uses: radarsimx/cuda-toolkit@master
+        uses: ./.github/actions/setup-cuda-windows
         with:
           cuda: ${{ matrix.cuda_version }}
-          method: 'local'
-          use-github-cache: false
+          sub-packages: '["nvcc", "crt", "nvvm", "cudart", "curand_dev", "thrust", "visual_studio_integration"]'
 
       - name: Verify CUDA installation
         if: matrix.arch == 'gpu'

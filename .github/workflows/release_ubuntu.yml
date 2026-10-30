@@ -16,7 +16,7 @@ name: Build Ubuntu Libraries
 #
 # Features:
 # - Comprehensive caching (apt, ccache)
-# - CUDA toolkit setup for GPU builds
+# - CUDA toolkit setup for GPU builds, cached across runs (.github/actions/setup-cuda-*)
 # - Build optimization with ccache
 # - Artifact verification and validation
 # - Multi-architecture artifact packing
@@ -90,19 +90,15 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      # Installs nvcc and cuRAND, or restores them from the Actions cache when
+      # it can; see .github/actions/setup-cuda-linux for why.
       - name: Setup CUDA Toolkit
         if: matrix.arch == 'gpu'
-        uses: radarsimx/cuda-toolkit@master
+        uses: ./.github/actions/setup-cuda-linux
         with:
           cuda: "13.4.3"
-          method: "network"
           sub-packages: '["nvcc"]'
-          linux-local-args: '["--toolkit", "--silent"]'
-
-      - name: Install CUDA cuRAND development headers
-        if: matrix.arch == 'gpu'
-        run: |
-          sudo apt-get install -y libcurand-dev-13-4
+          apt-packages: "libcurand-dev-13-4"
 
       - name: Cache build dependencies
         uses: actions/cache@v6
