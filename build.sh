@@ -347,27 +347,25 @@ get_cpp_compiler() {
 # get_platform_suffix() - Returns the platform-specific directory suffix
 # Description:
 #   Returns the appropriate platform suffix for output directories
-#   For Ubuntu systems, detects version and returns ubuntu22/ubuntu24
+#   For Ubuntu systems, detects the major version and returns ubuntu<major>
 # Arguments:
 #   None
 # Output:
-#   Prints the platform suffix to stdout (e.g., "ubuntu22", "ubuntu24", "macos")
+#   Prints the platform suffix to stdout (e.g., "ubuntu22", "ubuntu26", "macos")
 # Return:
 #   Always returns 0 (success)
 get_platform_suffix() {
     case "${PLATFORM_NAME}" in
-        Linux) 
-            # Try to detect Ubuntu version
+        Linux)
+            # Ubuntu gets ubuntu<major> (ubuntu22, ubuntu24, ubuntu26, ...);
+            # anything else, or a version that cannot be read, is generic linux
+            local os_id="" ubuntu_version=""
             if [ -f /etc/os-release ]; then
-                local ubuntu_version=$(grep -E '^VERSION_ID=' /etc/os-release | cut -d'"' -f2 | cut -d'.' -f1)
-                if [ -n "$ubuntu_version" ] && [ "$ubuntu_version" = "22" ]; then
-                    echo "ubuntu22"
-                elif [ -n "$ubuntu_version" ] && [ "$ubuntu_version" = "24" ]; then
-                    echo "ubuntu24"
-                else
-                    # Fallback to generic linux for non-Ubuntu or unknown versions
-                    echo "linux"
-                fi
+                os_id=$(grep -E '^ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
+                ubuntu_version=$(grep -E '^VERSION_ID=' /etc/os-release | cut -d'"' -f2 | cut -d'.' -f1)
+            fi
+            if [ "$os_id" = "ubuntu" ] && [[ "$ubuntu_version" =~ ^[0-9]+$ ]]; then
+                echo "ubuntu${ubuntu_version}"
             else
                 echo "linux"
             fi

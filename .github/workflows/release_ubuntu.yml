@@ -227,6 +227,7 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: ./radarsimlib_ubuntu${{ matrix.ubuntu_version }}_x86_64_${{ matrix.arch }}
+          if-no-files-found: error
           retention-days: 1
           compression-level: 6
 

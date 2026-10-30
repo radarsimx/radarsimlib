@@ -191,6 +191,7 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: ./radarsimlib_macos_${{ matrix.arch }}_cpu
+          if-no-files-found: error
           retention-days: 1
           compression-level: 6
 
