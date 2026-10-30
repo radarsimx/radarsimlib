@@ -57,7 +57,7 @@ jobs:
           cat > matrix.json << 'EOF'
           [
             { "arch": "cpu", "artifact_name": "radarsimlib_win_x86_64_cpu" },
-            { "arch": "gpu", "artifact_name": "radarsimlib_win_x86_64_gpu", "cuda_version": "13.3.1" }
+            { "arch": "gpu", "artifact_name": "radarsimlib_win_x86_64_gpu", "cuda_version": "13.4.3" }
           ]
           EOF
           echo "matrix=$(jq -c . matrix.json)" >> "$GITHUB_OUTPUT"
