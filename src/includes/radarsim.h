@@ -55,7 +55,7 @@ extern "C" {
 // #define RADARSIM_SIMPLE_CLEANUP
 
 #define VERSION_MAJOR 15
-#define VERSION_MINOR 5
+#define VERSION_MINOR 6
 #define VERSION_PATCH 0
 
 /*********************************************
